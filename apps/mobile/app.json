@@ -1,0 +1,14 @@
+{
+  "expo": {
+    "name": "Vyapar Pakistan",
+    "slug": "vyapar-pakistan",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "scheme": "vyapar",
+    "newArchEnabled": true,
+    "ios": { "supportsTablet": true, "bundleIdentifier": "pk.vyapar.mobile" },
+    "android": { "package": "pk.vyapar.mobile" },
+    "plugins": ["expo-router"]
+  }
+}

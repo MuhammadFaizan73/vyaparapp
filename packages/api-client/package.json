@@ -1,0 +1,19 @@
+{
+  "name": "@vyapar/api-client",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "tsc",
+    "lint": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@vyapar/shared-types": "workspace:*",
+    "axios": "^1.7.9"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

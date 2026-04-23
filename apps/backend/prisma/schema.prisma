@@ -1,0 +1,44 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id             String    @id @default(uuid())
+  phone          String    @unique
+  countryCode    String
+  trialStartedAt DateTime  @default(now())
+  trialExpiresAt DateTime
+  licenseId      String?   @unique
+  license        License?  @relation(fields: [licenseId], references: [id])
+  parties        Party[]
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model License {
+  id          String    @id @default(uuid())
+  key         String    @unique
+  plan        String    @default("pro")
+  activatedAt DateTime?
+  expiresAt   DateTime
+  tenant      Tenant?
+  createdAt   DateTime  @default(now())
+}
+
+model Party {
+  id             String   @id @default(uuid())
+  tenantId       String
+  tenant         Tenant   @relation(fields: [tenantId], references: [id])
+  name           String
+  phone          String?
+  email          String?
+  billingAddress String?
+  isSystem       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
