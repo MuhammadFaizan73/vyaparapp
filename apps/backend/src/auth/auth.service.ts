@@ -17,7 +17,6 @@ export class AuthService {
 
     let tenant = await this.prisma.tenant.findUnique({
       where: { phone: fullPhone },
-      include: { license: true },
     });
 
     const isNew = !tenant;
@@ -31,7 +30,6 @@ export class AuthService {
           trialStartedAt: now,
           trialExpiresAt: expires,
         },
-        include: { license: true },
       });
     }
 
