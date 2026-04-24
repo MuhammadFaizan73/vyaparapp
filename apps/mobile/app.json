@@ -7,8 +7,16 @@
     "userInterfaceStyle": "automatic",
     "scheme": "vyapar",
     "newArchEnabled": true,
-    "ios": { "supportsTablet": true, "bundleIdentifier": "pk.vyapar.mobile" },
-    "android": { "package": "pk.vyapar.mobile" },
-    "plugins": ["expo-router"]
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "pk.vyapar.mobile"
+    },
+    "android": {
+      "package": "pk.vyapar.mobile"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store"
+    ]
   }
 }

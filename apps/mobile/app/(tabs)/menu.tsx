@@ -6,10 +6,12 @@ import {
   TouchableOpacity,
   StyleSheet,
   Switch,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { colors } from "../../src/theme";
+import { clearToken } from "../../src/auth";
 
 type MenuItem = {
   key: string;
@@ -200,6 +202,18 @@ export default function MenuScreen() {
 
         {/* Footer */}
         <View style={styles.footer}>
+          <TouchableOpacity
+            style={styles.logoutBtn}
+            onPress={() => Alert.alert("Sign Out", "Are you sure you want to sign out?", [
+              { text: "Cancel", style: "cancel" },
+              { text: "Sign Out", style: "destructive", onPress: async () => {
+                await clearToken();
+                router.replace("/onboarding" as never);
+              }},
+            ])}
+          >
+            <Text style={styles.logoutText}>Sign Out</Text>
+          </TouchableOpacity>
           <TouchableOpacity>
             <Text style={styles.privacyLink}>Privacy Policy</Text>
           </TouchableOpacity>
@@ -313,6 +327,14 @@ const styles = StyleSheet.create({
   versionText: { fontSize: 14, color: colors.textMuted },
 
   footer: { alignItems: "center", paddingVertical: 24, gap: 12 },
+  logoutBtn: {
+    borderWidth: 1.5,
+    borderColor: colors.red,
+    borderRadius: 8,
+    paddingHorizontal: 32,
+    paddingVertical: 10,
+  },
+  logoutText: { fontSize: 14, fontWeight: "600", color: colors.red },
   privacyLink: { fontSize: 13, color: colors.primary },
   footerBrand: { alignItems: "center", gap: 4 },
   footerBrandText: { fontSize: 15, fontWeight: "700", color: colors.textMuted },
