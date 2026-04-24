@@ -28,10 +28,16 @@ export default function LicenseGateScreen() {
       router.replace("/(tabs)" as never);
     } catch (e: any) {
       const msg = e?.response?.data?.message;
-      if (msg?.includes("desktop")) {
-        setError("This is a Desktop key. Mobile requires a separate Mobile license key.");
+      if (!msg) {
+        setError("Cannot connect to server. Make sure your phone is on the same Wi-Fi as the server.");
+      } else if (msg.includes("desktop")) {
+        setError("This is a Desktop key. Mobile requires a MOBI-... key.");
+      } else if (msg.includes("another account")) {
+        setError("This key is already used by another account. Try a different key.");
+      } else if (msg.includes("not found")) {
+        setError("Key not found. Double-check and try again.");
       } else {
-        setError(msg || "Invalid or expired license key.");
+        setError(msg);
       }
     } finally {
       setLoading(false);
