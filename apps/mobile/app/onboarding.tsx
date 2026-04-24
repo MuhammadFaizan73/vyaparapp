@@ -32,8 +32,7 @@ export default function OnboardingScreen() {
     setError("");
     setLoading(true);
     try {
-      const fullPhone = country.dial + cleaned;
-      const res = await api.register({ phone: fullPhone, country: country.code });
+      const res = await api.register({ countryCode: country.dial, phone: cleaned });
       await saveToken(res.token);
       router.replace("/(tabs)" as never);
     } catch (e: any) {
