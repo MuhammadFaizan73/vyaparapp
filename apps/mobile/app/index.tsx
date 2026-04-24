@@ -1,17 +1,32 @@
 import { useEffect, useState } from "react";
 import { Redirect } from "expo-router";
 import { View, ActivityIndicator } from "react-native";
-import { loadToken } from "../src/auth";
+import { loadToken, api } from "../src/auth";
 import { colors } from "../src/theme";
 
+type State = "loading" | "onboarding" | "license-gate" | "app";
+
 export default function Root() {
-  const [token, setToken] = useState<string | null | undefined>(undefined);
+  const [state, setState] = useState<State>("loading");
 
   useEffect(() => {
-    loadToken().then(setToken);
+    (async () => {
+      const token = await loadToken();
+      if (!token) { setState("onboarding"); return; }
+      try {
+        const status = await api.getLicenseStatus("mobile");
+        if (status.state === "trial_expired" || status.state === "license_expired") {
+          setState("license-gate");
+        } else {
+          setState("app");
+        }
+      } catch {
+        setState("onboarding");
+      }
+    })();
   }, []);
 
-  if (token === undefined) {
+  if (state === "loading") {
     return (
       <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.bg }}>
         <ActivityIndicator size="large" color={colors.primary} />
@@ -19,6 +34,7 @@ export default function Root() {
     );
   }
 
-  if (!token) return <Redirect href="/onboarding" />;
+  if (state === "onboarding") return <Redirect href="/onboarding" />;
+  if (state === "license-gate") return <Redirect href="/license-gate" />;
   return <Redirect href="/(tabs)" />;
 }

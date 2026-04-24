@@ -31,13 +31,13 @@ export class VyaparApiClient {
     return data;
   }
 
-  async getLicenseStatus(): Promise<LicenseStatus> {
-    const { data } = await this.http.get<LicenseStatus>("/license/status");
+  async getLicenseStatus(platform: "desktop" | "mobile" = "desktop"): Promise<LicenseStatus> {
+    const { data } = await this.http.get<LicenseStatus>(`/license/status?platform=${platform}`);
     return data;
   }
 
-  async activateLicense(key: string): Promise<LicenseStatus> {
-    const { data } = await this.http.post<LicenseStatus>("/license/activate", { key });
+  async activateLicense(key: string, platform: "desktop" | "mobile" = "desktop"): Promise<LicenseStatus> {
+    const { data } = await this.http.post<LicenseStatus>("/license/activate", { key, platform });
     return data;
   }
 

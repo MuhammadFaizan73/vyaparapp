@@ -8,26 +8,30 @@ datasource db {
 }
 
 model Tenant {
-  id             String    @id @default(uuid())
-  phone          String    @unique
-  countryCode    String
-  trialStartedAt DateTime  @default(now())
-  trialExpiresAt DateTime
-  licenseId      String?   @unique
-  license        License?  @relation(fields: [licenseId], references: [id])
-  parties        Party[]
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  id               String    @id @default(uuid())
+  phone            String    @unique
+  countryCode      String
+  trialStartedAt   DateTime  @default(now())
+  trialExpiresAt   DateTime
+  desktopLicenseId String?   @unique
+  mobileLicenseId  String?   @unique
+  desktopLicense   License?  @relation("DesktopLicense", fields: [desktopLicenseId], references: [id])
+  mobileLicense    License?  @relation("MobileLicense", fields: [mobileLicenseId], references: [id])
+  parties          Party[]
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 }
 
 model License {
-  id          String    @id @default(uuid())
-  key         String    @unique
-  plan        String    @default("pro")
-  activatedAt DateTime?
-  expiresAt   DateTime
-  tenant      Tenant?
-  createdAt   DateTime  @default(now())
+  id            String    @id @default(uuid())
+  key           String    @unique
+  plan          String    @default("pro")
+  platform      String    @default("desktop")
+  activatedAt   DateTime?
+  expiresAt     DateTime
+  desktopTenant Tenant?   @relation("DesktopLicense")
+  mobileTenant  Tenant?   @relation("MobileLicense")
+  createdAt     DateTime  @default(now())
 }
 
 model Party {

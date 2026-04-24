@@ -23,6 +23,7 @@ export type RegisterResponse = z.infer<typeof RegisterResponseSchema>;
 
 export const LicenseStatusSchema = z.object({
   state: z.enum(["trial", "trial_expired", "licensed", "license_expired"]),
+  platform: z.enum(["desktop", "mobile"]),
   trialStartedAt: z.string().datetime(),
   trialExpiresAt: z.string().datetime(),
   daysRemaining: z.number().int().nonnegative(),
@@ -39,6 +40,7 @@ export type LicenseStatus = z.infer<typeof LicenseStatusSchema>;
 
 export const ActivateLicenseRequestSchema = z.object({
   key: z.string().min(8).max(64),
+  platform: z.enum(["desktop", "mobile"]),
 });
 export type ActivateLicenseRequest = z.infer<typeof ActivateLicenseRequestSchema>;
 

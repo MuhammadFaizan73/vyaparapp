@@ -25,7 +25,7 @@ export default function App() {
       return;
     }
     try {
-      const status = await api.getLicenseStatus();
+      const status = await api.getLicenseStatus("desktop");
       if (status.state === "trial_expired" || status.state === "license_expired") {
         setPhase({ kind: "license-gate", status });
       } else {
@@ -40,7 +40,7 @@ export default function App() {
   async function handleRegistered(token: string, tenant: unknown) {
     saveToken(token);
     saveTenant(tenant);
-    const status = await api.getLicenseStatus();
+    const status = await api.getLicenseStatus("desktop");
     setPhase({ kind: "app", status });
   }
 
