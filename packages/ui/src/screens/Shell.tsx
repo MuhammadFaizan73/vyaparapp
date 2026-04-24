@@ -3,6 +3,7 @@ import type { LicenseStatus } from "@vyapar/api-client";
 import { loadTenant } from "../lib/api";
 import { ActivateLicenseModal } from "./ActivateLicenseModal";
 import { PartiesScreen } from "./PartiesScreen";
+import { ItemsScreen } from "./ItemsScreen";
 import {
   HomeIcon,
   PartiesIcon,
@@ -146,7 +147,8 @@ export function Shell({ status, onLogout, onLicenseActivated }: Props) {
 
         {/* Screen content */}
         {active === "parties" && <PartiesScreen />}
-        {active !== "parties" && (
+        {active === "items" && <ItemsScreen />}
+        {active !== "parties" && active !== "items" && (
           <section className="content">
             <p>{primaryNav.find((n) => n.key === active)?.label} — coming soon.</p>
           </section>
