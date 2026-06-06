@@ -31,9 +31,16 @@ export default function App() {
       } else {
         setPhase({ kind: "app", status });
       }
-    } catch {
-      clearToken();
-      setPhase({ kind: "onboarding" });
+    } catch (e: any) {
+      // 401 = token invalid/expired → force re-login
+      // network error / backend down → keep token, go straight to app
+      if (e?.response?.status === 401) {
+        clearToken();
+        setPhase({ kind: "onboarding" });
+      } else {
+        const offline = { state: "trial", daysRemaining: 0, license: null } as unknown as LicenseStatus;
+        setPhase({ kind: "app", status: offline });
+      }
     }
   }
 

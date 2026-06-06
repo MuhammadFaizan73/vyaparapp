@@ -160,8 +160,8 @@ export function ArrowRight() {
 
 export function PremiumDiamond() {
   return (
-    <svg viewBox="0 0 24 24" fill="currentColor">
-      <path d="M12 3 4 10l8 11 8-11z" />
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M2 18 2 10 7 14 12 4 17 14 22 10 22 18Z" />
     </svg>
   );
 }

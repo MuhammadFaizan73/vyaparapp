@@ -3,23 +3,39 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
 model Tenant {
-  id               String    @id @default(uuid())
-  phone            String    @unique
+  id               String             @id @default(uuid())
+  phone            String             @unique
   countryCode      String
-  trialStartedAt   DateTime  @default(now())
+  trialStartedAt   DateTime           @default(now())
   trialExpiresAt   DateTime
-  desktopLicenseId String?   @unique
-  mobileLicenseId  String?   @unique
-  desktopLicense   License?  @relation("DesktopLicense", fields: [desktopLicenseId], references: [id])
-  mobileLicense    License?  @relation("MobileLicense", fields: [mobileLicenseId], references: [id])
+  desktopLicenseId String?            @unique
+  mobileLicenseId  String?            @unique
+  desktopLicense   License?           @relation("DesktopLicense", fields: [desktopLicenseId], references: [id])
+  mobileLicense    License?           @relation("MobileLicense", fields: [mobileLicenseId], references: [id])
   parties          Party[]
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  partyGroups      PartyGroup[]
+  items            Item[]
+  teamMembers      TeamMember[]
+  loanAccounts     LoanAccount[]
+  locationPings    LocationPing[]
+  shopVisits       ShopVisit[]
+  assignments      PartyAssignment[]
+  companyName      String?
+  businessType     String?
+  companyEmail     String?
+  extraCompanies   String   @default("[]")
+  officeLat        Float?
+  officeLng        Float?
+  officeLabel      String?
+  lastActiveAt     DateTime?
+  isActive         Boolean            @default(true)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
 }
 
 model License {
@@ -35,14 +51,258 @@ model License {
 }
 
 model Party {
+  id              String        @id @default(uuid())
+  tenantId        String
+  tenant          Tenant        @relation(fields: [tenantId], references: [id])
+  groupId         String?
+  group           PartyGroup?   @relation(fields: [groupId], references: [id])
+  name            String
+  phone           String?
+  email           String?
+  billingAddress  String?
+  city            String?
+  state           String?
+  pincode         String?
+  shippingAddress String?
+  shippingCity    String?
+  shippingState   String?
+  shippingPincode String?
+  openingBalance  Float         @default(0)
+  creditLimit     Float?
+  creditDays      Int?
+  gstin           String?
+  pan             String?
+  ntn             String?
+  cnic            String?
+  strn            String?
+  partyType       String        @default("both")
+  isSystem        Boolean       @default(false)
+  latitude        Float?
+  longitude       Float?
+  transactions    Transaction[]
+  shopVisits      ShopVisit[]
+  assignments     PartyAssignment[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model PartyGroup {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  name      String
+  parties   Party[]
+  createdAt DateTime @default(now())
+}
+
+model Item {
   id             String   @id @default(uuid())
   tenantId       String
   tenant         Tenant   @relation(fields: [tenantId], references: [id])
   name           String
-  phone          String?
-  email          String?
-  billingAddress String?
-  isSystem       Boolean  @default(false)
+  sku            String?
+  unit           String?
+  secondaryUnit  String?
+  conversionRate String?
+  mrp            Float?
+  salePrice      Float?
+  purchasePrice  Float?
+  discount       Float?
+  openingStock   Float    @default(0)
+  minStock       Float    @default(0)
+  companyTag     String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+}
+
+model Transaction {
+  id        String               @id @default(uuid())
+  tenantId  String
+  partyId   String
+  party     Party                @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  type      String
+  number    String?
+  date      DateTime             @default(now())
+  total     Float                @default(0)
+  balance   Float                @default(0)
+  notes     String?
+  createdAt DateTime             @default(now())
+  history   TransactionHistory[]
+}
+
+model TransactionHistory {
+  id            String      @id @default(uuid())
+  transactionId String
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  tenantId      String
+  changes       String      // JSON array of change description strings
+  ipAddress     String?
+  createdAt     DateTime    @default(now())
+}
+
+model TeamMember {
+  id            String        @id @default(uuid())
+  tenantId      String
+  tenant        Tenant        @relation(fields: [tenantId], references: [id])
+  name          String
+  contact       String        @default("")
+  email         String?       @unique
+  passwordHash  String?
+  role          String        @default("salesman")
+  permissions   String        @default("[]")
+  status        String        @default("active")
+  inviteToken   String        @unique @default(uuid())
+  locationPings LocationPing[]
+  shopVisits    ShopVisit[]
+  assignments   PartyAssignment[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model LocationPing {
+  id         String     @id @default(uuid())
+  tenantId   String
+  tenant     Tenant     @relation(fields: [tenantId], references: [id])
+  memberId   String
+  member     TeamMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  latitude   Float
+  longitude  Float
+  accuracy   Float?
+  createdAt  DateTime   @default(now())
+}
+
+model ShopVisit {
+  id         String     @id @default(uuid())
+  tenantId   String
+  tenant     Tenant     @relation(fields: [tenantId], references: [id])
+  memberId   String
+  member     TeamMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  partyId    String?
+  party      Party?     @relation(fields: [partyId], references: [id], onDelete: SetNull)
+  partyName  String?
+  latitude   Float?
+  longitude  Float?
+  checkedInAt  DateTime @default(now())
+  checkedOutAt DateTime?
+  durationMin  Int?
+  notes        String?
+  createdAt    DateTime @default(now())
+}
+
+model LoanAccount {
+  id                   String   @id @default(uuid())
+  tenantId             String
+  tenant               Tenant   @relation(fields: [tenantId], references: [id])
+  accountName          String
+  lenderBank           String?
+  accountNumber        String?
+  description          String?
+  currentBalance       Float    @default(0)
+  balanceAsOf          DateTime @default(now())
+  loanReceivedIn       String   @default("Cash")
+  interestRate         Float?
+  termDuration         Int?
+  processingFee        Float?
+  processingFeePaidFrom String   @default("Cash")
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+model PartyAssignment {
+  id        String     @id @default(uuid())
+  tenantId  String
+  tenant    Tenant     @relation(fields: [tenantId], references: [id])
+  partyId   String
+  party     Party      @relation(fields: [partyId], references: [id], onDelete: Cascade)
+  memberId  String
+  member    TeamMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  visitDays String     // comma-separated: "Mon,Wed,Fri"
+  createdAt DateTime   @default(now())
+
+  @@unique([partyId, memberId])
+}
+
+// ─── Super Admin ──────────────────────────────────────────────────────────────
+
+model AdminUser {
+  id              String          @id @default(uuid())
+  name            String
+  email           String          @unique
+  passwordHash    String
+  role            String          @default("support")
+  lastLoginAt     DateTime?
+  isActive        Boolean         @default(true)
+  auditLogs       AuditLog[]
+  assignedTickets SupportTicket[]
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+}
+
+model SupportTicket {
+  id           String          @id @default(uuid())
+  tenantId     String
+  issueType    String          @default("other")
+  subject      String
+  status       String          @default("open")
+  assignedToId String?
+  assignedTo   AdminUser?      @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+  messages     TicketMessage[]
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+}
+
+model TicketMessage {
+  id         String        @id @default(uuid())
+  ticketId   String
+  ticket     SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  sender     String
+  senderId   String?
+  body       String
+  isInternal Boolean       @default(false)
+  createdAt  DateTime      @default(now())
+}
+
+model Announcement {
+  id          String             @id @default(uuid())
+  title       String
+  body        String
+  type        String             @default("info")
+  target      String             @default("all")
+  targetValue String?
+  scheduledAt DateTime?
+  sentAt      DateTime?
+  expiresAt   DateTime?
+  reads       AnnouncementRead[]
+  createdAt   DateTime           @default(now())
+}
+
+model AnnouncementRead {
+  id             String       @id @default(uuid())
+  announcementId String
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  tenantId       String
+  readAt         DateTime     @default(now())
+
+  @@unique([announcementId, tenantId])
+}
+
+model AuditLog {
+  id         String     @id @default(uuid())
+  adminId    String?
+  admin      AdminUser? @relation(fields: [adminId], references: [id], onDelete: SetNull)
+  action     String
+  targetType String?
+  targetId   String?
+  meta       String?
+  createdAt  DateTime   @default(now())
+}
+
+model SystemMetric {
+  id         String   @id @default(uuid())
+  endpoint   String
+  method     String   @default("GET")
+  statusCode Int
+  responseMs Int
+  tenantId   String?
+  createdAt  DateTime @default(now())
 }

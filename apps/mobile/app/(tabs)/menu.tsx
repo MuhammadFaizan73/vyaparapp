@@ -1,342 +1,273 @@
-import { useState } from "react";
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  Switch,
-  Alert,
-} from "react-native";
+import { useState, useCallback } from "react";
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../src/theme";
-import { clearToken } from "../../src/auth";
+import { clearToken, getRole, getPermissions } from "../../src/auth";
 
-type MenuItem = {
-  key: string;
+type IoniconsName = React.ComponentProps<typeof Ionicons>["name"];
+
+interface MenuRow {
   label: string;
-  icon: string;
-  iconBg: string;
-  sub?: string[];
+  sub?: string;
+  icon: IoniconsName;
+  tint: string;
+  fg: string;
   badge?: string;
-  toggle?: boolean;
-  subLabel?: string;
+  route?: string;
+  allow?: string[];     // role-based: only these roles + owner can see it
+  memberOnly?: boolean; // only non-owner roles see it
+  requirePerm?: string; // permission-based: if user has a custom permissions list, they need this perm
+}
+
+const BUSINESS: MenuRow[] = [
+  { label: "Company Profile", sub: "Logo, address, GSTIN", icon: "business-outline", tint: "#dbeafe", fg: "#1d4ed8", allow: ["secondary_admin", "ca_accountant", "ca_accountant_edit"] },
+  { label: "Parties", sub: "Customers & suppliers", icon: "people-outline", tint: "#fce7f3", fg: "#be185d", route: "/party", allow: ["secondary_admin", "salesman", "biller", "biller_salesman", "ca_accountant", "ca_accountant_edit"], requirePerm: "parties_view" },
+  { label: "Items", sub: "Inventory & stock", icon: "cube-outline", tint: "#dcfce7", fg: "#15803d", route: "/(tabs)/items", allow: ["secondary_admin", "biller_salesman", "salesman", "stock_keeper", "ca_accountant", "ca_accountant_edit"], requirePerm: "items_view" },
+  { label: "Tax Settings", sub: "GST & rates", icon: "receipt-outline", tint: "#fef3c7", fg: "#b45309", allow: ["secondary_admin", "ca_accountant", "ca_accountant_edit", "biller", "biller_salesman"] },
+];
+
+const REPORTS: MenuRow[] = [
+  { label: "Reports", sub: "GST · P&L · Stock", icon: "bar-chart-outline", tint: "#ede9fe", fg: "#6d28d9", route: "/reports", allow: ["secondary_admin", "ca_accountant", "ca_accountant_edit"], requirePerm: "reports_view" },
+  { label: "Cashflow", sub: "Daily & monthly", icon: "cash-outline", tint: "#fff1e6", fg: "#c2410c", route: "/reports/cash-flow", allow: ["secondary_admin", "ca_accountant", "ca_accountant_edit"], requirePerm: "cash_view" },
+  { label: "Day Book", sub: "Today's transactions", icon: "book-outline", tint: "#dbeafe", fg: "#1d4ed8", route: "/reports/day-book", allow: ["secondary_admin", "ca_accountant", "ca_accountant_edit", "biller", "biller_salesman"], requirePerm: "reports_view" },
+];
+
+const TOOLS: MenuRow[] = [
+  { label: "Office Location", sub: "Set check-in zone for salesmen", icon: "business-outline", tint: "#e6f3f7", fg: colors.primary, route: "/office-location", allow: ["secondary_admin"] },
+  { label: "Salesman Tracking", sub: "Live map & attendance", icon: "map-outline", tint: "#dbeafe", fg: "#1d4ed8", route: "/salesman-tracking", allow: ["secondary_admin"] },
+  { label: "My Attendance", sub: "Check in / out at office", icon: "finger-print-outline", tint: "#f0fdf4", fg: "#15803d", route: "/my-visits", allow: ["salesman", "biller_salesman"] },
+  { label: "User Management", sub: "Team members & roles", icon: "people-outline", tint: "#fce7f3", fg: "#be185d", route: "/user-management", allow: ["secondary_admin"], requirePerm: "team_manage" },
+  { label: "Backup & Sync", sub: "Last sync · 2 min ago", icon: "cloud-upload-outline", tint: "#dcfce7", fg: "#15803d", badge: "Auto", route: "/sync-share", allow: ["secondary_admin"] },
+  { label: "Print Settings", sub: "Thermal & A4", icon: "print-outline", tint: "#fef3c7", fg: "#b45309", allow: ["secondary_admin"] },
+  { label: "Manage Companies", sub: "Switch or add company", icon: "layers-outline", tint: "#e0e7ff", fg: "#4338ca", route: "/manage-companies", allow: [] },
+  { label: "Join with Invite Code", sub: "Enter code from your employer", icon: "key-outline", tint: "#f0fdf4", fg: "#15803d", route: "/accept-invite", memberOnly: true },
+  { label: "Plans & Pricing", sub: "Upgrade your plan", icon: "diamond-outline", tint: "#fef3c7", fg: "#b45309", route: "/plans-pricing", allow: ["secondary_admin"] },
+  { label: "Help & Support", sub: "Tutorials & FAQs", icon: "help-circle-outline", tint: "#e0e7ff", fg: "#4338ca" },
+];
+
+// permissions=null → old JWT or owner → role-based fallback
+// permissions=string[] → member with assigned permissions; requirePerm is enforced strictly
+function isVisible(item: MenuRow, role: string, permissions: string[] | null): boolean {
+  if (role === "owner") return !item.memberOnly;
+  if (item.memberOnly) return true;
+
+  if (permissions !== null && item.requirePerm) {
+    return permissions.includes(item.requirePerm);
+  }
+
+  if (!item.allow) return true;
+  return item.allow.includes(role);
+}
+
+const ROLE_LABELS: Record<string, string> = {
+  secondary_admin: "Secondary Admin",
+  salesman: "Salesman",
+  biller: "Biller",
+  biller_salesman: "Biller & Salesman",
+  stock_keeper: "Stock Keeper",
+  ca_accountant: "CA / Accountant",
+  ca_accountant_edit: "CA / Accountant (Edit)",
 };
-
-const MY_BUSINESS: MenuItem[] = [
-  {
-    key: "sale",
-    label: "Sale",
-    icon: "🧾",
-    iconBg: "#dbeafe",
-    sub: [
-      "Sale Invoice",
-      "Payment-In",
-      "Sale Return (Credit Note)",
-      "Estimate/Quotation",
-      "Proforma Invoice",
-      "Sale Order",
-      "Delivery Note",
-    ],
-  },
-  { key: "purchase", label: "Purchase", icon: "🛒", iconBg: "#e0f2fe" },
-  { key: "expenses", label: "Expenses", icon: "💰", iconBg: "#dcfce7" },
-  { key: "store", label: "My Online Store", icon: "🏪", iconBg: "#fef9c3" },
-  { key: "reports", label: "Reports", icon: "📈", iconBg: "#ede9fe" },
-];
-
-const CASH_BANK: MenuItem[] = [
-  { key: "bank", label: "Bank Accounts", icon: "🏦", iconBg: "#dbeafe" },
-  { key: "cash", label: "Cash In-Hand", icon: "👛", iconBg: "#dcfce7" },
-  { key: "cheques", label: "Cheques", icon: "📋", iconBg: "#e0f2fe" },
-  { key: "loan", label: "Loan Accounts", icon: "💳", iconBg: "#fce7f3" },
-];
-
-const UTILITIES: MenuItem[] = [
-  {
-    key: "sync",
-    label: "Sync & Share",
-    icon: "🔄",
-    iconBg: "#dbeafe",
-    toggle: true,
-    subLabel: "3159200720",
-  },
-  { key: "companies", label: "Manage Companies", icon: "🏢", iconBg: "#e0f2fe" },
-  { key: "backup", label: "Backup/Restore", icon: "💾", iconBg: "#fef9c3" },
-  { key: "utilities", label: "Utilities", icon: "🔧", iconBg: "#ede9fe", badge: "New" },
-];
-
-const OTHERS: MenuItem[] = [
-  { key: "plans", label: "Plans & Pricing", icon: "💎", iconBg: "#fce7f3" },
-  { key: "desktop", label: "Get Desktop Billing Software", icon: "🖥️", iconBg: "#dbeafe" },
-  { key: "grow", label: "Grow Your Business", icon: "📊", iconBg: "#dcfce7" },
-  { key: "settings", label: "Settings", icon: "⚙️", iconBg: "#f1f5f9", badge: "New" },
-  { key: "help", label: "Help & Support", icon: "🎧", iconBg: "#e0f2fe" },
-  { key: "rate", label: "Rate this app", icon: "⭐", iconBg: "#fef9c3" },
-];
 
 export default function MenuScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({ sale: true });
-  const [syncOn, setSyncOn] = useState(true);
+  const [role, setRole] = useState("owner");
+  const [permissions, setPermissions] = useState<string[] | null>(null);
 
-  function toggle(key: string) {
-    setExpanded((p) => ({ ...p, [key]: !p[key] }));
+  useFocusEffect(useCallback(() => {
+    getRole().then(setRole);
+    getPermissions().then(setPermissions);
+  }, []));
+
+  const visibleBusiness = BUSINESS.filter(i => isVisible(i, role, permissions));
+  const visibleReports = REPORTS.filter(i => isVisible(i, role, permissions));
+  const visibleTools = TOOLS.filter(i => isVisible(i, role, permissions));
+
+  function handleSignOut() {
+    Alert.alert("Sign Out", "Are you sure you want to sign out?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Sign Out", style: "destructive", onPress: async () => {
+          await clearToken();
+          router.replace("/onboarding" as never);
+        },
+      },
+    ]);
   }
 
-  function renderItem(item: MenuItem, isLast = false) {
-    const hasChildren = !!item.sub;
-    const isExpanded = expanded[item.key];
-
+  function renderRow(item: MenuRow, last = false) {
     return (
-      <View key={item.key}>
-        <TouchableOpacity
-          style={[styles.menuItem, isLast && styles.menuItemLast]}
-          onPress={() => (hasChildren ? toggle(item.key) : null)}
-          activeOpacity={0.7}
-        >
-          <View style={[styles.iconBox, { backgroundColor: item.iconBg }]}>
-            <Text style={styles.iconText}>{item.icon}</Text>
-          </View>
-          <View style={styles.menuItemCenter}>
-            <Text style={styles.menuItemLabel}>{item.label}</Text>
-            {item.subLabel && (
-              <Text style={styles.menuItemSub}>{item.subLabel}</Text>
-            )}
-          </View>
-          <View style={styles.menuItemRight}>
+      <TouchableOpacity
+        key={item.label}
+        style={[styles.row, last && styles.rowLast]}
+        onPress={() => item.route && router.push(item.route as never)}
+        activeOpacity={item.route ? 0.7 : 1}
+      >
+        <View style={[styles.rowIcon, { backgroundColor: item.tint }]}>
+          <Ionicons name={item.icon} size={18} color={item.fg} />
+        </View>
+        <View style={styles.rowMid}>
+          <View style={styles.rowLabelRow}>
+            <Text style={styles.rowLabel}>{item.label}</Text>
             {item.badge && (
               <View style={styles.badge}>
-                <Text style={styles.badgeText}>{item.badge}</Text>
+                <Text style={styles.badgeTxt}>{item.badge}</Text>
               </View>
             )}
-            {item.toggle ? (
-              <Switch
-                value={syncOn}
-                onValueChange={setSyncOn}
-                trackColor={{ true: colors.green, false: colors.border }}
-                thumbColor="#fff"
-                style={{ transform: [{ scaleX: 0.85 }, { scaleY: 0.85 }] }}
-              />
-            ) : null}
-            <Text style={styles.chevron}>
-              {hasChildren ? (isExpanded ? "∧" : "∨") : "›"}
-            </Text>
           </View>
-        </TouchableOpacity>
-
-        {hasChildren && isExpanded && item.sub?.map((sub, i) => (
-          <TouchableOpacity
-            key={sub}
-            style={[styles.subItem, i === item.sub!.length - 1 && styles.subItemLast]}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.subItemLabel}>{sub}</Text>
-            <Text style={styles.chevronSub}>›</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+          {item.sub && <Text style={styles.rowSub}>{item.sub}</Text>}
+        </View>
+        <Ionicons name="chevron-forward" size={15} color={colors.textLight} />
+      </TouchableOpacity>
     );
   }
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.logoCircle}>
-          <Text style={styles.logoIcon}>⊡</Text>
-        </View>
-        <Text style={styles.headerTitle}>Rootocloud</Text>
-        <View style={styles.headerIcons}>
-          <TouchableOpacity style={styles.headerIconBtn}>
-            <Text style={styles.headerIconText}>🔔</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.headerIconBtn}>
-            <Text style={styles.headerIconText}>⚙️</Text>
-          </TouchableOpacity>
-        </View>
+      <View style={styles.appBar}>
+        <Text style={styles.appBarTitle}>Menu</Text>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* My Business */}
-        <Text style={styles.sectionLabel}>My Business</Text>
-        <View style={styles.section}>
-          {MY_BUSINESS.map((item, i) =>
-            renderItem(item, i === MY_BUSINESS.length - 1)
-          )}
-        </View>
-
-        {/* Cash & Bank */}
-        <Text style={styles.sectionLabel}>Cash &amp; Bank</Text>
-        <View style={styles.section}>
-          {CASH_BANK.map((item, i) =>
-            renderItem(item, i === CASH_BANK.length - 1)
-          )}
-        </View>
-
-        {/* Important Utilities */}
-        <Text style={styles.sectionLabel}>Important Utilities</Text>
-        <View style={styles.section}>
-          {UTILITIES.map((item, i) =>
-            renderItem(item, i === UTILITIES.length - 1)
-          )}
-        </View>
-
-        {/* Others */}
-        <Text style={styles.sectionLabel}>Others</Text>
-        <View style={styles.section}>
-          {OTHERS.map((item, i) =>
-            renderItem(item, i === OTHERS.length - 1)
-          )}
-        </View>
-
-        {/* App Version */}
-        <Text style={styles.sectionLabel}>App Version</Text>
-        <View style={styles.section}>
-          <View style={styles.versionRow}>
-            <Text style={styles.versionText}>24.1.0</Text>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.body}>
+        {/* Profile card */}
+        <View style={styles.profileCard}>
+          <View style={styles.profileAvatar}>
+            <Text style={styles.profileAvatarTxt}>V</Text>
           </View>
+          <View style={styles.profileMid}>
+            <Text style={styles.profileName}>Vyapar Pakistan</Text>
+            <Text style={styles.profileSub}>
+              {role === "owner" ? "Free Plan · 5 invoices left" : ROLE_LABELS[role] ?? role}
+            </Text>
+          </View>
+          {role === "owner" && (
+            <TouchableOpacity
+              style={styles.upgradeBtn}
+              onPress={() => router.push("/plans-pricing" as never)}
+            >
+              <Text style={styles.upgradeBtnTxt}>Upgrade</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
-        {/* Footer */}
+        {/* Business */}
+        {visibleBusiness.length > 0 && (
+          <>
+            <SectionHeader title="Business" />
+            <View style={styles.group}>
+              {visibleBusiness.map((item, i) => renderRow(item, i === visibleBusiness.length - 1))}
+            </View>
+          </>
+        )}
+
+        {/* Reports */}
+        {visibleReports.length > 0 && (
+          <>
+            <View style={styles.group}>
+              {visibleReports.map((item, i) => renderRow(item, i === visibleReports.length - 1))}
+            </View>
+          </>
+        )}
+
+        {/* Tools */}
+        {visibleTools.length > 0 && (
+          <>
+            <SectionHeader title="Tools" />
+            <View style={styles.group}>
+              {visibleTools.map((item, i) => renderRow(item, i === visibleTools.length - 1))}
+            </View>
+          </>
+        )}
+
+        {/* Version & signout */}
         <View style={styles.footer}>
-          <TouchableOpacity
-            style={styles.logoutBtn}
-            onPress={() => Alert.alert("Sign Out", "Are you sure you want to sign out?", [
-              { text: "Cancel", style: "cancel" },
-              { text: "Sign Out", style: "destructive", onPress: async () => {
-                await clearToken();
-                router.replace("/onboarding" as never);
-              }},
-            ])}
-          >
-            <Text style={styles.logoutText}>Sign Out</Text>
+          <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut}>
+            <Ionicons name="log-out-outline" size={16} color={colors.red} />
+            <Text style={styles.signOutTxt}>Sign Out</Text>
           </TouchableOpacity>
-          <TouchableOpacity>
-            <Text style={styles.privacyLink}>Privacy Policy</Text>
-          </TouchableOpacity>
-          <View style={styles.footerBrand}>
-            <Text style={styles.footerBrandText}>▼ Vyapar</Text>
-            <Text style={styles.footerCaption}>Crafted by Simply Vyapar Apps Pvt Ltd.</Text>
-          </View>
+          <Text style={styles.versionTxt}>Vyapar Pakistan · v24.1.0</Text>
         </View>
       </ScrollView>
     </View>
   );
 }
 
+function SectionHeader({ title }: { title: string }) {
+  return (
+    <Text style={styles.sectionHeader}>{title}</Text>
+  );
+}
+
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
+  appBar: {
+    backgroundColor: "#fff", paddingHorizontal: 18, paddingVertical: 16,
+    borderBottomWidth: 1, borderBottomColor: colors.border,
+  },
+  appBarTitle: { fontSize: 17, fontWeight: "600", color: colors.text },
+  body: { paddingBottom: 110 },
 
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.card,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    gap: 10,
+  // Profile
+  profileCard: {
+    backgroundColor: "#fff", marginHorizontal: 16, marginTop: 16,
+    borderRadius: 14, padding: 16,
+    borderWidth: 1, borderColor: colors.border,
+    flexDirection: "row", alignItems: "center", gap: 14,
   },
-  logoCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#e0f2fe",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1.5,
-    borderColor: "#bae6fd",
+  profileAvatar: {
+    width: 52, height: 52, borderRadius: 16,
+    backgroundColor: colors.primary,
+    alignItems: "center", justifyContent: "center",
   },
-  logoIcon: { fontSize: 18 },
-  headerTitle: { flex: 1, fontSize: 17, fontWeight: "700", color: colors.text },
-  headerIcons: { flexDirection: "row", gap: 8 },
-  headerIconBtn: { padding: 6 },
-  headerIconText: { fontSize: 18 },
+  profileAvatarTxt: { fontSize: 20, fontWeight: "800", color: "#fff", letterSpacing: -0.5 },
+  profileMid: { flex: 1 },
+  profileName: { fontSize: 15, fontWeight: "700", color: colors.text },
+  profileSub: { fontSize: 11.5, color: colors.textMuted, marginTop: 3 },
+  upgradeBtn: {
+    backgroundColor: colors.primary, borderRadius: 100,
+    paddingHorizontal: 14, paddingVertical: 7,
+  },
+  upgradeBtnTxt: { fontSize: 11.5, fontWeight: "600", color: "#fff" },
 
-  sectionLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: colors.sectionLabel,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 6,
+  // Section header
+  sectionHeader: {
+    fontSize: 13, fontWeight: "600", color: colors.text,
+    paddingHorizontal: 20, paddingTop: 20, paddingBottom: 10,
   },
-  section: {
-    backgroundColor: colors.card,
-    marginHorizontal: 12,
-    borderRadius: 12,
+
+  // Group
+  group: {
+    backgroundColor: "#fff", marginHorizontal: 16,
+    borderRadius: 14, borderWidth: 1, borderColor: colors.border,
     overflow: "hidden",
-    borderWidth: 1,
-    borderColor: colors.border,
   },
-
-  menuItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 14,
-    paddingVertical: 13,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
-    gap: 12,
+  row: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    paddingHorizontal: 16, paddingVertical: 13,
+    borderBottomWidth: 1, borderBottomColor: "#f4f6fa",
   },
-  menuItemLast: { borderBottomWidth: 0 },
-  iconBox: {
-    width: 34,
-    height: 34,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
-  iconText: { fontSize: 16 },
-  menuItemCenter: { flex: 1 },
-  menuItemLabel: { fontSize: 14, fontWeight: "500", color: colors.text },
-  menuItemSub: { fontSize: 12, color: colors.textMuted, marginTop: 1 },
-  menuItemRight: { flexDirection: "row", alignItems: "center", gap: 6 },
-  chevron: { fontSize: 16, color: colors.textMuted, fontWeight: "600" },
-
+  rowLast: { borderBottomWidth: 0 },
+  rowIcon: { width: 38, height: 38, borderRadius: 10, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  rowMid: { flex: 1 },
+  rowLabelRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  rowLabel: { fontSize: 14, fontWeight: "600", color: colors.text },
+  rowSub: { fontSize: 11, color: colors.textLight, marginTop: 2 },
   badge: {
-    backgroundColor: colors.red,
-    borderRadius: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    backgroundColor: colors.greenLight, borderRadius: 4,
+    paddingHorizontal: 6, paddingVertical: 2,
   },
-  badgeText: { fontSize: 10, fontWeight: "700", color: "#fff" },
+  badgeTxt: { fontSize: 9, fontWeight: "700", color: colors.green, letterSpacing: 0.4 },
 
-  subItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingLeft: 62,
-    paddingRight: 14,
-    paddingVertical: 11,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
-    backgroundColor: "#fafcfe",
+  // Footer
+  footer: { alignItems: "center", paddingVertical: 28, gap: 12 },
+  signOutBtn: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    borderWidth: 1.5, borderColor: colors.red,
+    borderRadius: 100, paddingHorizontal: 24, paddingVertical: 10,
   },
-  subItemLast: { borderBottomWidth: 0 },
-  subItemLabel: { fontSize: 13.5, color: colors.text },
-  chevronSub: { fontSize: 16, color: colors.textMuted },
-
-  versionRow: { paddingHorizontal: 14, paddingVertical: 13 },
-  versionText: { fontSize: 14, color: colors.textMuted },
-
-  footer: { alignItems: "center", paddingVertical: 24, gap: 12 },
-  logoutBtn: {
-    borderWidth: 1.5,
-    borderColor: colors.red,
-    borderRadius: 8,
-    paddingHorizontal: 32,
-    paddingVertical: 10,
-  },
-  logoutText: { fontSize: 14, fontWeight: "600", color: colors.red },
-  privacyLink: { fontSize: 13, color: colors.primary },
-  footerBrand: { alignItems: "center", gap: 4 },
-  footerBrandText: { fontSize: 15, fontWeight: "700", color: colors.textMuted },
-  footerCaption: { fontSize: 11, color: colors.textLight },
+  signOutTxt: { fontSize: 14, fontWeight: "600", color: colors.red },
+  versionTxt: { fontSize: 11, color: colors.textLight },
 });

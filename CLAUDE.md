@@ -116,3 +116,8 @@ Open the web UI in a browser at `http://localhost:5173` while `dev:desktop` is r
 ## Roadmap reference
 
 Full phased plan lives in `docs/ARCHITECTURE.md` — follow it when deciding scope.
+
+## Binding feature requirements
+
+All contractual feature requirements from the client agreement live in `docs/FEATURES.md`.
+Read that file before building any of these modules: invoicing, salesman, inventory, subscriptions, voice assistant, Excel paste, or anything touching company-based data isolation.

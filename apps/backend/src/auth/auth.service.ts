@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { PrismaService } from "../prisma/prisma.service";
-import { RegisterDto } from "./auth.dto";
+import { RegisterDto, UpdateTenantDto } from "./auth.dto";
 
 const TRIAL_DAYS = 7;
 
@@ -49,6 +49,43 @@ export class AuthService {
         trialStartedAt: tenant.trialStartedAt.toISOString(),
         trialExpiresAt: tenant.trialExpiresAt.toISOString(),
       },
+    };
+  }
+
+  async getTenant(tenantId: string) {
+    const t = await this.prisma.tenant.findUniqueOrThrow({
+      where: { id: tenantId },
+      select: {
+        id: true, phone: true, countryCode: true,
+        companyName: true, businessType: true, companyEmail: true,
+        extraCompanies: true,
+        trialStartedAt: true, trialExpiresAt: true,
+      },
+    });
+    return {
+      ...t,
+      extraCompanies: (() => { try { return JSON.parse(t.extraCompanies); } catch { return []; } })(),
+    };
+  }
+
+  async updateTenant(tenantId: string, dto: UpdateTenantDto) {
+    const t = await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        ...(dto.companyName !== undefined && { companyName: dto.companyName }),
+        ...(dto.businessType !== undefined && { businessType: dto.businessType }),
+        ...(dto.companyEmail !== undefined && { companyEmail: dto.companyEmail }),
+        ...(dto.extraCompanies !== undefined && { extraCompanies: dto.extraCompanies }),
+      },
+      select: {
+        id: true, phone: true, countryCode: true,
+        companyName: true, businessType: true, companyEmail: true,
+        extraCompanies: true,
+      },
+    });
+    return {
+      ...t,
+      extraCompanies: (() => { try { return JSON.parse(t.extraCompanies); } catch { return []; } })(),
     };
   }
 }

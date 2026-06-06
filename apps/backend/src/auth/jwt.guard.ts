@@ -9,6 +9,8 @@ import { JwtService } from "@nestjs/jwt";
 export type AuthedRequest = {
   headers: { authorization?: string };
   tenantId: string;
+  memberId?: string;
+  memberRole?: string;
 };
 
 @Injectable()
@@ -22,8 +24,10 @@ export class JwtGuard implements CanActivate {
       throw new UnauthorizedException("Missing bearer token");
     }
     try {
-      const payload = await this.jwt.verifyAsync<{ sub: string }>(auth.slice(7));
+      const payload = await this.jwt.verifyAsync<{ sub: string; memberId?: string; role?: string }>(auth.slice(7));
       req.tenantId = payload.sub;
+      req.memberId = payload.memberId;
+      req.memberRole = payload.role;
       return true;
     } catch {
       throw new UnauthorizedException("Invalid token");

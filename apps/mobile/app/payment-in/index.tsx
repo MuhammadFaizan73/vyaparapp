@@ -1,133 +1,232 @@
-import { useState } from "react";
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, TextInput } from "react-native";
+import { useState, useCallback, useRef } from "react";
+import {
+  View, Text, TouchableOpacity, FlatList, StyleSheet, Animated,
+} from "react-native";
 import { useRouter } from "expo-router";
+import { useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../src/theme";
+import { api } from "../../src/auth";
+import type { Transaction, Party } from "@vyapar/api-client";
 
-const TRANSACTIONS = [
-  // empty for now — shows empty state
+type PiRow = Transaction & { partyName: string; colorIdx: number };
+
+const ROW_COLORS = [
+  colors.primary,
+  "#15803d",
+  "#1d4ed8",
+  "#b45309",
+  "#6d28d9",
+  "#be185d",
+  "#c2410c",
 ];
 
-const DATE_FILTERS = ["This Month", "Last Month", "Custom"];
-const TYPE_FILTERS = ["All", "Payment-In", "Payment-Out"];
+function fmt4(n: number) {
+  return n.toLocaleString("en-PK", { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+}
+
+function fmtDate(iso: string) {
+  return new Date(iso).toLocaleDateString("en-PK", {
+    day: "2-digit", month: "short", year: "2-digit",
+  });
+}
 
 export default function PaymentInListScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [dateFilter, setDateFilter] = useState("This Month");
-  const [typeFilter, setTypeFilter] = useState("All");
-  const [partySearch, setPartySearch] = useState("");
-  const [showDateDropdown, setShowDateDropdown] = useState(false);
-  const [showTypeDropdown, setShowTypeDropdown] = useState(false);
+
+  const [rows, setRows] = useState<PiRow[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // FAB animation
+  const micPulse = useRef(new Animated.Value(1)).current;
+
+  async function loadData() {
+    try {
+      const [txns, parties] = await Promise.all([
+        api.getTransactionsByType("payment_in"),
+        api.getParties(),
+      ]);
+      const partyMap = Object.fromEntries(parties.map((p: Party) => [p.id, p.name]));
+      const colorMap: Record<string, number> = {};
+      let colorCounter = 0;
+      setRows(
+        txns.map((t) => {
+          if (!(t.partyId in colorMap)) {
+            colorMap[t.partyId] = colorCounter++ % ROW_COLORS.length;
+          }
+          return { ...t, partyName: partyMap[t.partyId] ?? "Unknown", colorIdx: colorMap[t.partyId] };
+        })
+      );
+    } catch {
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useFocusEffect(
+    useCallback(() => {
+      setLoading(true);
+      void loadData();
+    }, [])
+  );
+
+  // Today's date formatted for filter row
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+    .toLocaleDateString("en-PK", { day: "2-digit", month: "2-digit", year: "numeric" });
+  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+    .toLocaleDateString("en-PK", { day: "2-digit", month: "2-digit", year: "numeric" });
+
+  function startMicPulse() {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(micPulse, { toValue: 1.18, duration: 600, useNativeDriver: true }),
+        Animated.timing(micPulse, { toValue: 1, duration: 600, useNativeDriver: true }),
+      ])
+    ).start();
+  }
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
-      {/* Header */}
-      <View style={styles.header}>
+      {/* Teal app bar */}
+      <View style={styles.appBar}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={8}>
-          <Text style={styles.backArrow}>←</Text>
+          <Ionicons name="chevron-back" size={24} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>All Transactions</Text>
-        <TouchableOpacity style={styles.headerIconBtn}>
-          <Text style={styles.headerIcon}>🔍</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.pdfBtn}>
-          <Text style={styles.pdfBtnText}>PDF</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Filter row */}
-      <View style={styles.filterRow}>
-        {/* Date filter */}
-        <View style={styles.filterWrap}>
-          <TouchableOpacity
-            style={styles.filterDropdown}
-            onPress={() => { setShowDateDropdown(!showDateDropdown); setShowTypeDropdown(false); }}
-          >
-            <Text style={styles.filterText}>{dateFilter}</Text>
-            <Text style={styles.filterChevron}>∨</Text>
+        <Text style={styles.appBarTitle}>All Transactions</Text>
+        <View style={styles.appBarRight}>
+          <TouchableOpacity style={styles.pdfPill} hitSlop={8}>
+            <Text style={styles.pdfPillTxt}>Pdf</Text>
           </TouchableOpacity>
-          {showDateDropdown && (
-            <View style={styles.dropdownMenu}>
-              {DATE_FILTERS.map((f) => (
-                <TouchableOpacity
-                  key={f}
-                  style={styles.dropdownItem}
-                  onPress={() => { setDateFilter(f); setShowDateDropdown(false); }}
-                >
-                  <Text style={[styles.dropdownItemText, f === dateFilter && styles.dropdownItemActive]}>{f}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-        </View>
-
-        {/* Type filter */}
-        <View style={styles.filterWrap}>
-          <TouchableOpacity
-            style={styles.filterDropdown}
-            onPress={() => { setShowTypeDropdown(!showTypeDropdown); setShowDateDropdown(false); }}
-          >
-            <Text style={styles.filterText}>{typeFilter}</Text>
-            <Text style={styles.filterChevron}>∨</Text>
+          <TouchableOpacity style={styles.xlsPill} hitSlop={8}>
+            <Text style={styles.xlsPillTxt}>xls</Text>
           </TouchableOpacity>
-          {showTypeDropdown && (
-            <View style={styles.dropdownMenu}>
-              {TYPE_FILTERS.map((f) => (
-                <TouchableOpacity
-                  key={f}
-                  style={styles.dropdownItem}
-                  onPress={() => { setTypeFilter(f); setShowTypeDropdown(false); }}
-                >
-                  <Text style={[styles.dropdownItemText, f === typeFilter && styles.dropdownItemActive]}>{f}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-        </View>
-
-        {/* Party name search */}
-        <View style={styles.partySearchWrap}>
-          <TextInput
-            style={styles.partySearch}
-            placeholder="Party Name"
-            placeholderTextColor={colors.textLight}
-            value={partySearch}
-            onChangeText={setPartySearch}
-          />
         </View>
       </View>
 
-      {/* Summary bar */}
-      <View style={styles.summaryBar}>
-        <View style={styles.summaryCell}>
-          <Text style={styles.summaryLabel}>Payment-In</Text>
-          <Text style={[styles.summaryValue, { color: colors.green }]}>Rs 0.00</Text>
+      {/* Filter rows */}
+      <View style={styles.filterSection}>
+        {/* Row 1: User */}
+        <View style={styles.filterRow}>
+          <Text style={styles.filterLabel}>User</Text>
+          <TouchableOpacity style={styles.filterDropdown}>
+            <Text style={styles.filterDropdownTxt}>All Users</Text>
+            <Ionicons name="chevron-down" size={13} color={colors.textMuted} />
+          </TouchableOpacity>
         </View>
-        <View style={styles.summaryDivider} />
-        <View style={styles.summaryCell}>
-          <Text style={styles.summaryLabel}>Payment-Out</Text>
-          <Text style={[styles.summaryValue, { color: colors.red }]}>Rs 0.00</Text>
-        </View>
-      </View>
 
-      <ScrollView style={styles.scroll} contentContainerStyle={{ flexGrow: 1 }}>
-        {TRANSACTIONS.length === 0 ? (
-          <View style={styles.empty}>
-            <Text style={styles.emptyIcon}>💸</Text>
-            <Text style={styles.emptyTitle}>No Transactions Yet</Text>
-            <Text style={styles.emptySub}>Record a payment-in to get started.</Text>
+        {/* Row 2: Date range */}
+        <View style={styles.filterRow}>
+          <TouchableOpacity style={styles.filterDropdown}>
+            <Text style={styles.filterDropdownTxt}>This month</Text>
+            <Ionicons name="chevron-down" size={13} color={colors.textMuted} />
+          </TouchableOpacity>
+          <View style={styles.dateRangeRight}>
+            <Ionicons name="calendar-outline" size={14} color={colors.textMuted} />
+            <Text style={styles.filterDropdownTxt}>{monthStart}</Text>
+            <Text style={styles.toLabel}>to</Text>
+            <Text style={styles.filterDropdownTxt}>{monthEnd}</Text>
           </View>
-        ) : null}
-      </ScrollView>
+        </View>
 
-      {/* FAB */}
-      <TouchableOpacity
-        style={[styles.fab, { bottom: insets.bottom + 20 }]}
-        onPress={() => router.push("/payment-in/new" as never)}
-      >
-        <Text style={styles.fabText}>+ Add Payment-In</Text>
-      </TouchableOpacity>
+        {/* Row 3: Type / Status — split */}
+        <View style={[styles.filterRow, { paddingHorizontal: 0 }]}>
+          <TouchableOpacity style={styles.filterHalf}>
+            <Text style={styles.filterDropdownTxt}>Payment-In</Text>
+            <Ionicons name="chevron-down" size={13} color={colors.textMuted} />
+          </TouchableOpacity>
+          <View style={styles.filterDivider} />
+          <TouchableOpacity style={styles.filterHalf}>
+            <Text style={styles.filterDropdownTxt}>All Statuses</Text>
+            <Ionicons name="chevron-down" size={13} color={colors.textMuted} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Row 4: Party Name */}
+        <View style={[styles.filterRow, { borderBottomWidth: 0 }]}>
+          <Text style={styles.filterLabelTeal}>Party Name</Text>
+          <TouchableOpacity style={styles.filterDropdown}>
+            <Text style={styles.filterDropdownTxt}>All parties</Text>
+            <Ionicons name="chevron-down" size={13} color={colors.textMuted} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* List */}
+      {loading ? (
+        <View style={styles.centerWrap}>
+          <Text style={styles.loadingTxt}>Loading…</Text>
+        </View>
+      ) : rows.length === 0 ? (
+        <View style={styles.centerWrap}>
+          <View style={styles.docIllustration}>
+            <View style={styles.docPage}>
+              <View style={styles.docLine} />
+              <View style={styles.docLine} />
+              <View style={[styles.docLine, { width: "55%" }]} />
+            </View>
+            <View style={styles.docAccent} />
+          </View>
+          <Text style={styles.emptyTitle}>No transactions yet</Text>
+          <Text style={styles.emptySub}>Record a payment to get started.</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={rows}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 90 }}
+          renderItem={({ item, index }) => (
+            <TouchableOpacity activeOpacity={0.7} style={styles.txnRow}>
+              {/* Left color bar */}
+              <View style={[styles.colorBar, { backgroundColor: ROW_COLORS[item.colorIdx] }]} />
+
+              {/* Party + date */}
+              <View style={styles.txnLeft}>
+                <Text style={styles.txnParty}>{item.partyName}</Text>
+                <Text style={styles.txnDate}>{fmtDate(item.date)}</Text>
+              </View>
+
+              {/* PayIn : N */}
+              <View style={styles.txnMid}>
+                <Text style={styles.txnPayIn}>PayIn : {index + 1}</Text>
+              </View>
+
+              {/* Total + Balance */}
+              <View style={styles.txnRight}>
+                <Text style={styles.txnAmtLabel}>Total : Rs</Text>
+                <Text style={styles.txnAmt}>{fmt4(item.total)}</Text>
+                <Text style={styles.txnAmtLabel}>Balance: Rs</Text>
+                <Text style={styles.txnBalance}>{fmt4(item.balance)}</Text>
+              </View>
+            </TouchableOpacity>
+          )}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+        />
+      )}
+
+      {/* 3-button FAB bar */}
+      <View style={[styles.fabBar, { paddingBottom: insets.bottom + 12 }]}>
+        <TouchableOpacity style={styles.fabCirclePurple}>
+          <Ionicons name="chevron-forward" size={20} color="#fff" />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.fabRedPill}
+          onPress={() => router.push("/payment-in/new" as never)}
+        >
+          <Ionicons name="add" size={18} color="#fff" />
+          <Text style={styles.fabPillTxt}>Add Payment-In</Text>
+        </TouchableOpacity>
+
+        <Animated.View style={{ transform: [{ scale: micPulse }] }}>
+          <TouchableOpacity style={styles.fabCircleOrange} onPress={startMicPulse}>
+            <Ionicons name="mic" size={20} color="#fff" />
+          </TouchableOpacity>
+        </Animated.View>
+      </View>
     </View>
   );
 }
@@ -135,112 +234,107 @@ export default function PaymentInListScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
 
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.teal,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 10,
+  /* App bar */
+  appBar: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 14, paddingVertical: 13,
+    flexDirection: "row", alignItems: "center", gap: 12,
   },
-  backArrow: { fontSize: 22, color: "#fff" },
-  headerTitle: { flex: 1, fontSize: 18, fontWeight: "700", color: "#fff" },
-  headerIconBtn: { padding: 4 },
-  headerIcon: { fontSize: 18 },
-  pdfBtn: {
-    backgroundColor: "rgba(255,255,255,0.2)",
-    borderRadius: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.4)",
+  appBarTitle: { flex: 1, fontSize: 17, fontWeight: "700", color: "#fff" },
+  appBarRight: { flexDirection: "row", alignItems: "center", gap: 8 },
+  pdfPill: {
+    backgroundColor: "#fee2e2", borderRadius: 6,
+    paddingHorizontal: 9, paddingVertical: 4,
   },
-  pdfBtnText: { fontSize: 13, fontWeight: "700", color: "#fff" },
+  pdfPillTxt: { fontSize: 11, fontWeight: "700", color: colors.red },
+  xlsPill: {
+    backgroundColor: "#dcfce7", borderRadius: 6,
+    paddingHorizontal: 9, paddingVertical: 4,
+  },
+  xlsPillTxt: { fontSize: 11, fontWeight: "700", color: colors.green },
 
+  /* Filter section */
+  filterSection: {
+    backgroundColor: "#fff",
+    borderBottomWidth: 1, borderBottomColor: colors.border,
+  },
   filterRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.card,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 14, paddingVertical: 11,
+    borderBottomWidth: 1, borderBottomColor: "#f4f6fa",
     gap: 8,
-    zIndex: 10,
   },
-  filterWrap: { position: "relative" },
-  filterDropdown: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    backgroundColor: "#f8fafc",
-    gap: 4,
+  filterLabel: { fontSize: 13.5, fontWeight: "700", color: colors.text },
+  filterLabelTeal: { fontSize: 13.5, fontWeight: "700", color: colors.primary },
+  filterDropdown: { flexDirection: "row", alignItems: "center", gap: 4 },
+  filterDropdownTxt: { fontSize: 12.5, color: colors.textSecondary, fontWeight: "500" },
+  filterHalf: {
+    flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center",
+    paddingVertical: 11, gap: 4,
   },
-  filterText: { fontSize: 12, color: colors.text, fontWeight: "500" },
-  filterChevron: { fontSize: 10, color: colors.textMuted },
-  dropdownMenu: {
-    position: "absolute",
-    top: 38,
-    left: 0,
-    backgroundColor: colors.card,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    minWidth: 130,
-    zIndex: 100,
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  dropdownItem: { paddingHorizontal: 14, paddingVertical: 10 },
-  dropdownItemText: { fontSize: 13, color: colors.text },
-  dropdownItemActive: { color: colors.primary, fontWeight: "600" },
-  partySearchWrap: { flex: 1 },
-  partySearch: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    fontSize: 12,
-    color: colors.text,
-    backgroundColor: "#f8fafc",
-  },
+  filterDivider: { width: 1, height: 32, backgroundColor: colors.border },
+  dateRangeRight: { flexDirection: "row", alignItems: "center", gap: 6 },
+  toLabel: { fontSize: 12, color: colors.textMuted },
 
-  summaryBar: {
-    flexDirection: "row",
-    backgroundColor: colors.card,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+  /* List row */
+  txnRow: {
+    flexDirection: "row", alignItems: "center",
+    backgroundColor: "#fff", paddingVertical: 12, paddingRight: 14,
   },
-  summaryCell: { flex: 1, padding: 14, alignItems: "center" },
-  summaryDivider: { width: 1, backgroundColor: colors.border, marginVertical: 8 },
-  summaryLabel: { fontSize: 12, color: colors.textMuted, marginBottom: 4 },
-  summaryValue: { fontSize: 16, fontWeight: "700" },
+  colorBar: { width: 4, alignSelf: "stretch", marginRight: 12 },
+  txnLeft: { flex: 1.5, gap: 2 },
+  txnParty: { fontSize: 13.5, fontWeight: "700", color: colors.text },
+  txnDate: { fontSize: 11, color: colors.textLight, marginTop: 2 },
+  txnMid: { flex: 1, alignItems: "center" },
+  txnPayIn: { fontSize: 11.5, color: colors.textMuted, fontWeight: "500" },
+  txnRight: { alignItems: "flex-end", gap: 1 },
+  txnAmtLabel: { fontSize: 10, color: colors.textLight },
+  txnAmt: { fontSize: 12.5, fontWeight: "700", color: colors.text },
+  txnBalance: { fontSize: 12.5, fontWeight: "700", color: colors.primary },
+  separator: { height: 1, backgroundColor: "#f0f4f8", marginLeft: 16 },
 
-  scroll: { flex: 1 },
-
-  empty: { flex: 1, alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 80 },
-  emptyIcon: { fontSize: 52 },
-  emptyTitle: { fontSize: 16, fontWeight: "600", color: colors.textMuted },
-  emptySub: { fontSize: 13, color: colors.textLight },
-
-  fab: {
-    position: "absolute",
-    alignSelf: "center",
-    backgroundColor: colors.teal,
-    borderRadius: 999,
-    paddingHorizontal: 24,
-    paddingVertical: 14,
-    shadowColor: "#000",
-    shadowOpacity: 0.18,
-    shadowRadius: 8,
-    elevation: 5,
+  /* Empty / loading */
+  centerWrap: { flex: 1, alignItems: "center", justifyContent: "center", gap: 10, padding: 24 },
+  loadingTxt: { fontSize: 13, color: colors.textMuted },
+  docIllustration: { width: 110, height: 110, position: "relative", marginBottom: 4 },
+  docPage: {
+    width: 78, height: 88, backgroundColor: "#fff", borderRadius: 8,
+    borderWidth: 1, borderColor: colors.border, padding: 14, gap: 7,
+    shadowColor: "#000", shadowOpacity: 0.08, shadowRadius: 8, elevation: 3,
   },
-  fabText: { fontSize: 15, fontWeight: "700", color: "#fff" },
+  docLine: { height: 5, backgroundColor: "#dde6f0", borderRadius: 3, width: "82%" },
+  docAccent: {
+    position: "absolute", right: 0, top: 14,
+    width: 28, height: 78, backgroundColor: colors.primary,
+    borderRadius: 8, opacity: 0.7,
+  },
+  emptyTitle: { fontSize: 15, fontWeight: "600", color: colors.text },
+  emptySub: { fontSize: 13, color: colors.textMuted },
+
+  /* FAB bar */
+  fabBar: {
+    position: "absolute", bottom: 0, left: 0, right: 0,
+    flexDirection: "row", alignItems: "center", gap: 10,
+    paddingHorizontal: 16, paddingTop: 12,
+    backgroundColor: "transparent",
+  },
+  fabCirclePurple: {
+    width: 46, height: 46, borderRadius: 23,
+    backgroundColor: "#6d28d9",
+    alignItems: "center", justifyContent: "center",
+    shadowColor: "#6d28d9", shadowOpacity: 0.4, shadowRadius: 8, elevation: 5,
+  },
+  fabRedPill: {
+    flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    height: 46, borderRadius: 23,
+    backgroundColor: colors.red,
+    shadowColor: colors.red, shadowOpacity: 0.35, shadowRadius: 8, elevation: 5,
+  },
+  fabPillTxt: { fontSize: 13.5, fontWeight: "700", color: "#fff" },
+  fabCircleOrange: {
+    width: 46, height: 46, borderRadius: 23,
+    backgroundColor: "#c2410c",
+    alignItems: "center", justifyContent: "center",
+    shadowColor: "#c2410c", shadowOpacity: 0.4, shadowRadius: 8, elevation: 5,
+  },
 });

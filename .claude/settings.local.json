@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(ELECTRON_RUN_AS_NODE= pnpm --filter @vyapar/desktop dev)",
+      "Bash(echo \"PID: $!\")",
+      "Read(//tmp/vyapar-app/project/**)",
+      "Read(//private/tmp/vyapar-app/project/**)",
+      "Bash(pnpm exec *)",
+      "Bash(kill 3767)",
+      "Bash(nohup npm exec expo start -- --lan --clear)",
+      "Bash(echo \"Metro PID: $!\")",
+      "Bash(sleep 10 && tail -15 /tmp/expo.log)",
+      "Read(//private/tmp/**)"
+    ]
+  }
+}

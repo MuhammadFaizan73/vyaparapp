@@ -36,7 +36,9 @@ export default function OnboardingScreen() {
       await saveToken(res.token);
       router.replace("/(tabs)" as never);
     } catch (e: any) {
-      setError(e?.response?.data?.message || "Could not connect. Check your Wi-Fi.");
+      const msg = e?.response?.data?.message || e?.message || "Unknown error";
+      const url = e?.config?.url || e?.request?._url || "";
+      setError(`${msg}\n${url}`);
     } finally {
       setLoading(false);
     }
@@ -124,6 +126,29 @@ export default function OnboardingScreen() {
             By continuing you agree to our Terms of Service. Your data is securely synced across all your devices.
           </Text>
         </View>
+
+        {/* Divider */}
+        <View style={styles.dividerRow}>
+          <View style={styles.dividerLine} />
+          <Text style={styles.dividerTxt}>OR</Text>
+          <View style={styles.dividerLine} />
+        </View>
+
+        {/* Staff / Salesman login */}
+        <TouchableOpacity
+          style={styles.staffCard}
+          onPress={() => router.push("/staff-login" as never)}
+          activeOpacity={0.8}
+        >
+          <View style={styles.staffIcon}>
+            <Text style={{ fontSize: 22 }}>👤</Text>
+          </View>
+          <View style={styles.inviteText}>
+            <Text style={styles.staffTitle}>Staff / Salesman Login</Text>
+            <Text style={styles.inviteSub}>Login with your email and password assigned by your employer.</Text>
+          </View>
+          <Text style={styles.staffArrow}>›</Text>
+        </TouchableOpacity>
 
         {/* Sync badge */}
         <View style={styles.syncBadge}>
@@ -235,6 +260,36 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     marginTop: 8,
   },
+
+  dividerRow: { flexDirection: "row", alignItems: "center", width: "100%", gap: 10 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
+  dividerTxt: { fontSize: 12, color: colors.textLight, fontWeight: "600" },
+
+  inviteCard: {
+    width: "100%", flexDirection: "row", alignItems: "center", gap: 14,
+    backgroundColor: "#f0fdf4", borderRadius: 14,
+    borderWidth: 1.5, borderColor: "#bbf7d0", padding: 16,
+  },
+  inviteIcon: {
+    width: 44, height: 44, borderRadius: 12,
+    backgroundColor: "#dcfce7", alignItems: "center", justifyContent: "center",
+  },
+  inviteText: { flex: 1 },
+  inviteTitle: { fontSize: 14.5, fontWeight: "700", color: colors.text },
+  inviteSub: { fontSize: 11.5, color: colors.textMuted, marginTop: 2, lineHeight: 16 },
+  inviteArrow: { fontSize: 22, color: colors.green, fontWeight: "300" },
+
+  staffCard: {
+    width: "100%", flexDirection: "row", alignItems: "center", gap: 14,
+    backgroundColor: "#eff6ff", borderRadius: 14,
+    borderWidth: 1.5, borderColor: "#bfdbfe", padding: 16,
+  },
+  staffIcon: {
+    width: 44, height: 44, borderRadius: 12,
+    backgroundColor: "#dbeafe", alignItems: "center", justifyContent: "center",
+  },
+  staffTitle: { fontSize: 14.5, fontWeight: "700", color: colors.text },
+  staffArrow: { fontSize: 22, color: colors.primary, fontWeight: "300" },
 
   syncBadge: {
     flexDirection: "row",

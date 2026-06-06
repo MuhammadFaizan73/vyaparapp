@@ -12,11 +12,33 @@
       "bundleIdentifier": "pk.vyapar.mobile"
     },
     "android": {
-      "package": "pk.vyapar.mobile"
+      "package": "pk.vyapar.mobile",
+      "config": {
+        "googleMaps": {
+          "apiKey": "YOUR_GOOGLE_MAPS_API_KEY"
+        }
+      }
     },
     "plugins": [
       "expo-router",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Vyapar Pakistan uses your location to track field sales visits.",
+          "locationAlwaysPermission": "Vyapar Pakistan uses background location to record your field route.",
+          "locationWhenInUsePermission": "Vyapar Pakistan uses your location to record shop check-ins.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true
+        }
+      ],
+      [
+        "@react-native-voice/voice",
+        {
+          "microphonePermission": "Allow Vyapar Pakistan to use the microphone for voice search",
+          "speechRecognitionPermission": "Allow Vyapar Pakistan to use speech recognition for filtering invoices"
+        }
+      ]
     ]
   }
 }

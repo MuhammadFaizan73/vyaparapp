@@ -1,4 +1,4 @@
-import { IsString, Length, Matches } from "class-validator";
+import { IsString, Length, Matches, IsOptional } from "class-validator";
 
 export class RegisterDto {
   @IsString()
@@ -9,4 +9,11 @@ export class RegisterDto {
   @Length(6, 15)
   @Matches(/^\d+$/, { message: "phone must contain only digits" })
   phone!: string;
+}
+
+export class UpdateTenantDto {
+  @IsOptional() @IsString() companyName?: string;
+  @IsOptional() @IsString() businessType?: string;
+  @IsOptional() @IsString() companyEmail?: string;
+  @IsOptional() @IsString() extraCompanies?: string;
 }

@@ -50,19 +50,73 @@ export const PartySchema = z.object({
   phone: z.string().nullable(),
   email: z.string().nullable(),
   billingAddress: z.string().nullable(),
+  city: z.string().nullable(),
+  state: z.string().nullable(),
+  pincode: z.string().nullable(),
+  shippingAddress: z.string().nullable(),
+  shippingCity: z.string().nullable(),
+  shippingState: z.string().nullable(),
+  shippingPincode: z.string().nullable(),
+  openingBalance: z.number(),
+  creditLimit: z.number().nullable(),
+  creditDays: z.number().nullable(),
+  gstin: z.string().nullable(),
+  pan: z.string().nullable(),
+  ntn: z.string().nullable(),
+  cnic: z.string().nullable(),
+  strn: z.string().nullable(),
+  partyType: z.enum(["customer", "supplier", "both"]).default("both"),
   isSystem: z.boolean(),
+  groupId: z.string().nullable(),
+  groupName: z.string().nullable(),
   balance: z.number(),
+  latitude: z.number().nullable(),
+  longitude: z.number().nullable(),
   createdAt: z.string().datetime(),
 });
 export type Party = z.infer<typeof PartySchema>;
 
-export const CreatePartyRequestSchema = z.object({
-  name: z.string().min(1).max(100),
+const partyFields = {
+  name: z.string().min(1).max(100).optional(),
   phone: z.string().optional(),
   email: z.string().optional(),
   billingAddress: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  pincode: z.string().optional(),
+  shippingAddress: z.string().optional(),
+  shippingCity: z.string().optional(),
+  shippingState: z.string().optional(),
+  shippingPincode: z.string().optional(),
+  openingBalance: z.number().optional(),
+  creditLimit: z.number().min(0).optional(),
+  creditDays: z.number().min(0).optional(),
+  gstin: z.string().optional(),
+  pan: z.string().optional(),
+  ntn: z.string().optional(),
+  cnic: z.string().optional(),
+  strn: z.string().optional(),
+  partyType: z.enum(["customer", "supplier", "both"]).optional(),
+  groupId: z.string().optional(),
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
+};
+
+export const CreatePartyRequestSchema = z.object({
+  ...partyFields,
+  name: z.string().min(1).max(100),
 });
 export type CreatePartyRequest = z.infer<typeof CreatePartyRequestSchema>;
+
+export const UpdatePartyRequestSchema = z.object(partyFields);
+export type UpdatePartyRequest = z.infer<typeof UpdatePartyRequestSchema>;
+
+export const PartyGroupSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  createdAt: z.string().datetime(),
+});
+export type PartyGroup = z.infer<typeof PartyGroupSchema>;
 
 export const UserSchema = z.object({
   id: z.string().uuid(),
@@ -91,3 +145,100 @@ export const ProductSchema = z.object({
   stock: z.number().int().nonnegative(),
 });
 export type Product = z.infer<typeof ProductSchema>;
+
+export const ItemSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  sku: z.string().nullable(),
+  unit: z.string().nullable(),
+  secondaryUnit: z.string().nullable(),
+  conversionRate: z.string().nullable(),
+  mrp: z.number().nullable(),
+  salePrice: z.number().nullable(),
+  purchasePrice: z.number().nullable(),
+  discount: z.number().nullable(),
+  openingStock: z.number(),
+  minStock: z.number(),
+  companyTag: z.string().nullable().optional(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type Item = z.infer<typeof ItemSchema>;
+
+export const CreateItemRequestSchema = z.object({
+  name: z.string().min(1).max(200),
+  sku: z.string().optional(),
+  unit: z.string().optional(),
+  secondaryUnit: z.string().optional(),
+  conversionRate: z.string().optional(),
+  mrp: z.number().optional(),
+  salePrice: z.number().optional(),
+  purchasePrice: z.number().optional(),
+  discount: z.number().min(0).max(100).optional(),
+  openingStock: z.number().min(0).optional(),
+  minStock: z.number().min(0).optional(),
+  companyTag: z.string().optional(),
+});
+export type CreateItemRequest = z.infer<typeof CreateItemRequestSchema>;
+
+export const UpdateItemRequestSchema = CreateItemRequestSchema.partial();
+export type UpdateItemRequest = z.infer<typeof UpdateItemRequestSchema>;
+
+export const TransactionSchema = z.object({
+  id: z.string().uuid(),
+  partyId: z.string().uuid(),
+  tenantId: z.string().uuid(),
+  type: z.enum(["sale","purchase","payment_in","payment_out","credit_note","debit_note","expense","opening_balance","estimate","proforma_invoice","sale_order","purchase_order","delivery_challan"]),
+  number: z.string().nullable(),
+  date: z.string().datetime(),
+  total: z.number(),
+  balance: z.number(),
+  notes: z.string().nullable(),
+  createdAt: z.string().datetime(),
+});
+export type Transaction = z.infer<typeof TransactionSchema>;
+
+export const CreateTransactionRequestSchema = z.object({
+  partyId: z.string().uuid(),
+  type: z.enum(["sale","purchase","payment_in","payment_out","credit_note","debit_note","expense","opening_balance","estimate","proforma_invoice","sale_order","purchase_order","delivery_challan"]),
+  number: z.string().optional(),
+  date: z.string().optional(),
+  total: z.number(),
+  balance: z.number(),
+  notes: z.string().optional(),
+});
+export type CreateTransactionRequest = z.infer<typeof CreateTransactionRequestSchema>;
+
+export const UpdateTransactionRequestSchema = z.object({
+  partyId: z.string().uuid().optional(),
+  date: z.string().optional(),
+  total: z.number().optional(),
+  balance: z.number().optional(),
+  notes: z.string().optional(),
+});
+export type UpdateTransactionRequest = z.infer<typeof UpdateTransactionRequestSchema>;
+
+export const TEAM_ROLES = [
+  "secondary_admin",
+  "salesman",
+  "biller",
+  "biller_salesman",
+  "ca_accountant",
+  "stock_keeper",
+  "ca_accountant_edit",
+] as const;
+export type TeamRole = (typeof TEAM_ROLES)[number];
+
+export const TeamMemberSchema = z.object({
+  id: z.string().uuid(),
+  tenantId: z.string(),
+  name: z.string(),
+  contact: z.string(),
+  role: z.string(),
+  permissions: z.string().default("[]"),
+  status: z.string(),
+  inviteToken: z.string(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type TeamMember = z.infer<typeof TeamMemberSchema>;

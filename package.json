@@ -8,6 +8,7 @@
     "dev:web": "pnpm --filter @vyapar/web dev",
     "dev:mobile": "pnpm --filter @vyapar/mobile start",
     "dev:backend": "pnpm --filter @vyapar/backend start:dev",
+    "dev:admin": "pnpm --filter @vyapar/admin dev",
     "dev:all": "concurrently \"pnpm dev:backend\" \"pnpm dev:desktop\" \"pnpm dev:web\"",
     "build": "turbo run build",
     "lint": "turbo run lint",

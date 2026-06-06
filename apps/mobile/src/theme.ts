@@ -1,20 +1,45 @@
 export const colors = {
-  bg: "#edf6fb",
+  // App background & cards
+  bg: "#f6f8fb",
   card: "#ffffff",
-  primary: "#2563eb",
-  teal: "#0891b2",
-  tealDark: "#0e7490",
-  red: "#ef4444",
-  green: "#16a34a",
+  border: "#eef2f6",
+  borderLight: "#f4f6fa",
+
+  // Primary teal
+  primary: "#0f5a72",
+  primaryLight: "#1f8aa8",
+  tabActive: "#1f8fd9",
+
+  // Legacy teal aliases
+  teal: "#0f5a72",
+  tealDark: "#0a3f54",
+
+  // Status colors
+  green: "#15803d",
   greenLight: "#dcfce7",
-  orange: "#f97316",
-  orangeLight: "#fff7ed",
-  gold: "#d97706",
+  greenBg: "#e6f9ee",
+  red: "#dc2626",
+  redLight: "#fee2e2",
+  amber: "#b45309",
+  amberLight: "#fef3c7",
+  blue: "#1d4ed8",
+  blueLight: "#dbeafe",
+  purple: "#6d28d9",
+  purpleLight: "#ede9fe",
+  pink: "#be185d",
+  pinkLight: "#fce7f3",
+  orange: "#c2410c",
+  orangeLight: "#fff1e6",
+  gold: "#f59e0b",
+  goldLight: "#fef3c7",
+
+  // Text
   text: "#0f172a",
+  textSecondary: "#475569",
   textMuted: "#64748b",
   textLight: "#94a3b8",
-  border: "#e2e8f0",
-  borderLight: "#f1f5f9",
+
+  // Legacy (kept for compat)
   sectionLabel: "#94a3b8",
 };
 
