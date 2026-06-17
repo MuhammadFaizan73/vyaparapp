@@ -17,9 +17,17 @@ export type TransactionSettings = {
   barcodeScanningForItems: boolean;
   /* Taxes, Discount & Total */
   transactionWiseTax: boolean;
-  /* Other */
+  transactionWiseDiscount: boolean;
+  roundOffTransactionAmount: boolean;
+  roundOffNearest: string;
+  roundOffTo: string;
+  /* More Transaction Features */
+  shareTransactionAs: string;
+  passcodeForEditDelete: boolean;
+  discountDuringPayment: boolean;
   linkPaymentsToInvoices: boolean;
   enableInvoicePreview: boolean;
+  termsAndConditions: boolean;
   showProfitWhileMakingSale: boolean;
   /* Prefixes */
   prefixSaleInvoices: string;
@@ -45,8 +53,16 @@ const DEFAULTS: TransactionSettings = {
   count: false,
   barcodeScanningForItems: false,
   transactionWiseTax: true,
+  transactionWiseDiscount: true,
+  roundOffTransactionAmount: true,
+  roundOffNearest: "Nearest",
+  roundOffTo: "1",
+  shareTransactionAs: "Ask me Everytime",
+  passcodeForEditDelete: false,
+  discountDuringPayment: false,
   linkPaymentsToInvoices: true,
   enableInvoicePreview: true,
+  termsAndConditions: true,
   showProfitWhileMakingSale: false,
   prefixSaleInvoices: "None",
   prefixCreditNote: "None",

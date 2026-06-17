@@ -36,9 +36,17 @@ export default function OnboardingScreen() {
       await saveToken(res.token);
       router.replace("/(tabs)" as never);
     } catch (e: any) {
-      const msg = e?.response?.data?.message || e?.message || "Unknown error";
-      const url = e?.config?.url || e?.request?._url || "";
-      setError(`${msg}\n${url}`);
+      const isTimeout = e?.code === "ECONNABORTED" || e?.message?.includes("timeout");
+      const isNetwork = e?.message === "Network Error";
+      const url = e?.config?.baseURL || e?.config?.url || "";
+      if (isTimeout) {
+        setError(`Connection timed out. Backend unreachable.\n${url}`);
+      } else if (isNetwork) {
+        setError(`Network error — backend server is down or wrong IP.\n${url}`);
+      } else {
+        const msg = e?.response?.data?.message || e?.message || "Unknown error";
+        setError(`${msg}\n${url}`);
+      }
     } finally {
       setLoading(false);
     }

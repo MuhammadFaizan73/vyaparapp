@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "scheme": "vyapar",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "pk.vyapar.mobile"
@@ -15,9 +15,17 @@
       "package": "pk.vyapar.mobile",
       "config": {
         "googleMaps": {
-          "apiKey": "YOUR_GOOGLE_MAPS_API_KEY"
+          "apiKey": ""
         }
-      }
+      },
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "plugins": [
       "expo-router",
@@ -38,7 +46,24 @@
           "microphonePermission": "Allow Vyapar Pakistan to use the microphone for voice search",
           "speechRecognitionPermission": "Allow Vyapar Pakistan to use speech recognition for filtering invoices"
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableProguardInReleaseBuilds": false,
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
+            "buildToolsVersion": "35.0.0"
+          }
+        }
       ]
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "e0f59f3c-c7d2-40cb-9f92-ba14a73348db"
+      }
+    }
   }
 }

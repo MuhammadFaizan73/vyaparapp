@@ -399,3 +399,5 @@ const s = StyleSheet.create({
   },
   assignedBadgeTxt: { fontSize: 11, fontWeight: "600", color: colors.primary },
 });
+
+export default AssignModal;

@@ -22,6 +22,7 @@ model Tenant {
   items            Item[]
   teamMembers      TeamMember[]
   loanAccounts     LoanAccount[]
+  bankAccounts     BankAccount[]
   locationPings    LocationPing[]
   shopVisits       ShopVisit[]
   assignments      PartyAssignment[]
@@ -206,6 +207,18 @@ model LoanAccount {
   processingFeePaidFrom String   @default("Cash")
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
+}
+
+model BankAccount {
+  id                 String   @id @default(uuid())
+  tenantId           String
+  tenant             Tenant   @relation(fields: [tenantId], references: [id])
+  name               String
+  openingBalance     Float    @default(0)
+  openingBalanceDate DateTime @default(now())
+  printOnInvoices    Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 }
 
 model PartyAssignment {

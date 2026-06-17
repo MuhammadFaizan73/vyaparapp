@@ -17,6 +17,17 @@ import type {
   TeamMember,
 } from "@vyapar/shared-types";
 
+export type BankAccount = {
+  id: string;
+  tenantId: string;
+  name: string;
+  openingBalance: number;
+  openingBalanceDate: string;
+  printOnInvoices: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ExtraCompany = {
   id: string;
   name: string;
@@ -61,6 +72,7 @@ export class VyaparApiClient {
   constructor(baseURL: string, token?: string) {
     this.http = axios.create({
       baseURL,
+      timeout: 10000,
       headers: {
         "bypass-tunnel-reminder": "true",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -267,6 +279,25 @@ export class VyaparApiClient {
   async adjustCash(body: { mode: "add" | "reduce"; amount: number; date: string; description?: string }): Promise<any> {
     const { data } = await this.http.post("/cash-bank/cash-in-hand/adjust", body);
     return data;
+  }
+
+  async getBankAccounts(): Promise<BankAccount[]> {
+    const { data } = await this.http.get<BankAccount[]>("/cash-bank/banks");
+    return data;
+  }
+
+  async createBankAccount(body: { name: string; openingBalance?: number; openingBalanceDate?: string; printOnInvoices?: boolean }): Promise<BankAccount> {
+    const { data } = await this.http.post<BankAccount>("/cash-bank/banks", body);
+    return data;
+  }
+
+  async updateBankAccount(id: string, body: { name?: string; openingBalance?: number; openingBalanceDate?: string; printOnInvoices?: boolean }): Promise<any> {
+    const { data } = await this.http.patch(`/cash-bank/banks/${id}`, body);
+    return data;
+  }
+
+  async deleteBankAccount(id: string): Promise<void> {
+    await this.http.delete(`/cash-bank/banks/${id}`);
   }
 
   async getOfficeLocation(): Promise<{ lat: number | null; lng: number | null; label: string | null }> {

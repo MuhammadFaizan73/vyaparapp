@@ -75,6 +75,9 @@ import { SyncShareScreen } from "./SyncShareScreen";
 import { ReportsScreen } from "./ReportsScreen";
 import { CashInHandScreen } from "./CashInHandScreen";
 import { LoanAccountsScreen } from "./LoanAccountsScreen";
+import { BankAccountsScreen } from "./BankAccountsScreen";
+import { SettingsScreen } from "./SettingsScreen";
+import { SyncDataScreen, BackupScreen } from "./SyncScreen";
 import {
   HomeIcon,
   PartiesIcon,
@@ -267,8 +270,12 @@ export function Shell({ status, onLogout, onLicenseActivated }: Props) {
     if (active.startsWith("purchase"))      return "purchase";
     if (active === "sync-share")            return "sync-share";
     if (active === "reports")               return "reports";
+    if (active === "cash-bank")             return "bank-accounts";
     if (active === "cash-in-hand")          return "cash-in-hand";
     if (active === "cash-loans")            return "loan-accounts";
+    if (active === "settings")              return "settings";
+    if (active === "sync-data")             return "sync-data";
+    if (active === "sync-backup")           return "sync-backup";
     return "placeholder";
   })();
 
@@ -446,8 +453,12 @@ export function Shell({ status, onLogout, onLicenseActivated }: Props) {
         {screenKey === "purchase"    && <PurchaseScreen isLocked={isLocked} onLockedAction={handleLockedAction} activeKey={active} />}
         {screenKey === "sync-share"  && <SyncShareScreen />}
         {screenKey === "reports"     && <ReportsScreen />}
+        {screenKey === "bank-accounts" && <BankAccountsScreen />}
         {screenKey === "cash-in-hand"  && <CashInHandScreen />}
         {screenKey === "loan-accounts" && <LoanAccountsScreen />}
+        {screenKey === "settings"      && <SettingsScreen />}
+        {screenKey === "sync-data"     && <SyncDataScreen />}
+        {screenKey === "sync-backup"   && <BackupScreen />}
         {screenKey === "placeholder" && (
           <section className="content">
             <p>{activeLabel} — coming soon.</p>

@@ -78,6 +78,23 @@ const TXN_SECTIONS: Array<{ title: string; items: TxnTypeItem[] }> = [
   },
 ];
 
+type MoreOption = {
+  label: string;
+  icon: React.ComponentProps<typeof Ionicons>["name"];
+  route?: string;
+  premium?: boolean;
+};
+
+const MORE_OPTIONS: MoreOption[] = [
+  { label: "Bank Accounts",   icon: "business-outline",        route: "/cash-bank" },
+  { label: "Day Book",        icon: "book-outline",            route: "/reports/day-book" },
+  { label: "All Txns Report", icon: "document-text-outline",   route: "/reports" },
+  { label: "Profit & Loss",   icon: "trending-up-outline",     premium: true },
+  { label: "Balance Sheet",   icon: "bar-chart-outline",       premium: true },
+  { label: "Billwise PnL",    icon: "receipt-outline",         premium: true },
+  { label: "Print Settings",  icon: "print-outline" },
+];
+
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -90,6 +107,7 @@ export default function HomeScreen() {
   const [search, setSearch] = useState("");
   const [companyName, setCompanyName] = useState("My Company");
   const [showAddTxn, setShowAddTxn] = useState(false);
+  const [showMoreOptions, setShowMoreOptions] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -247,29 +265,37 @@ export default function HomeScreen() {
       <View style={s.quickLinks}>
         <Text style={s.quickLinksTitle}>Quick Links</Text>
         <View style={s.quickLinksRow}>
+          {/* Add Txn — red */}
           <TouchableOpacity style={s.quickItem} onPress={() => setShowAddTxn(true)}>
-            <View style={s.quickIcon}>
-              <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
+            <View style={[s.quickIconBox, { backgroundColor: "#ff3d5a" }]}>
+              <Ionicons name="receipt-outline" size={24} color="#fff" />
+              <View style={s.quickAddBadge}><Ionicons name="add" size={10} color="#fff" /></View>
             </View>
             <Text style={s.quickLabel}>Add Txn</Text>
           </TouchableOpacity>
+          {/* Parties — teal */}
+          <TouchableOpacity style={s.quickItem} onPress={() => router.push("/party" as never)}>
+            <View style={[s.quickIconBox, { backgroundColor: "#0f5a72" }]}>
+              <Ionicons name="people-outline" size={24} color="#fff" />
+            </View>
+            <Text style={s.quickLabel}>Parties</Text>
+          </TouchableOpacity>
+          {/* Sale Report — blue */}
           <TouchableOpacity style={s.quickItem} onPress={() => router.push("/reports/sale" as never)}>
-            <View style={s.quickIcon}>
-              <Ionicons name="bar-chart-outline" size={22} color={colors.primary} />
+            <View style={[s.quickIconBox, { backgroundColor: "#4a9fd4" }]}>
+              <Ionicons name="document-text-outline" size={22} color="#fff" />
+              <Ionicons name="stats-chart" size={12} color="#fff" style={{ position: "absolute", bottom: 8, right: 8 }} />
             </View>
             <Text style={s.quickLabel}>Sale Report</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={s.quickItem} onPress={() => router.push("/sale" as never)}>
-            <View style={s.quickIcon}>
-              <Ionicons name="apps-outline" size={22} color={colors.primary} />
+          {/* Show All — blue with arrow circle */}
+          <TouchableOpacity style={s.quickItem} onPress={() => setShowMoreOptions(true)}>
+            <View style={[s.quickIconBox, { backgroundColor: "#4a9fd4" }]}>
+              <View style={s.quickArrowCircle}>
+                <Ionicons name="chevron-forward" size={20} color="#4a9fd4" />
+              </View>
             </View>
             <Text style={s.quickLabel}>Show All</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={s.quickItem} onPress={() => router.push("/sale/new" as never)}>
-            <View style={s.quickIcon}>
-              <Ionicons name="receipt-outline" size={22} color={colors.primary} />
-            </View>
-            <Text style={s.quickLabel}>Sale Invoice</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -337,6 +363,49 @@ export default function HomeScreen() {
         <Ionicons name="add" size={20} color="#fff" />
         <Text style={s.fabTxt}>Add New Sale</Text>
       </TouchableOpacity>
+
+      {/* ── More Options bottom sheet ── */}
+      <Modal
+        visible={showMoreOptions}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowMoreOptions(false)}
+      >
+        <View style={s.modalContainer}>
+          <Pressable style={StyleSheet.absoluteFillObject} onPress={() => setShowMoreOptions(false)} />
+          <View style={[s.sheet, { paddingBottom: insets.bottom + 16 }]}>
+            <View style={s.sheetHandle} />
+            <View style={s.sheetHeader}>
+              <Text style={s.sheetTitle}>More Options</Text>
+              <TouchableOpacity onPress={() => setShowMoreOptions(false)} hitSlop={10}>
+                <Ionicons name="close" size={22} color={colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+            <View style={s.moreGrid}>
+              {MORE_OPTIONS.map((item) => (
+                <TouchableOpacity
+                  key={item.label}
+                  style={s.moreItem}
+                  onPress={() => { setShowMoreOptions(false); if (item.route) router.push(item.route as never); }}
+                  activeOpacity={0.7}
+                >
+                  <View style={s.moreIconWrap}>
+                    <View style={s.moreIcon}>
+                      <Ionicons name={item.icon} size={28} color="#4a9fd4" />
+                    </View>
+                    {item.premium && (
+                      <View style={s.crownBadge}>
+                        <Ionicons name="crown" size={10} color="#fff" />
+                      </View>
+                    )}
+                  </View>
+                  <Text style={s.moreLabel}>{item.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* ── Add Transaction bottom sheet ── */}
       <Modal
@@ -438,11 +507,21 @@ const s = StyleSheet.create({
   },
   quickLinksTitle: { fontSize: 13, fontWeight: "600", color: colors.text, marginBottom: 12 },
   quickLinksRow: { flexDirection: "row", justifyContent: "space-between" },
-  quickItem: { alignItems: "center", gap: 6, flex: 1 },
-  quickIcon: {
-    width: 52, height: 52, borderRadius: 12,
-    backgroundColor: "#f0f4ff", alignItems: "center", justifyContent: "center",
-    borderWidth: 1, borderColor: "#dde8f8",
+  quickItem: { alignItems: "center", gap: 7, flex: 1 },
+  quickIconBox: {
+    width: 58, height: 62, borderRadius: 12,
+    alignItems: "center", justifyContent: "center",
+    shadowColor: "#000", shadowOpacity: 0.12, shadowRadius: 4, shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+  },
+  quickAddBadge: {
+    position: "absolute", top: 6, right: 6,
+    width: 16, height: 16, borderRadius: 8,
+    backgroundColor: "rgba(0,0,0,0.25)", alignItems: "center", justifyContent: "center",
+  },
+  quickArrowCircle: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: "#fff", alignItems: "center", justifyContent: "center",
   },
   quickLabel: { fontSize: 11, color: colors.text, fontWeight: "500", textAlign: "center" },
 
@@ -550,4 +629,31 @@ const s = StyleSheet.create({
     paddingHorizontal: 6, paddingVertical: 2, marginTop: -2,
   },
   soonTxt: { fontSize: 9.5, fontWeight: "700", color: "#b45309" },
+
+  /* ── More Options sheet ── */
+  moreGrid: {
+    flexDirection: "row", flexWrap: "wrap",
+    paddingTop: 4, paddingBottom: 8,
+  },
+  moreItem: {
+    width: "33.33%", alignItems: "center",
+    paddingVertical: 16, gap: 10,
+  },
+  moreIconWrap: { position: "relative" },
+  moreIcon: {
+    width: 68, height: 68, borderRadius: 16,
+    backgroundColor: "#e8f4fd",
+    alignItems: "center", justifyContent: "center",
+  },
+  crownBadge: {
+    position: "absolute", top: -4, right: -4,
+    width: 20, height: 20, borderRadius: 10,
+    backgroundColor: "#7c3aed",
+    alignItems: "center", justifyContent: "center",
+    borderWidth: 1.5, borderColor: "#fff",
+  },
+  moreLabel: {
+    fontSize: 12, fontWeight: "500", color: colors.text,
+    textAlign: "center", lineHeight: 16,
+  },
 });

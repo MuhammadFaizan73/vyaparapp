@@ -7,6 +7,31 @@ import { colors } from "../../src/theme";
 import { clearToken, getRole, getPermissions } from "../../src/auth";
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>["name"];
+type ExpandedSection = "sale" | "purchase" | null;
+
+interface SubItem {
+  label: string;
+  icon: IoniconsName;
+  route?: string;
+}
+
+const SALE_ITEMS: SubItem[] = [
+  { label: "Sale Invoice",              icon: "receipt-outline",            route: "/sale" },
+  { label: "Payment-In",               icon: "arrow-down-circle-outline",  route: "/payment-in" },
+  { label: "Sale Return (Credit Note)", icon: "return-down-back-outline",  route: "/credit-note" },
+  { label: "Estimate/Quotation",        icon: "calculator-outline",         route: "/estimate" },
+  { label: "Proforma Invoice",          icon: "document-text-outline",      route: "/proforma-invoice" },
+  { label: "Sale Order",                icon: "bag-outline",                route: "/sale-order" },
+  { label: "Delivery Note",             icon: "car-outline",                route: "/delivery-note" },
+];
+
+const PURCHASE_ITEMS: SubItem[] = [
+  { label: "Purchase Invoice",  icon: "cart-outline",            route: "/purchase" },
+  { label: "Payment-Out",       icon: "arrow-up-circle-outline", route: "/payment-out" },
+  { label: "Purchase Return",   icon: "return-up-back-outline",  route: "/purchase-return" },
+  { label: "Purchase Order",    icon: "clipboard-outline",       route: "/purchase-order" },
+  { label: "Debit Note",        icon: "document-outline",        route: "/debit-note" },
+];
 
 interface MenuRow {
   label: string;
@@ -16,50 +41,31 @@ interface MenuRow {
   fg: string;
   badge?: string;
   route?: string;
-  allow?: string[];     // role-based: only these roles + owner can see it
-  memberOnly?: boolean; // only non-owner roles see it
-  requirePerm?: string; // permission-based: if user has a custom permissions list, they need this perm
+  allow?: string[];
+  memberOnly?: boolean;
+  requirePerm?: string;
 }
 
-const BUSINESS: MenuRow[] = [
-  { label: "Company Profile", sub: "Logo, address, GSTIN", icon: "business-outline", tint: "#dbeafe", fg: "#1d4ed8", allow: ["secondary_admin", "ca_accountant", "ca_accountant_edit"] },
-  { label: "Parties", sub: "Customers & suppliers", icon: "people-outline", tint: "#fce7f3", fg: "#be185d", route: "/party", allow: ["secondary_admin", "salesman", "biller", "biller_salesman", "ca_accountant", "ca_accountant_edit"], requirePerm: "parties_view" },
-  { label: "Items", sub: "Inventory & stock", icon: "cube-outline", tint: "#dcfce7", fg: "#15803d", route: "/(tabs)/items", allow: ["secondary_admin", "biller_salesman", "salesman", "stock_keeper", "ca_accountant", "ca_accountant_edit"], requirePerm: "items_view" },
-  { label: "Tax Settings", sub: "GST & rates", icon: "receipt-outline", tint: "#fef3c7", fg: "#b45309", allow: ["secondary_admin", "ca_accountant", "ca_accountant_edit", "biller", "biller_salesman"] },
+const TOOLS: MenuRow[] = [
+  { label: "Office Location",    sub: "Set check-in zone for salesmen", icon: "business-outline",      tint: "#e6f3f7", fg: colors.primary,  route: "/office-location",      allow: ["secondary_admin"] },
+  { label: "Salesman Tracking",  sub: "Live map & attendance",          icon: "map-outline",            tint: "#dbeafe", fg: "#1d4ed8",        route: "/salesman-tracking",    allow: ["secondary_admin"] },
+  { label: "My Attendance",      sub: "Check in / out at office",       icon: "finger-print-outline",   tint: "#f0fdf4", fg: "#15803d",        route: "/my-visits",            allow: ["salesman", "biller_salesman"] },
+  { label: "User Management",    sub: "Team members & roles",           icon: "people-outline",         tint: "#fce7f3", fg: "#be185d",        route: "/user-management",      allow: ["secondary_admin"],   requirePerm: "team_manage" },
+  { label: "Backup & Sync",      sub: "Last sync · 2 min ago",         icon: "cloud-upload-outline",   tint: "#dcfce7", fg: "#15803d",        route: "/sync-share",           allow: ["secondary_admin"],   badge: "Auto" },
+  { label: "Print Settings",     sub: "Thermal & A4",                   icon: "print-outline",          tint: "#fef3c7", fg: "#b45309",        allow: ["secondary_admin"] },
+  { label: "Manage Companies",   sub: "Switch or add company",          icon: "layers-outline",         tint: "#e0e7ff", fg: "#4338ca",        route: "/manage-companies",     allow: [] },
+  { label: "Transaction Settings", sub: "Invoice, tax, prefixes",       icon: "document-text-outline",  tint: "#e0f2fe", fg: "#0369a1",        route: "/transaction-settings", allow: ["secondary_admin", "ca_accountant", "ca_accountant_edit", "biller", "biller_salesman"] },
+  { label: "Tax Settings",       sub: "GST & rates",                    icon: "receipt-outline",        tint: "#fef3c7", fg: "#b45309",        allow: ["secondary_admin", "ca_accountant", "ca_accountant_edit", "biller", "biller_salesman"] },
+  { label: "Join with Invite Code", sub: "Enter code from your employer", icon: "key-outline",         tint: "#f0fdf4", fg: "#15803d",        route: "/accept-invite",        memberOnly: true },
+  { label: "Plans & Pricing",    sub: "Upgrade your plan",              icon: "diamond-outline",        tint: "#fef3c7", fg: "#b45309",        route: "/plans-pricing",        allow: ["secondary_admin"] },
+  { label: "Help & Support",     sub: "Tutorials & FAQs",               icon: "help-circle-outline",    tint: "#e0e7ff", fg: "#4338ca" },
 ];
 
 const REPORTS: MenuRow[] = [
-  { label: "Reports", sub: "GST · P&L · Stock", icon: "bar-chart-outline", tint: "#ede9fe", fg: "#6d28d9", route: "/reports", allow: ["secondary_admin", "ca_accountant", "ca_accountant_edit"], requirePerm: "reports_view" },
-  { label: "Cashflow", sub: "Daily & monthly", icon: "cash-outline", tint: "#fff1e6", fg: "#c2410c", route: "/reports/cash-flow", allow: ["secondary_admin", "ca_accountant", "ca_accountant_edit"], requirePerm: "cash_view" },
-  { label: "Day Book", sub: "Today's transactions", icon: "book-outline", tint: "#dbeafe", fg: "#1d4ed8", route: "/reports/day-book", allow: ["secondary_admin", "ca_accountant", "ca_accountant_edit", "biller", "biller_salesman"], requirePerm: "reports_view" },
+  { label: "Reports",    sub: "GST · P&L · Stock",   icon: "bar-chart-outline", tint: "#ede9fe", fg: "#6d28d9", route: "/reports",            allow: ["secondary_admin", "ca_accountant", "ca_accountant_edit"], requirePerm: "reports_view" },
+  { label: "Day Book",   sub: "Today's transactions", icon: "book-outline",      tint: "#dbeafe", fg: "#1d4ed8", route: "/reports/day-book",   allow: ["secondary_admin", "ca_accountant", "ca_accountant_edit", "biller", "biller_salesman"], requirePerm: "reports_view" },
+  { label: "Cash & Bank", sub: "Accounts & balances", icon: "wallet-outline",   tint: "#dcfce7", fg: "#15803d", route: "/cash-bank",          allow: ["secondary_admin", "ca_accountant", "ca_accountant_edit"] },
 ];
-
-const TOOLS: MenuRow[] = [
-  { label: "Office Location", sub: "Set check-in zone for salesmen", icon: "business-outline", tint: "#e6f3f7", fg: colors.primary, route: "/office-location", allow: ["secondary_admin"] },
-  { label: "Salesman Tracking", sub: "Live map & attendance", icon: "map-outline", tint: "#dbeafe", fg: "#1d4ed8", route: "/salesman-tracking", allow: ["secondary_admin"] },
-  { label: "My Attendance", sub: "Check in / out at office", icon: "finger-print-outline", tint: "#f0fdf4", fg: "#15803d", route: "/my-visits", allow: ["salesman", "biller_salesman"] },
-  { label: "User Management", sub: "Team members & roles", icon: "people-outline", tint: "#fce7f3", fg: "#be185d", route: "/user-management", allow: ["secondary_admin"], requirePerm: "team_manage" },
-  { label: "Backup & Sync", sub: "Last sync · 2 min ago", icon: "cloud-upload-outline", tint: "#dcfce7", fg: "#15803d", badge: "Auto", route: "/sync-share", allow: ["secondary_admin"] },
-  { label: "Print Settings", sub: "Thermal & A4", icon: "print-outline", tint: "#fef3c7", fg: "#b45309", allow: ["secondary_admin"] },
-  { label: "Manage Companies", sub: "Switch or add company", icon: "layers-outline", tint: "#e0e7ff", fg: "#4338ca", route: "/manage-companies", allow: [] },
-  { label: "Join with Invite Code", sub: "Enter code from your employer", icon: "key-outline", tint: "#f0fdf4", fg: "#15803d", route: "/accept-invite", memberOnly: true },
-  { label: "Plans & Pricing", sub: "Upgrade your plan", icon: "diamond-outline", tint: "#fef3c7", fg: "#b45309", route: "/plans-pricing", allow: ["secondary_admin"] },
-  { label: "Help & Support", sub: "Tutorials & FAQs", icon: "help-circle-outline", tint: "#e0e7ff", fg: "#4338ca" },
-];
-
-// permissions=null → old JWT or owner → role-based fallback
-// permissions=string[] → member with assigned permissions; requirePerm is enforced strictly
-function isVisible(item: MenuRow, role: string, permissions: string[] | null): boolean {
-  if (role === "owner") return !item.memberOnly;
-  if (item.memberOnly) return true;
-
-  if (permissions !== null && item.requirePerm) {
-    return permissions.includes(item.requirePerm);
-  }
-
-  if (!item.allow) return true;
-  return item.allow.includes(role);
-}
 
 const ROLE_LABELS: Record<string, string> = {
   secondary_admin: "Secondary Admin",
@@ -71,20 +77,32 @@ const ROLE_LABELS: Record<string, string> = {
   ca_accountant_edit: "CA / Accountant (Edit)",
 };
 
+function isVisible(item: MenuRow, role: string, permissions: string[] | null): boolean {
+  if (role === "owner") return !item.memberOnly;
+  if (item.memberOnly) return true;
+  if (permissions !== null && item.requirePerm) return permissions.includes(item.requirePerm);
+  if (!item.allow) return true;
+  return item.allow.includes(role);
+}
+
 export default function MenuScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [role, setRole] = useState("owner");
   const [permissions, setPermissions] = useState<string[] | null>(null);
+  const [expanded, setExpanded] = useState<ExpandedSection>("sale");
 
   useFocusEffect(useCallback(() => {
     getRole().then(setRole);
     getPermissions().then(setPermissions);
   }, []));
 
-  const visibleBusiness = BUSINESS.filter(i => isVisible(i, role, permissions));
-  const visibleReports = REPORTS.filter(i => isVisible(i, role, permissions));
   const visibleTools = TOOLS.filter(i => isVisible(i, role, permissions));
+  const visibleReports = REPORTS.filter(i => isVisible(i, role, permissions));
+
+  function toggle(section: ExpandedSection) {
+    setExpanded(prev => prev === section ? null : section);
+  }
 
   function handleSignOut() {
     Alert.alert("Sign Out", "Are you sure you want to sign out?", [
@@ -98,7 +116,7 @@ export default function MenuScreen() {
     ]);
   }
 
-  function renderRow(item: MenuRow, last = false) {
+  function renderMenuRow(item: MenuRow, last = false) {
     return (
       <TouchableOpacity
         key={item.label}
@@ -122,6 +140,54 @@ export default function MenuScreen() {
         </View>
         <Ionicons name="chevron-forward" size={15} color={colors.textLight} />
       </TouchableOpacity>
+    );
+  }
+
+  function renderExpandableSection(
+    id: ExpandedSection,
+    label: string,
+    icon: IoniconsName,
+    tint: string,
+    fg: string,
+    items: SubItem[]
+  ) {
+    const open = expanded === id;
+    return (
+      <View key={id} style={styles.expandSection}>
+        <TouchableOpacity
+          style={styles.expandHeader}
+          onPress={() => toggle(id)}
+          activeOpacity={0.8}
+        >
+          <View style={[styles.expandIcon, { backgroundColor: tint }]}>
+            <Ionicons name={icon} size={19} color={fg} />
+          </View>
+          <Text style={styles.expandLabel}>{label}</Text>
+          <Ionicons
+            name={open ? "chevron-up" : "chevron-down"}
+            size={16}
+            color={colors.textLight}
+          />
+        </TouchableOpacity>
+
+        {open && (
+          <View style={styles.subList}>
+            {items.map((item, i) => (
+              <TouchableOpacity
+                key={item.label}
+                style={[styles.subRow, i === items.length - 1 && styles.subRowLast]}
+                onPress={() => item.route && router.push(item.route as never)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.subDot} />
+                <Ionicons name={item.icon} size={16} color={colors.textMuted} style={styles.subIcon} />
+                <Text style={styles.subLabel}>{item.label}</Text>
+                <Ionicons name="chevron-forward" size={13} color={colors.border} />
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+      </View>
     );
   }
 
@@ -153,21 +219,30 @@ export default function MenuScreen() {
           )}
         </View>
 
-        {/* Business */}
-        {visibleBusiness.length > 0 && (
-          <>
-            <SectionHeader title="Business" />
-            <View style={styles.group}>
-              {visibleBusiness.map((item, i) => renderRow(item, i === visibleBusiness.length - 1))}
-            </View>
-          </>
-        )}
+        {/* My Business */}
+        <Text style={styles.sectionHeader}>My Business</Text>
+        <View style={styles.group}>
+          {renderExpandableSection("sale", "Sale", "receipt-outline", "#fff0f4", "#e11d48", SALE_ITEMS)}
+          {renderExpandableSection("purchase", "Purchase", "cart-outline", "#f0fdf4", "#15803d", PURCHASE_ITEMS)}
 
-        {/* Reports */}
+          {/* Expenses */}
+          <TouchableOpacity style={styles.row} onPress={() => router.push("/expense" as never)} activeOpacity={0.7}>
+            <View style={[styles.rowIcon, { backgroundColor: "#ede9fe" }]}>
+              <Ionicons name="wallet-outline" size={18} color="#6d28d9" />
+            </View>
+            <View style={styles.rowMid}>
+              <Text style={styles.rowLabel}>Expenses</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={15} color={colors.textLight} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Reports & Finance */}
         {visibleReports.length > 0 && (
           <>
+            <Text style={styles.sectionHeader}>Reports & Finance</Text>
             <View style={styles.group}>
-              {visibleReports.map((item, i) => renderRow(item, i === visibleReports.length - 1))}
+              {visibleReports.map((item, i) => renderMenuRow(item, i === visibleReports.length - 1))}
             </View>
           </>
         )}
@@ -175,14 +250,14 @@ export default function MenuScreen() {
         {/* Tools */}
         {visibleTools.length > 0 && (
           <>
-            <SectionHeader title="Tools" />
+            <Text style={styles.sectionHeader}>Tools</Text>
             <View style={styles.group}>
-              {visibleTools.map((item, i) => renderRow(item, i === visibleTools.length - 1))}
+              {visibleTools.map((item, i) => renderMenuRow(item, i === visibleTools.length - 1))}
             </View>
           </>
         )}
 
-        {/* Version & signout */}
+        {/* Footer */}
         <View style={styles.footer}>
           <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut}>
             <Ionicons name="log-out-outline" size={16} color={colors.red} />
@@ -195,12 +270,6 @@ export default function MenuScreen() {
   );
 }
 
-function SectionHeader({ title }: { title: string }) {
-  return (
-    <Text style={styles.sectionHeader}>{title}</Text>
-  );
-}
-
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   appBar: {
@@ -210,7 +279,6 @@ const styles = StyleSheet.create({
   appBarTitle: { fontSize: 17, fontWeight: "600", color: colors.text },
   body: { paddingBottom: 110 },
 
-  // Profile
   profileCard: {
     backgroundColor: "#fff", marginHorizontal: 16, marginTop: 16,
     borderRadius: 14, padding: 16,
@@ -232,18 +300,18 @@ const styles = StyleSheet.create({
   },
   upgradeBtnTxt: { fontSize: 11.5, fontWeight: "600", color: "#fff" },
 
-  // Section header
   sectionHeader: {
     fontSize: 13, fontWeight: "600", color: colors.text,
     paddingHorizontal: 20, paddingTop: 20, paddingBottom: 10,
   },
 
-  // Group
   group: {
     backgroundColor: "#fff", marginHorizontal: 16,
     borderRadius: 14, borderWidth: 1, borderColor: colors.border,
     overflow: "hidden",
   },
+
+  // Normal menu row
   row: {
     flexDirection: "row", alignItems: "center", gap: 12,
     paddingHorizontal: 16, paddingVertical: 13,
@@ -255,11 +323,28 @@ const styles = StyleSheet.create({
   rowLabelRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   rowLabel: { fontSize: 14, fontWeight: "600", color: colors.text },
   rowSub: { fontSize: 11, color: colors.textLight, marginTop: 2 },
-  badge: {
-    backgroundColor: colors.greenLight, borderRadius: 4,
-    paddingHorizontal: 6, paddingVertical: 2,
-  },
+  badge: { backgroundColor: colors.greenLight, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
   badgeTxt: { fontSize: 9, fontWeight: "700", color: colors.green, letterSpacing: 0.4 },
+
+  // Expandable section
+  expandSection: { borderBottomWidth: 1, borderBottomColor: "#f4f6fa" },
+  expandHeader: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    paddingHorizontal: 16, paddingVertical: 13,
+  },
+  expandIcon: { width: 38, height: 38, borderRadius: 10, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  expandLabel: { flex: 1, fontSize: 14, fontWeight: "600", color: colors.text },
+
+  subList: { backgroundColor: "#fafbfc", borderTopWidth: 1, borderTopColor: "#f0f2f5" },
+  subRow: {
+    flexDirection: "row", alignItems: "center",
+    paddingHorizontal: 20, paddingVertical: 11,
+    borderBottomWidth: 1, borderBottomColor: "#f0f2f5",
+  },
+  subRowLast: { borderBottomWidth: 0 },
+  subDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: colors.border, marginRight: 10 },
+  subIcon: { marginRight: 10 },
+  subLabel: { flex: 1, fontSize: 13.5, color: colors.text },
 
   // Footer
   footer: { alignItems: "center", paddingVertical: 28, gap: 12 },

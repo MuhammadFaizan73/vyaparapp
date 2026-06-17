@@ -2,7 +2,7 @@ import * as SecureStore from "expo-secure-store";
 import { VyaparApiClient } from "@vyapar/api-client";
 
 const TOKEN_KEY = "vyapar_jwt";
-const API_BASE = process.env.EXPO_PUBLIC_API_BASE ?? "http://10.169.53.93:3000/api";
+const API_BASE = process.env.EXPO_PUBLIC_API_BASE ?? "https://63dfc27578ffa4d0-125-62-88-237.serveousercontent.com/api";
 
 export const api = new VyaparApiClient(API_BASE);
 

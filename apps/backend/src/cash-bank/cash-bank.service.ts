@@ -109,4 +109,51 @@ export class CashBankService {
       },
     });
   }
+
+  // ── Bank Accounts ──────────────────────────────────────────────────────────
+
+  async getBankAccounts(tenantId: string) {
+    return this.prisma.bankAccount.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: "asc" },
+    });
+  }
+
+  async createBankAccount(tenantId: string, body: {
+    name: string;
+    openingBalance?: number;
+    openingBalanceDate?: string;
+    printOnInvoices?: boolean;
+  }) {
+    return this.prisma.bankAccount.create({
+      data: {
+        tenantId,
+        name:               body.name,
+        openingBalance:     body.openingBalance ?? 0,
+        openingBalanceDate: body.openingBalanceDate ? new Date(body.openingBalanceDate) : new Date(),
+        printOnInvoices:    body.printOnInvoices ?? false,
+      },
+    });
+  }
+
+  async updateBankAccount(tenantId: string, id: string, body: {
+    name?: string;
+    openingBalance?: number;
+    openingBalanceDate?: string;
+    printOnInvoices?: boolean;
+  }) {
+    return this.prisma.bankAccount.updateMany({
+      where: { id, tenantId },
+      data: {
+        ...(body.name !== undefined             && { name: body.name }),
+        ...(body.openingBalance !== undefined   && { openingBalance: body.openingBalance }),
+        ...(body.openingBalanceDate !== undefined && { openingBalanceDate: new Date(body.openingBalanceDate) }),
+        ...(body.printOnInvoices !== undefined  && { printOnInvoices: body.printOnInvoices }),
+      },
+    });
+  }
+
+  async deleteBankAccount(tenantId: string, id: string) {
+    return this.prisma.bankAccount.deleteMany({ where: { id, tenantId } });
+  }
 }
