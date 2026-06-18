@@ -26,6 +26,7 @@ model Tenant {
   locationPings    LocationPing[]
   shopVisits       ShopVisit[]
   assignments      PartyAssignment[]
+  deviceSessions   DeviceSession[]
   companyName      String?
   businessType     String?
   companyEmail     String?
@@ -233,6 +234,20 @@ model PartyAssignment {
   createdAt DateTime   @default(now())
 
   @@unique([partyId, memberId])
+}
+
+model DeviceSession {
+  id          String   @id @default(uuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  deviceId    String
+  deviceName  String
+  deviceType  String
+  isActive    Boolean  @default(false)
+  lastSeenAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  @@unique([tenantId, deviceId])
 }
 
 // ─── Super Admin ──────────────────────────────────────────────────────────────

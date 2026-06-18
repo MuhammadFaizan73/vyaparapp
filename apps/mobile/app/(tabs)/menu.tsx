@@ -52,6 +52,7 @@ const TOOLS: MenuRow[] = [
   { label: "My Attendance",      sub: "Check in / out at office",       icon: "finger-print-outline",   tint: "#f0fdf4", fg: "#15803d",        route: "/my-visits",            allow: ["salesman", "biller_salesman"] },
   { label: "User Management",    sub: "Team members & roles",           icon: "people-outline",         tint: "#fce7f3", fg: "#be185d",        route: "/user-management",      allow: ["secondary_admin"],   requirePerm: "team_manage" },
   { label: "Backup & Sync",      sub: "Last sync · 2 min ago",         icon: "cloud-upload-outline",   tint: "#dcfce7", fg: "#15803d",        route: "/sync-share",           allow: ["secondary_admin"],   badge: "Auto" },
+  { label: "Manage Devices",    sub: "Control active device access",   icon: "phone-portrait-outline", tint: "#e0f2fe", fg: "#0369a1",        route: "/manage-devices",       allow: ["secondary_admin"] },
   { label: "Print Settings",     sub: "Thermal & A4",                   icon: "print-outline",          tint: "#fef3c7", fg: "#b45309",        allow: ["secondary_admin"] },
   { label: "Manage Companies",   sub: "Switch or add company",          icon: "layers-outline",         tint: "#e0e7ff", fg: "#4338ca",        route: "/manage-companies",     allow: [] },
   { label: "Transaction Settings", sub: "Invoice, tax, prefixes",       icon: "document-text-outline",  tint: "#e0f2fe", fg: "#0369a1",        route: "/transaction-settings", allow: ["secondary_admin", "ca_accountant", "ca_accountant_edit", "biller", "biller_salesman"] },

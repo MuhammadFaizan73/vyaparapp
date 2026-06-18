@@ -3,6 +3,7 @@ import { Redirect } from "expo-router";
 import { View, ActivityIndicator } from "react-native";
 import { loadToken, api } from "../src/auth";
 import { colors } from "../src/theme";
+import { scheduleExpiryNotifications, showExpiryBannerIfNeeded } from "../src/licenseNotifications";
 
 type State = "loading" | "onboarding" | "license-gate" | "app";
 
@@ -18,6 +19,9 @@ export default function Root() {
         if (status.state === "trial_expired" || status.state === "license_expired") {
           setState("license-gate");
         } else {
+          // Schedule / show expiry notifications
+          scheduleExpiryNotifications(status).catch(() => {});
+          showExpiryBannerIfNeeded(status).catch(() => {});
           setState("app");
         }
       } catch {

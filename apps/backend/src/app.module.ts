@@ -19,6 +19,7 @@ import { PartyGroupsModule } from "./party-groups/party-groups.module";
 import { LocationModule } from "./location/location.module";
 import { PartyAssignmentsModule } from "./party-assignments/party-assignments.module";
 import { AdminModule } from "./admin/admin.module";
+import { DevicesModule } from "./devices/devices.module";
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { AdminModule } from "./admin/admin.module";
     LocationModule,
     PartyAssignmentsModule,
     AdminModule,
+    DevicesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
-import { Tabs } from "expo-router";
-import { Platform, View, StyleSheet } from "react-native";
+import { Tabs, router } from "expo-router";
+import { Platform, View, StyleSheet, Text, TouchableOpacity } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { colors } from "../../src/theme";
 import { getRole, getPermissions } from "../../src/auth";
+import { useDevice } from "../../src/useDeviceSession";
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>["name"];
 type MCIName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
@@ -12,6 +13,24 @@ type MCIName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
 function hasPerm(permissions: string[] | null, perm: string): boolean {
   if (permissions === null) return true;
   return permissions.includes(perm);
+}
+
+function ReadOnlyBanner() {
+  const { isReadOnly } = useDevice();
+  if (!isReadOnly) return null;
+  return (
+    <TouchableOpacity
+      style={styles.readOnlyBanner}
+      onPress={() => router.push("/manage-devices")}
+      activeOpacity={0.85}
+    >
+      <Ionicons name="eye-outline" size={14} color="#fff" />
+      <Text style={styles.readOnlyText}>
+        View-only mode · Tap to activate this device
+      </Text>
+      <Ionicons name="chevron-forward" size={14} color="#fff" />
+    </TouchableOpacity>
+  );
 }
 
 export default function TabLayout() {
@@ -35,7 +54,9 @@ export default function TabLayout() {
   const showDashboard = hasPerm(permissions, "reports_view");
 
   return (
-    <Tabs
+    <>
+      <ReadOnlyBanner />
+      <Tabs
       screenOptions={{
         headerShown: false,
         tabBarStyle: styles.tabBar,
@@ -121,6 +142,7 @@ export default function TabLayout() {
         }}
       />
     </Tabs>
+    </>
   );
 }
 
@@ -155,5 +177,21 @@ const styles = StyleSheet.create({
   },
   iconWrapGold: {
     backgroundColor: "#fef9c3",
+  },
+  readOnlyBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#d97706",
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    gap: 6,
+  },
+  readOnlyText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "600",
+    flex: 1,
+    textAlign: "center",
   },
 });

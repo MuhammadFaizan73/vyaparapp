@@ -66,6 +66,17 @@ export type LocationPingPoint = {
   createdAt: string;
 };
 
+export type DeviceSession = {
+  id: string;
+  tenantId: string;
+  deviceId: string;
+  deviceName: string;
+  deviceType: "mobile" | "desktop" | "web";
+  isActive: boolean;
+  lastSeenAt: string;
+  createdAt: string;
+};
+
 export class VyaparApiClient {
   private http: AxiosInstance;
 
@@ -401,6 +412,27 @@ export class VyaparApiClient {
 
   async deleteAssignment(id: string): Promise<void> {
     await this.http.delete(`/party-assignments/${id}`);
+  }
+
+  // ── Device Sessions ────────────────────────────────────────────────────────
+
+  async registerDevice(deviceId: string, deviceName: string, deviceType: "mobile" | "desktop" | "web"): Promise<DeviceSession> {
+    const { data } = await this.http.post<DeviceSession>("/devices/register", { deviceId, deviceName, deviceType });
+    return data;
+  }
+
+  async getDevices(): Promise<DeviceSession[]> {
+    const { data } = await this.http.get<DeviceSession[]>("/devices");
+    return data;
+  }
+
+  async activateDevice(sessionId: string): Promise<DeviceSession> {
+    const { data } = await this.http.post<DeviceSession>(`/devices/${sessionId}/activate`);
+    return data;
+  }
+
+  async removeDevice(sessionId: string): Promise<void> {
+    await this.http.delete(`/devices/${sessionId}`);
   }
 }
 

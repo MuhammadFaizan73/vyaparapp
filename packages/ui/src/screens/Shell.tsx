@@ -1,6 +1,17 @@
-import { useMemo, useState, type ReactNode } from "react";
-import type { LicenseStatus } from "@vyapar/api-client";
-import { loadTenant, loadRole } from "../lib/api";
+import { useMemo, useState, useEffect, useCallback, type ReactNode } from "react";
+import type { LicenseStatus, DeviceSession } from "@vyapar/api-client";
+import { loadTenant, loadRole, api } from "../lib/api";
+
+const DESKTOP_DEVICE_ID_KEY = "vyapar.deviceId";
+
+function getOrCreateDesktopDeviceId(): string {
+  let id = localStorage.getItem(DESKTOP_DEVICE_ID_KEY);
+  if (!id) {
+    id = crypto.randomUUID();
+    localStorage.setItem(DESKTOP_DEVICE_ID_KEY, id);
+  }
+  return id;
+}
 
 // Keys allowed per role. "owner" / undefined = full access.
 const ROLE_ALLOWED: Record<string, string[]> = {
@@ -165,9 +176,10 @@ const navStructure: NavEntry[] = [
   {
     type: "item", key: "sync",      label: "Sync, Share & Backup", icon: <SyncIcon />,   action: "chevron",
     children: [
-      { key: "sync-data",   label: "Sync Data",  action: "none" },
-      { key: "sync-share",  label: "Share",      action: "none" },
-      { key: "sync-backup", label: "Backup",     action: "none" },
+      { key: "sync-data",    label: "Sync Data",      action: "none" },
+      { key: "sync-share",   label: "Share",          action: "none" },
+      { key: "sync-backup",  label: "Backup",         action: "none" },
+      { key: "sync-devices", label: "Manage Devices", action: "none" },
     ],
   },
   {
@@ -192,6 +204,47 @@ export function Shell({ status, onLogout, onLicenseActivated }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [showReviewOrder, setShowReviewOrder] = useState(false);
   const [showActivate,    setShowActivate]    = useState(false);
+  const [isReadOnly, setIsReadOnly] = useState(false);
+  const [devices, setDevices] = useState<DeviceSession[]>([]);
+  const [showDevices, setShowDevices] = useState(false);
+  const [deviceSessionId, setDeviceSessionId] = useState<string | null>(null);
+
+  const registerDevice = useCallback(async () => {
+    try {
+      const deviceId = getOrCreateDesktopDeviceId();
+      const hostname = window.location.hostname || "Desktop App";
+      const session = await api.registerDevice(deviceId, `Desktop – ${hostname}`, "desktop");
+      setDeviceSessionId(session.id);
+      setIsReadOnly(!session.isActive);
+    } catch {
+      // Network error — stay in current mode
+    }
+  }, []);
+
+  const loadDevices = useCallback(async () => {
+    try {
+      const list = await api.getDevices();
+      setDevices(list);
+    } catch {}
+  }, []);
+
+  const activateDevice = useCallback(async (sessionId: string) => {
+    try {
+      await api.activateDevice(sessionId);
+      await Promise.all([registerDevice(), loadDevices()]);
+    } catch {}
+  }, [registerDevice, loadDevices]);
+
+  const removeDevice = useCallback(async (sessionId: string) => {
+    try {
+      await api.removeDevice(sessionId);
+      await Promise.all([registerDevice(), loadDevices()]);
+    } catch {}
+  }, [registerDevice, loadDevices]);
+
+  useEffect(() => {
+    registerDevice();
+  }, [registerDevice]);
 
   const role = loadRole();
   const allowed = ROLE_ALLOWED[role]; // undefined = owner = full access
@@ -276,6 +329,7 @@ export function Shell({ status, onLogout, onLicenseActivated }: Props) {
     if (active === "settings")              return "settings";
     if (active === "sync-data")             return "sync-data";
     if (active === "sync-backup")           return "sync-backup";
+    if (active === "sync-devices")          return "sync-devices";
     return "placeholder";
   })();
 
@@ -443,6 +497,23 @@ export function Shell({ status, onLogout, onLicenseActivated }: Props) {
           </div>
         )}
 
+        {/* ── Read-only device banner ── */}
+        {isReadOnly && !isLocked && (
+          <div className="readonly-banner">
+            <span>👁️</span>
+            <span className="readonly-banner__text">
+              View-only mode — another device is active. Activate this device to add or edit data.
+            </span>
+            <button
+              type="button"
+              className="readonly-banner__btn"
+              onClick={() => { loadDevices(); setShowDevices(true); }}
+            >
+              Manage Devices →
+            </button>
+          </div>
+        )}
+
         {/* ── Screen content ── */}
         {screenKey === "home"        && <HomeScreen />}
         {screenKey === "parties"     && <PartiesScreen  isLocked={isLocked} onLockedAction={handleLockedAction} />}
@@ -459,6 +530,15 @@ export function Shell({ status, onLogout, onLicenseActivated }: Props) {
         {screenKey === "settings"      && <SettingsScreen />}
         {screenKey === "sync-data"     && <SyncDataScreen />}
         {screenKey === "sync-backup"   && <BackupScreen />}
+        {screenKey === "sync-devices"  && (
+          <DevicesPanel
+            devices={devices}
+            deviceSessionId={deviceSessionId}
+            onLoad={loadDevices}
+            onActivate={activateDevice}
+            onRemove={removeDevice}
+          />
+        )}
         {screenKey === "placeholder" && (
           <section className="content">
             <p>{activeLabel} — coming soon.</p>
@@ -481,7 +561,114 @@ export function Shell({ status, onLogout, onLicenseActivated }: Props) {
           }}
         />
       )}
+
+      {showDevices && (
+        <div className="modal-overlay" onClick={() => setShowDevices(false)}>
+          <div className="devices-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="devices-modal__header">
+              <h2>Manage Devices</h2>
+              <button type="button" className="devices-modal__close" onClick={() => setShowDevices(false)}>✕</button>
+            </div>
+            <p className="devices-modal__subtitle">
+              Only the <strong>active</strong> device can add or edit data. Activate this device to unlock full access.
+            </p>
+            <div className="devices-modal__list">
+              {devices.length === 0 && <p className="devices-modal__empty">No devices found. Refresh to load.</p>}
+              {devices.map((d) => (
+                <div key={d.id} className={`device-row${d.isActive ? " device-row--active" : ""}`}>
+                  <div className="device-row__icon">{d.deviceType === "mobile" ? "📱" : d.deviceType === "web" ? "🌐" : "🖥️"}</div>
+                  <div className="device-row__info">
+                    <span className="device-row__name">
+                      {d.deviceName}
+                      {d.id === deviceSessionId ? " (this device)" : ""}
+                    </span>
+                    <span className="device-row__meta">{d.deviceType} · last seen {new Date(d.lastSeenAt).toLocaleString()}</span>
+                  </div>
+                  <div className="device-row__badge">
+                    {d.isActive
+                      ? <span className="badge badge--active">ACTIVE</span>
+                      : <span className="badge badge--readonly">VIEW ONLY</span>}
+                  </div>
+                  <div className="device-row__actions">
+                    {!d.isActive && (
+                      <button type="button" className="device-row__activate" onClick={() => activateDevice(d.id)}>
+                        Activate
+                      </button>
+                    )}
+                    <button type="button" className="device-row__remove" onClick={() => removeDevice(d.id)} title="Remove">✕</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button type="button" className="devices-modal__refresh" onClick={loadDevices}>↻ Refresh</button>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+function DevicesPanel({
+  devices,
+  deviceSessionId,
+  onLoad,
+  onActivate,
+  onRemove,
+}: {
+  devices: DeviceSession[];
+  deviceSessionId: string | null;
+  onLoad: () => void;
+  onActivate: (id: string) => void;
+  onRemove: (id: string) => void;
+}) {
+  useEffect(() => { onLoad(); }, [onLoad]);
+  return (
+    <section className="content">
+      <div style={{ maxWidth: 600 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Manage Devices</h2>
+        <p style={{ fontSize: 13, color: "#64748b", marginBottom: 20 }}>
+          Only the <strong>active</strong> device can add or edit data.
+          Activate this device to unlock full access.
+        </p>
+        <div className="devices-modal__list" style={{ padding: 0 }}>
+          {devices.length === 0 && (
+            <p className="devices-modal__empty">No devices found.</p>
+          )}
+          {devices.map((d) => (
+            <div key={d.id} className={`device-row${d.isActive ? " device-row--active" : ""}`}>
+              <div className="device-row__icon">
+                {d.deviceType === "mobile" ? "📱" : d.deviceType === "web" ? "🌐" : "🖥️"}
+              </div>
+              <div className="device-row__info">
+                <span className="device-row__name">
+                  {d.deviceName}
+                  {d.id === deviceSessionId ? " (this device)" : ""}
+                </span>
+                <span className="device-row__meta">
+                  {d.deviceType} · last seen {new Date(d.lastSeenAt).toLocaleString()}
+                </span>
+              </div>
+              <div className="device-row__badge">
+                {d.isActive
+                  ? <span className="badge badge--active">ACTIVE</span>
+                  : <span className="badge badge--readonly">VIEW ONLY</span>}
+              </div>
+              <div className="device-row__actions">
+                {!d.isActive && (
+                  <button type="button" className="device-row__activate" onClick={() => onActivate(d.id)}>
+                    Activate
+                  </button>
+                )}
+                <button type="button" className="device-row__remove" onClick={() => onRemove(d.id)} title="Remove">✕</button>
+              </div>
+            </div>
+          ))}
+        </div>
+        <button type="button" className="devices-modal__refresh" style={{ marginTop: 16 }} onClick={onLoad}>
+          ↻ Refresh
+        </button>
+      </div>
+    </section>
   );
 }
 
