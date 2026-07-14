@@ -40,7 +40,8 @@
     "publish": {
       "provider": "github",
       "owner": "MuhammadFaizan73",
-      "repo": "vyaparapp"
+      "repo": "vyaparapp",
+      "releaseType": "release"
     }
   }
 }
