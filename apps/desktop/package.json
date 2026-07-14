@@ -1,11 +1,12 @@
 {
   "name": "@vyapar/desktop",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build && electron-builder",
+    "release": "tsc -b && vite build && electron-builder --publish always",
     "preview": "vite preview",
     "lint": "tsc --noEmit"
   },
@@ -13,6 +14,7 @@
     "@vyapar/api-client": "workspace:*",
     "@vyapar/shared-types": "workspace:*",
     "@vyapar/ui": "workspace:*",
+    "electron-updater": "^6.3.9",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
@@ -29,11 +31,16 @@
   },
   "build": {
     "appId": "pk.vyapar.desktop",
-    "productName": "Vyapar Pakistan",
-    "directories": { "output": "release" },
+    "productName": "Godigi",
+    "directories": { "output": "release", "buildResources": "buildResources" },
     "files": ["dist/**/*", "dist-electron/**/*"],
     "mac": { "category": "public.app-category.business" },
     "win": { "target": "nsis" },
-    "linux": { "target": "AppImage" }
+    "linux": { "target": "AppImage" },
+    "publish": {
+      "provider": "github",
+      "owner": "MuhammadFaizan73",
+      "repo": "vyaparapp"
+    }
   }
 }
