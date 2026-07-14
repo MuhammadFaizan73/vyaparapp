@@ -30,6 +30,7 @@
   "build": {
     "appId": "pk.vyapar.desktop",
     "productName": "Vyapar Pakistan",
+    "directories": { "output": "release" },
     "files": ["dist/**/*", "dist-electron/**/*"],
     "mac": { "category": "public.app-category.business" },
     "win": { "target": "nsis" },

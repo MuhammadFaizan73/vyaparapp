@@ -116,10 +116,12 @@ function getRoleColor(roleId: string) {
 type AddUserForm = {
   name: string;
   contact: string;
+  email: string;
+  password: string;
   role: string;
 };
 
-const EMPTY_FORM: AddUserForm = { name: "", contact: "", role: "salesman" };
+const EMPTY_FORM: AddUserForm = { name: "", contact: "", email: "", password: "", role: "salesman" };
 
 export function SyncShareScreen() {
   const [members, setMembers] = useState<TeamMember[]>([]);
@@ -152,12 +154,16 @@ export function SyncShareScreen() {
     e.preventDefault();
     if (!form.name.trim()) { setFormError("Name is required."); return; }
     if (!form.contact.trim()) { setFormError("Contact (phone or email) is required."); return; }
+    if (!form.email.trim()) { setFormError("Login email is required."); return; }
+    if (!form.password.trim()) { setFormError("Login password is required."); return; }
     setFormError(null);
     setSaving(true);
     try {
       const created = await api.createTeamMember({
         name: form.name.trim(),
         contact: form.contact.trim(),
+        email: form.email.trim(),
+        password: form.password.trim(),
         role: form.role,
       });
       setMembers((prev) => [...prev, created]);
@@ -362,6 +368,30 @@ export function SyncShareScreen() {
                     placeholder="e.g. 03001234567 or ahmed@example.com"
                     value={form.contact}
                     onChange={(e) => setForm((f) => ({ ...f, contact: e.target.value }))}
+                  />
+                </div>
+
+                <div className="ss-field">
+                  <label className="ss-label" htmlFor="ss-email">Login Email</label>
+                  <input
+                    id="ss-email"
+                    type="email"
+                    className="ss-input"
+                    placeholder="e.g. ahmed@example.com"
+                    value={form.email}
+                    onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                  />
+                </div>
+
+                <div className="ss-field">
+                  <label className="ss-label" htmlFor="ss-password">Login Password</label>
+                  <input
+                    id="ss-password"
+                    type="password"
+                    className="ss-input"
+                    placeholder="Set a password for this user"
+                    value={form.password}
+                    onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
                   />
                 </div>
 

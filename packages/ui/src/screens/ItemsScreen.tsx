@@ -741,7 +741,7 @@ export function ItemsScreen({ isLocked = false, onLockedAction }: ItemsScreenPro
                   <span>PRICE/UNIT <FilterIcon /></span>
                   <span>STATUS <FilterIcon /></span>
                 </div>
-                {[].map((tx: never) => (
+                {([] as Array<{ invoice: string; dot: string; type: string; name: string; date: string; qty: number; price: number; status: string }>).map((tx) => (
                   <div key={tx.invoice} className="items-txn-table__row">
                     <span>
                       <span
