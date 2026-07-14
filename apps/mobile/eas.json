@@ -17,7 +17,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_BASE": "https://vyapar-backend.onrender.com/api"
+        "EXPO_PUBLIC_API_BASE": "https://vyapar-backend-production.up.railway.app/api"
       }
     },
     "testflight": {
@@ -26,7 +26,7 @@
         "buildConfiguration": "Release"
       },
       "env": {
-        "EXPO_PUBLIC_API_BASE": "https://vyapar-backend.onrender.com/api"
+        "EXPO_PUBLIC_API_BASE": "https://vyapar-backend-production.up.railway.app/api"
       }
     },
     "production": {
@@ -34,7 +34,7 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_API_BASE": "https://YOUR_RAILWAY_URL.up.railway.app/api"
+        "EXPO_PUBLIC_API_BASE": "https://vyapar-backend-production.up.railway.app/api"
       }
     }
   },
