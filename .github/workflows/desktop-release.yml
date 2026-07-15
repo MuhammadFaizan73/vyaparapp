@@ -27,8 +27,26 @@ jobs:
       - name: Install dependencies
         run: pnpm install --filter "@vyapar/desktop..." --frozen-lockfile
 
-      - name: Build and publish Windows installer
+      - name: Build renderer + electron
+        working-directory: apps/desktop
+        env:
+          VITE_API_URL: https://vyapar-backend-production.up.railway.app/api
+        run: |
+          pnpm exec tsc -b
+          pnpm exec vite build
+
+      - name: Verify production API URL is baked into the build
+        working-directory: apps/desktop
+        shell: bash
+        run: |
+          if ! grep -rq "vyapar-backend-production" dist/assets/*.js; then
+            echo "::error::Built bundle does not contain the production API URL — VITE_API_URL was not set correctly at build time. Refusing to publish a build that would point clients at localhost."
+            exit 1
+          fi
+          echo "Verified: production API URL is present in the built bundle."
+
+      - name: Package and publish Windows installer
         working-directory: apps/desktop
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: pnpm release
+        run: pnpm exec electron-builder --publish always

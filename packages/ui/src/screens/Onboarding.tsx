@@ -72,7 +72,7 @@ export function Onboarding({ onRegistered }: Props) {
     <div className="modal-backdrop">
       <div className="onboarding-card">
         <div className="onboarding-card__brand">
-          <div className="brand-badge">V</div>
+          <div className="brand-badge">G</div>
           <div>
             <h1>Welcome to Godigi</h1>
             <p>Business management made simple</p>
