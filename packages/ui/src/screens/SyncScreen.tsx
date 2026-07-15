@@ -214,7 +214,7 @@ export function BackupScreen() {
       const blob = new Blob([json], { type: "application/json" });
       const ts = Date.now();
       const sizeKb = (blob.size / 1024).toFixed(1);
-      const filename = `vyapar-backup-${new Date(ts).toISOString().slice(0, 10)}.json`;
+      const filename = `godigi-backup-${new Date(ts).toISOString().slice(0, 10)}.json`;
       downloadBlob(blob, filename);
 
       const record: BackupRecord = {

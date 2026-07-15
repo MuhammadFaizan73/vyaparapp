@@ -74,7 +74,7 @@ export function Onboarding({ onRegistered }: Props) {
         <div className="onboarding-card__brand">
           <div className="brand-badge">V</div>
           <div>
-            <h1>Welcome to Vyapar Pakistan</h1>
+            <h1>Welcome to Godigi</h1>
             <p>Business management made simple</p>
           </div>
         </div>

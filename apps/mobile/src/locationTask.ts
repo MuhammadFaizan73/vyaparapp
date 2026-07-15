@@ -57,7 +57,7 @@ export async function startLocationTracking() {
     distanceInterval: 100,        // or every 100 m, whichever comes first
     showsBackgroundLocationIndicator: true,
     foregroundService: {
-      notificationTitle: "Vyapar Pakistan",
+      notificationTitle: "Godigi",
       notificationBody: "Recording your field route",
     },
   });

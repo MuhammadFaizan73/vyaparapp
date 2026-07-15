@@ -66,7 +66,7 @@ export default function OnboardingScreen() {
           <View style={styles.logoCircle}>
             <Text style={styles.logoIcon}>⊡</Text>
           </View>
-          <Text style={styles.appName}>Vyapar Pakistan</Text>
+          <Text style={styles.appName}>Godigi</Text>
           <Text style={styles.tagline}>Business management made simple</Text>
         </View>
 

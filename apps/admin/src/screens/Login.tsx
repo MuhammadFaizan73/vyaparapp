@@ -29,7 +29,7 @@ export default function Login() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="card w-full max-w-sm p-8">
         <div className="text-center mb-8">
-          <div className="text-2xl font-bold text-primary">Vyapar Pakistan</div>
+          <div className="text-2xl font-bold text-primary">Godigi</div>
           <div className="text-sm text-gray-500 mt-1">Admin Panel</div>
         </div>
 

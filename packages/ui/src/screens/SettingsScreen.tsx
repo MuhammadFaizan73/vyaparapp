@@ -130,7 +130,7 @@ const DEFAULT_SETTINGS: Settings = {
   prefixSale: "", prefixCreditNote: "", prefixSaleOrder: "", prefixPurchaseOrder: "",
   prefixEstimate: "", prefixProforma: "", prefixDeliveryChallan: "", prefixPaymentIn: "",
   printTheme: 4, makeRegularDefault: true, repeatHeader: true,
-  companyName: "Vyapar Pakistan", companyAddress: "", companyEmail: "", companyPhone: "",
+  companyName: "Godigi", companyAddress: "", companyEmail: "", companyPhone: "",
   showTinOnSale: false, paperSize: "A4", orientation: "Portrait",
   companyNameSize: "Large", invoiceTextSize: "Medium",
   taxRates: [{ id: "1", name: "Sale tax", rate: 2 }],
@@ -183,6 +183,14 @@ export function SettingsScreen() {
   const [saved, setSaved] = useState(false);
   const [newTaxName, setNewTaxName] = useState("");
   const [newTaxRate, setNewTaxRate] = useState("");
+  const [appVersion, setAppVersion] = useState<string | null>(null);
+
+  useEffect(() => {
+    const bridge = (window as any).vyapar;
+    if (bridge?.getAppVersion) {
+      bridge.getAppVersion().then(setAppVersion).catch(() => {});
+    }
+  }, []);
 
   function set<K extends keyof Settings>(key: K, val: Settings[K]) {
     setS(prev => {
@@ -772,6 +780,7 @@ export function SettingsScreen() {
             {t.key === "reminders" && <span className="st-tab-badge">●</span>}
           </button>
         ))}
+        {appVersion && <div className="st-sidebar-version">Version {appVersion}</div>}
       </aside>
 
       {/* Content */}
@@ -842,6 +851,13 @@ const STYLES = `
 .st-tab:hover { color: #e2e8f0; background: rgba(255,255,255,0.05); }
 .st-tab--active { color: #fff; background: rgba(255,255,255,0.1); border-left-color: #3b82f6; }
 .st-tab-badge { color: #3b82f6; font-size: 10px; }
+.st-sidebar-version {
+  margin-top: auto;
+  padding: 12px 16px;
+  font-size: 11px;
+  color: #64748b;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
 
 /* Content */
 .st-content {

@@ -50,7 +50,7 @@ export class ImportSessionsService {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Import Contacts — Vyapar Pakistan</title>
+  <title>Import Contacts — Godigi</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f5f6fa; color: #1e293b; }
@@ -91,7 +91,7 @@ export class ImportSessionsService {
 <body>
   <div class="header">
     <div class="logo">V</div>
-    <h1>Vyapar Pakistan</h1>
+    <h1>Godigi</h1>
   </div>
   <div class="body">
 ${expired ? `

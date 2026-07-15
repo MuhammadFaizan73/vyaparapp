@@ -45,9 +45,9 @@ export function ActivateLicenseModal({ onActivated, onClose }: Props) {
         </button>
 
         <div className="onboarding-card__brand">
-          <div className="brand-badge">V</div>
+          <div className="brand-badge">G</div>
           <div>
-            <h1>Get Vyapar Premium</h1>
+            <h1>Get Godigi Premium</h1>
             <p>Enter your license key to unlock unlimited access.</p>
           </div>
         </div>

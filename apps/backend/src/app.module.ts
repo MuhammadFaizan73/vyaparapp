@@ -20,6 +20,7 @@ import { LocationModule } from "./location/location.module";
 import { PartyAssignmentsModule } from "./party-assignments/party-assignments.module";
 import { AdminModule } from "./admin/admin.module";
 import { DevicesModule } from "./devices/devices.module";
+import { BulkImportModule } from "./bulk-import/bulk-import.module";
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { DevicesModule } from "./devices/devices.module";
     PartyAssignmentsModule,
     AdminModule,
     DevicesModule,
+    BulkImportModule,
   ],
   controllers: [AppController],
   providers: [AppService],

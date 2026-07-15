@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { api } from "../lib/api";
 import type { Item } from "@vyapar/api-client";
@@ -30,7 +30,7 @@ const UNITS = [
   { label: "TABLETS", short: "Tbs" },
 ];
 
-type ItemsScreenProps = { isLocked?: boolean; onLockedAction?: () => void };
+type ItemsScreenProps = { isLocked?: boolean; onLockedAction?: () => void; onOpenImportItems?: () => void };
 
 function generateItemCode(): string {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -39,14 +39,13 @@ function generateItemCode(): string {
   return code;
 }
 
-export function ItemsScreen({ isLocked = false, onLockedAction }: ItemsScreenProps = {}) {
+export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItems }: ItemsScreenProps = {}) {
   const [items, setItems] = useState<Item[]>([]);
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("products");
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [showImportMenu, setShowImportMenu] = useState(false);
-  const [showImportItemsModal, setShowImportItemsModal] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showUnitModal, setShowUnitModal] = useState(false);
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
@@ -597,7 +596,7 @@ export function ItemsScreen({ isLocked = false, onLockedAction }: ItemsScreenPro
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setShowImportMenu(false); setShowImportItemsModal(true); }}
+                  onClick={() => { setShowImportMenu(false); onOpenImportItems?.(); }}
                 >
                   <span>📄</span> Import Items (Excel)
                 </button>
@@ -1077,204 +1076,6 @@ export function ItemsScreen({ isLocked = false, onLockedAction }: ItemsScreenPro
         </div>
       )}
 
-      {showImportItemsModal && (
-        <ImportItemsModal
-          onClose={() => setShowImportItemsModal(false)}
-          onImported={() => { setShowImportItemsModal(false); api.getItems().then(setItems).catch(() => {}); }}
-        />
-      )}
-    </div>
-  );
-}
-
-/* ─── Import Items Modal ─── */
-type ItemImportRow = {
-  name: string; sku: string; unit: string;
-  mrp: string; salePrice: string; purchasePrice: string;
-  openingStock: string; minStock: string;
-  errors: string[];
-};
-
-function ImportItemsModal({ onClose, onImported }: { onClose: () => void; onImported: () => void }) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [dragOver, setDragOver] = useState(false);
-  const [stage, setStage] = useState<"upload" | "review">("upload");
-  const [rows, setRows] = useState<ItemImportRow[]>([]);
-  const [importing, setImporting] = useState(false);
-  const [importError, setImportError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"valid" | "errors">("valid");
-
-  function parseFile(file: File) {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const data = new Uint8Array(e.target!.result as ArrayBuffer);
-      const wb = XLSX.read(data, { type: "array" });
-      const ws = wb.Sheets[wb.SheetNames[0]!];
-      if (!ws) { setRows([]); setStage("review"); return; }
-      const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: "" });
-      const parsed: ItemImportRow[] = raw.map((r) => {
-        const name = String(r["Item Name*"] ?? r["Item Name"] ?? r["Name"] ?? "").trim();
-        const errs: string[] = [];
-        if (!name) errs.push("Item Name is required");
-        return {
-          name,
-          sku: String(r["Item Code"] ?? r["SKU"] ?? "").trim(),
-          unit: String(r["Unit"] ?? "").trim(),
-          mrp: String(r["MRP"] ?? "").trim(),
-          salePrice: String(r["Sale Price"] ?? "").trim(),
-          purchasePrice: String(r["Purchase Price"] ?? "").trim(),
-          openingStock: String(r["Opening Stock"] ?? "").trim(),
-          minStock: String(r["Min Stock"] ?? "").trim(),
-          errors: errs,
-        };
-      });
-      setRows(parsed);
-      setActiveTab(parsed.some(r => r.errors.length) ? "errors" : "valid");
-      setStage("review");
-    };
-    reader.readAsArrayBuffer(file);
-  }
-
-  async function handleImport() {
-    const valid = rows.filter(r => r.errors.length === 0);
-    if (!valid.length) return;
-    setImporting(true); setImportError(null);
-    let failed = 0;
-    for (const r of valid) {
-      try {
-        await api.createItem({
-          name: r.name,
-          sku: r.sku || undefined,
-          unit: r.unit || undefined,
-          mrp: r.mrp ? Number(r.mrp) : undefined,
-          salePrice: r.salePrice ? Number(r.salePrice) : undefined,
-          purchasePrice: r.purchasePrice ? Number(r.purchasePrice) : undefined,
-          openingStock: r.openingStock ? Number(r.openingStock) : undefined,
-          minStock: r.minStock ? Number(r.minStock) : undefined,
-        });
-      } catch { failed++; }
-    }
-    setImporting(false);
-    if (failed > 0) setImportError(`${failed} item(s) could not be imported.`);
-    else onImported();
-  }
-
-  const validRows = rows.filter(r => r.errors.length === 0);
-  const errorRows = rows.filter(r => r.errors.length > 0);
-  const display = activeTab === "valid" ? validRows : errorRows;
-
-  if (stage === "upload") return (
-    <div className="import-backdrop">
-      <div className="import-main">
-        <div className="import-topbar">
-          <span className="import-topbar__title">Import Items</span>
-          <button type="button" className="import-close-btn" onClick={onClose}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
-              <circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6" strokeLinecap="round"/>
-            </svg>
-          </button>
-        </div>
-        <div className="import-body">
-          <div className="import-left">
-            <p className="import-left__hint">Download .xlsx template<br/>to enter item data</p>
-            <div className="import-xls-icon">
-              <div className="import-xls-icon__shadow"/>
-              <div className="import-xls-icon__card"><span className="import-xls-icon__label">xls</span></div>
-            </div>
-            <button type="button" className="import-download-btn" onClick={() => {
-              const headers = ["Item Name*","Item Code","Unit","MRP","Sale Price","Purchase Price","Opening Stock","Min Stock"];
-              const ws = XLSX.utils.aoa_to_sheet([headers]);
-              ws["!cols"] = headers.map(h => ({ wch: Math.max(h.length + 4, 16) }));
-              const wb = XLSX.utils.book_new();
-              XLSX.utils.book_append_sheet(wb, ws, "Items");
-              XLSX.writeFile(wb, "items_template.xlsx");
-            }}>Download Template</button>
-          </div>
-          <div className="import-divider"/>
-          <div className="import-right">
-            <p className="import-right__hint">Upload your filled .xlsx file</p>
-            <div
-              className={`import-dropzone${dragOver ? " import-dropzone--over" : ""}`}
-              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={(e) => { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files[0]; if (f) parseFile(f); }}
-              onClick={() => inputRef.current?.click()}
-            >
-              <input ref={inputRef} type="file" accept=".xls,.xlsx" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) parseFile(f); }} />
-              <svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2" width="40" height="40" style={{ marginBottom: 10 }}>
-                <path d="M12 4v12M6 10l6-6 6 6" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M4 20h16" strokeLinecap="round"/>
-              </svg>
-              <p className="import-dropzone__text">Drag and drop or <span className="import-dropzone__link">Click to Browse</span></p>
-              <p className="import-dropzone__sub">formatted .xlsx file</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  return (
-    <div className="import-backdrop">
-      <div className="import-main">
-        <div className="import-topbar">
-          <span className="import-topbar__title">Review Items</span>
-          <button type="button" className="import-close-btn" onClick={onClose}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
-              <circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6" strokeLinecap="round"/>
-            </svg>
-          </button>
-        </div>
-        <div className="import-review-tabs">
-          <button type="button" className={`import-review-tab${activeTab === "valid" ? " import-review-tab--active" : ""}`} onClick={() => setActiveTab("valid")}>
-            <svg viewBox="0 0 24 24" fill="#16a34a" width="16" height="16"><path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm-1 14.414-4.707-4.707 1.414-1.414L11 13.586l5.293-5.293 1.414 1.414L11 16.414z"/></svg>
-            Valid Items : {validRows.length}
-          </button>
-          <button type="button" className={`import-review-tab${activeTab === "errors" ? " import-review-tab--active import-review-tab--error" : ""}`} onClick={() => setActiveTab("errors")}>
-            <svg viewBox="0 0 24 24" fill="#f97316" width="16" height="16"><path d="M12 2L1 21h22L12 2zm0 3.516L21.016 19H2.984L12 5.516zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z"/></svg>
-            Items with Errors : {errorRows.length}
-          </button>
-        </div>
-        <div className="import-review-body">
-          {importError && <div style={{ color: "#dc2626", background: "#fee2e2", padding: "8px 16px", margin: "0 20px 10px", borderRadius: 6, fontSize: 13 }}>{importError}</div>}
-          <div className="import-table-wrap">
-            <table className="import-table">
-              <thead><tr>
-                <th style={{ width: 36 }}/>
-                <th>Item Name*</th><th>Item Code</th><th>Unit</th>
-                <th>MRP</th><th>Sale Price</th><th>Purchase Price</th>
-                <th>Opening Stock</th><th>Min Stock</th>
-              </tr></thead>
-              <tbody>
-                {display.map((row, i) => (
-                  <tr key={i} className={row.errors.length ? "import-table__row--error" : ""}>
-                    <td className="import-table__icon-cell">
-                      {row.errors.length > 0
-                        ? <svg viewBox="0 0 24 24" fill="#ef4444" width="16" height="16"><path d="M12 2L1 21h22L12 2zm0 3.516L21.016 19H2.984L12 5.516zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z"/></svg>
-                        : <svg viewBox="0 0 24 24" fill="#16a34a" width="16" height="16"><path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm-1 14.414-4.707-4.707 1.414-1.414L11 13.586l5.293-5.293 1.414 1.414L11 16.414z"/></svg>}
-                    </td>
-                    <td className={row.errors.some(e => e.includes("Name")) ? "import-table__cell--invalid" : ""}>{row.name}</td>
-                    <td>{row.sku}</td><td>{row.unit}</td><td>{row.mrp}</td>
-                    <td>{row.salePrice}</td><td>{row.purchasePrice}</td>
-                    <td>{row.openingStock}</td><td>{row.minStock}</td>
-                  </tr>
-                ))}
-                {display.length === 0 && <tr><td colSpan={9} style={{ textAlign: "center", padding: 32, color: "#94a3b8" }}>No {activeTab === "valid" ? "valid" : "error"} rows</td></tr>}
-              </tbody>
-            </table>
-          </div>
-        </div>
-        <div className="import-review-footer">
-          <button
-            type="button"
-            className={`import-import-btn${validRows.length > 0 ? " import-import-btn--active" : ""}`}
-            disabled={validRows.length === 0 || importing}
-            onClick={() => void handleImport()}
-          >
-            {importing ? "Importing…" : `Import ${validRows.length} Valid Item${validRows.length !== 1 ? "s" : ""}`}
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

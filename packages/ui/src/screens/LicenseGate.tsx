@@ -43,7 +43,7 @@ export function LicenseGate({ status, onActivated, onLogout }: Props) {
           <div className="brand-badge brand-badge--warn">!</div>
           <div>
             <h1>{expired ? "Your free trial has ended" : "Your license expired"}</h1>
-            <p>Enter your Vyapar Pakistan license key to continue.</p>
+            <p>Enter your Godigi license key to continue.</p>
           </div>
         </div>
 

@@ -140,7 +140,7 @@ function buildInvoiceHtml(sale: SaleRow, idx: number): string {
   .footer-sig { text-align: right; margin-top: 40px; font-weight: bold; }
   .footer-brand { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; color: #6366f1; font-size: 10px; }
 </style></head><body>
-  <div class="company">Vyapar Pakistan</div>
+  <div class="company">Godigi</div>
   <div class="phone">Phone no.: ${sale.partyName}</div>
   <hr/>
   <div class="title">Invoice</div>
@@ -181,8 +181,8 @@ function buildInvoiceHtml(sale: SaleRow, idx: number): string {
       </table>
     </div>
   </div>
-  <div class="footer-sig">For: Vyapar Pakistan<br/><br/><br/>Authorized Signatory</div>
-  <div class="footer-brand"><span>www.vyaparapp.in</span><span>▼ Vyapar</span></div>
+  <div class="footer-sig">For: Godigi<br/><br/><br/>Authorized Signatory</div>
+  <div class="footer-brand"><span>▼ Godigi</span></div>
 </body></html>`;
 }
 

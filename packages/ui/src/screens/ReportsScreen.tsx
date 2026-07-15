@@ -532,7 +532,7 @@ function AllTransactionsReport() {
 function ProfitAndLossReport() {
   const [from, setFrom] = useState(monthStart);
   const [to,   setTo]   = useState(todayStr);
-  const [view, setView] = useState<"vyapar" | "accounting">("vyapar");
+  const [view, setView] = useState<"godigi" | "accounting">("godigi");
   const { data, loading, error } = useReport("profit-and-loss", { from, to });
 
   return (
@@ -546,14 +546,14 @@ function ProfitAndLossReport() {
           <>
             <div className="rpt-pnl-view-toggle">
               <span className="rpt-filter-label">View :</span>
-              {(["vyapar","accounting"] as const).map(v => (
+              {(["godigi","accounting"] as const).map(v => (
                 <label key={v} className="rpt-radio-label">
                   <input type="radio" name="pnl-view" value={v} checked={view === v} onChange={() => setView(v)} />
                   {v.charAt(0).toUpperCase() + v.slice(1)}
                 </label>
               ))}
             </div>
-            {view === "vyapar" ? (
+            {view === "godigi" ? (
               <div className="rpt-pnl-table">
                 <div className="rpt-pnl-header"><span>Particulars</span><span>Amount</span></div>
                 <PnlRow label="Sale (+)" value={data.saleTotal} />
@@ -662,7 +662,7 @@ function CashFlowReport() {
 function PartyStatementReport() {
   const [from, setFrom] = useState(monthStart);
   const [to,   setTo]   = useState(monthEnd);
-  const [view, setView] = useState<"vyapar" | "accounting">("vyapar");
+  const [view, setView] = useState<"godigi" | "accounting">("godigi");
   const { data, loading, error } = useReport("party-statement", { from, to });
 
   return (
@@ -673,7 +673,7 @@ function PartyStatementReport() {
       </div>
       <div className="rpt-pnl-view-toggle">
         <span className="rpt-filter-label">View :</span>
-        {(["vyapar","accounting"] as const).map(v => (
+        {(["godigi","accounting"] as const).map(v => (
           <label key={v} className="rpt-radio-label">
             <input type="radio" name="ps-view" value={v} checked={view === v} onChange={() => setView(v)} />
             {v.charAt(0).toUpperCase() + v.slice(1)}

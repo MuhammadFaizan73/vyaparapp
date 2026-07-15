@@ -89,6 +89,8 @@ import { LoanAccountsScreen } from "./LoanAccountsScreen";
 import { BankAccountsScreen } from "./BankAccountsScreen";
 import { SettingsScreen } from "./SettingsScreen";
 import { SyncDataScreen, BackupScreen } from "./SyncScreen";
+import { ImportItemsPage } from "./ImportItemsPage";
+import { ImportSaleHistoryPage } from "./ImportSaleHistoryPage";
 import {
   HomeIcon,
   PartiesIcon,
@@ -143,7 +145,7 @@ const navStructure: NavEntry[] = [
       { key: "sale-order",       label: "Sale Order",             action: "add" },
       { key: "sale-delivery",    label: "Delivery Challan",       action: "add" },
       { key: "sale-return",      label: "Sale Return/ Credit Note", action: "add" },
-      { key: "sale-pos",         label: "Vyapar POS",             action: "premium" },
+      { key: "sale-pos",         label: "Godigi POS",             action: "premium" },
     ],
   },
   {
@@ -185,8 +187,9 @@ const navStructure: NavEntry[] = [
   {
     type: "item", key: "utilities", label: "Utilities",           icon: <UtilitiesIcon />, action: "chevron",
     children: [
-      { key: "utilities-tools",    label: "Tools",           action: "none" },
-      { key: "utilities-import",   label: "Import Data",     action: "none" },
+      { key: "utilities-import-items", label: "Import Items",  action: "none" },
+      { key: "utilities-import-sales", label: "Import Sale History", action: "none" },
+      { key: "utilities-tools",        label: "Tools",         action: "none" },
     ],
   },
   { type: "item", key: "settings",  label: "Settings",           icon: <SettingsIcon />, action: "none" },
@@ -316,6 +319,8 @@ export function Shell({ status, onLogout, onLicenseActivated }: Props) {
   const screenKey = (() => {
     if (active === "home")                  return "home";
     if (active === "items")                 return "items";
+    if (active === "utilities-import-items") return "import-items";
+    if (active === "utilities-import-sales") return "import-sale-history";
     if (active.startsWith("parties"))       return "parties";
     if (active === "sale-payment-in")        return "payment-in";
     if (active === "sale-estimate" || active === "sale-proforma" || active === "sale-order" || active === "sale-delivery" || active === "sale-return") return "sale-txn";
@@ -339,9 +344,9 @@ export function Shell({ status, onLogout, onLicenseActivated }: Props) {
 
         {/* ── Brand ── */}
         <div className="sidebar__brand">
-          <span className="sidebar__logo">V</span>
+          <span className="sidebar__logo">G</span>
           <div className="sidebar__brand-text">
-            <span className="sidebar__app-name">Vyapar PK</span>
+            <span className="sidebar__app-name">Godigi</span>
             <span className="sidebar__plan-badge">{planBadge}</span>
           </div>
         </div>
@@ -517,7 +522,9 @@ export function Shell({ status, onLogout, onLicenseActivated }: Props) {
         {/* ── Screen content ── */}
         {screenKey === "home"        && <HomeScreen />}
         {screenKey === "parties"     && <PartiesScreen  isLocked={isLocked} onLockedAction={handleLockedAction} />}
-        {screenKey === "items"       && <ItemsScreen    isLocked={isLocked} onLockedAction={handleLockedAction} />}
+        {screenKey === "items"       && <ItemsScreen    isLocked={isLocked} onLockedAction={handleLockedAction} onOpenImportItems={() => setActive("utilities-import-items")} />}
+        {screenKey === "import-items" && <ImportItemsPage onGoToItems={() => setActive("items")} />}
+        {screenKey === "import-sale-history" && <ImportSaleHistoryPage onGoToParties={() => setActive("parties")} />}
         {screenKey === "payment-in"  && <PaymentInScreen isLocked={isLocked} onLockedAction={handleLockedAction} />}
         {screenKey === "sale"        && <SaleScreen     isLocked={isLocked} onLockedAction={handleLockedAction} activeKey={active} />}
         {screenKey === "sale-txn"    && <SaleTxnScreen  isLocked={isLocked} onLockedAction={handleLockedAction} activeKey={active} />}

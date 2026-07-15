@@ -71,7 +71,7 @@ export async function showExpiryBannerIfNeeded(status: LicenseStatus): Promise<v
       title: days === 0 ? "Trial Expired" : `Trial ends in ${days} day${days !== 1 ? "s" : ""}`,
       body:
         days === 0
-          ? "Activate a license key to continue using Vyapar Pakistan."
+          ? "Activate a license key to continue using Godigi."
           : `You have ${days} day${days !== 1 ? "s" : ""} left. Activate a license to keep access.`,
       data: { type: "license_expiry" },
     },

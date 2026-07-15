@@ -26,7 +26,7 @@ export default function Layout() {
       {/* Sidebar */}
       <aside className="w-60 bg-primary-dark text-white flex flex-col shrink-0">
         <div className="px-5 py-4 border-b border-white/10">
-          <div className="text-lg font-bold tracking-tight">Vyapar Pakistan</div>
+          <div className="text-lg font-bold tracking-tight">Godigi</div>
           <div className="text-xs text-white/50 mt-0.5">Super Admin</div>
         </div>
 

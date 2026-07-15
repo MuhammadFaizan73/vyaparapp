@@ -76,8 +76,8 @@ export default function App() {
 function SplashScreen() {
   return (
     <div className="splash">
-      <div className="splash__logo">V</div>
-      <p>Vyapar Pakistan</p>
+      <div className="splash__logo">G</div>
+      <p>Godigi</p>
     </div>
   );
 }

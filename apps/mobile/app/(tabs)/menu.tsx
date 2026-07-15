@@ -205,7 +205,7 @@ export default function MenuScreen() {
             <Text style={styles.profileAvatarTxt}>V</Text>
           </View>
           <View style={styles.profileMid}>
-            <Text style={styles.profileName}>Vyapar Pakistan</Text>
+            <Text style={styles.profileName}>Godigi</Text>
             <Text style={styles.profileSub}>
               {role === "owner" ? "Free Plan · 5 invoices left" : ROLE_LABELS[role] ?? role}
             </Text>
@@ -264,7 +264,7 @@ export default function MenuScreen() {
             <Ionicons name="log-out-outline" size={16} color={colors.red} />
             <Text style={styles.signOutTxt}>Sign Out</Text>
           </TouchableOpacity>
-          <Text style={styles.versionTxt}>Vyapar Pakistan · v24.1.0</Text>
+          <Text style={styles.versionTxt}>Godigi · v24.1.0</Text>
         </View>
       </ScrollView>
     </View>

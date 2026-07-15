@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Vyapar Pakistan",
+    "name": "Godigi",
     "slug": "vyapar-pakistan",
     "version": "0.1.0",
     "orientation": "portrait",
@@ -33,9 +33,9 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Vyapar Pakistan uses your location to track field sales visits.",
-          "locationAlwaysPermission": "Vyapar Pakistan uses background location to record your field route.",
-          "locationWhenInUsePermission": "Vyapar Pakistan uses your location to record shop check-ins.",
+          "locationAlwaysAndWhenInUsePermission": "Godigi uses your location to track field sales visits.",
+          "locationAlwaysPermission": "Godigi uses background location to record your field route.",
+          "locationWhenInUsePermission": "Godigi uses your location to record shop check-ins.",
           "isIosBackgroundLocationEnabled": true,
           "isAndroidBackgroundLocationEnabled": true
         }
@@ -43,8 +43,8 @@
       [
         "@react-native-voice/voice",
         {
-          "microphonePermission": "Allow Vyapar Pakistan to use the microphone for voice search",
-          "speechRecognitionPermission": "Allow Vyapar Pakistan to use speech recognition for filtering invoices"
+          "microphonePermission": "Allow Godigi to use the microphone for voice search",
+          "speechRecognitionPermission": "Allow Godigi to use speech recognition for filtering invoices"
         }
       ],
       [

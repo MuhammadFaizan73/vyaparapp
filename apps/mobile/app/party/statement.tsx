@@ -137,7 +137,7 @@ export default function PartyStatementScreen() {
       <View style={s.filterRow}>
         <Text style={s.filterLabel}>Filters Applied</Text>
         <View style={s.filterChip}>
-          <Text style={s.filterChipTxt}>Theme - Vyapar View  ✕</Text>
+          <Text style={s.filterChipTxt}>Theme - Godigi View  ✕</Text>
         </View>
       </View>
 

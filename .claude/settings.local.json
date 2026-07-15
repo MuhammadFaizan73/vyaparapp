@@ -13,7 +13,8 @@
       "Bash(nohup npm exec expo start -- --lan --clear)",
       "Bash(echo \"Metro PID: $!\")",
       "Bash(sleep 10 && tail -15 /tmp/expo.log)",
-      "Read(//private/tmp/**)"
+      "Read(//private/tmp/**)",
+      "Bash(grep -rn 'queryRaw\\\\|executeRaw\\\\|$queryRawUnsafe\\\\|findUnique\\\\|findFirst\\\\|updateMany\\\\|deleteMany' reports/ import-sessions/)"
     ]
   }
 }

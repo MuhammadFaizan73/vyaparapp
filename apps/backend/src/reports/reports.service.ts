@@ -375,7 +375,7 @@ export class ReportsService {
     return {
       from: fromDate?.toISOString() ?? null,
       to: toDate?.toISOString() ?? null,
-      viewType: 'vyapar',
+      viewType: 'godigi',
       saleTotal,
       creditNoteTotal,
       purchaseTotal,

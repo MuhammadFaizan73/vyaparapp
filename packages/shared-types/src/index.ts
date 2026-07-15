@@ -218,6 +218,58 @@ export const UpdateTransactionRequestSchema = z.object({
 });
 export type UpdateTransactionRequest = z.infer<typeof UpdateTransactionRequestSchema>;
 
+export const BulkSaleImportLineItemSchema = z.object({
+  name: z.string(),
+  qty: z.number(),
+  unit: z.string().optional(),
+  rate: z.number(),
+});
+export type BulkSaleImportLineItem = z.infer<typeof BulkSaleImportLineItemSchema>;
+
+export const BulkSaleImportItemSchema = z.object({
+  name: z.string(),
+  unit: z.string().optional(),
+  sku: z.string().optional(),
+  salePrice: z.number().optional(),
+});
+export type BulkSaleImportItem = z.infer<typeof BulkSaleImportItemSchema>;
+
+export const BulkSaleImportPartySchema = z.object({
+  name: z.string(),
+});
+export type BulkSaleImportParty = z.infer<typeof BulkSaleImportPartySchema>;
+
+export const BulkSaleImportInvoiceSchema = z.object({
+  number: z.string(),
+  date: z.string(),
+  partyName: z.string(),
+  transactionType: z.string(),
+  total: z.number(),
+  lineItems: z.array(BulkSaleImportLineItemSchema),
+});
+export type BulkSaleImportInvoice = z.infer<typeof BulkSaleImportInvoiceSchema>;
+
+export const BulkSaleImportRequestSchema = z.object({
+  companyTag: z.string().optional(),
+  items: z.array(BulkSaleImportItemSchema),
+  parties: z.array(BulkSaleImportPartySchema),
+  invoices: z.array(BulkSaleImportInvoiceSchema),
+});
+export type BulkSaleImportRequest = z.infer<typeof BulkSaleImportRequestSchema>;
+
+export const BulkSaleImportJobStatusSchema = z.object({
+  jobId: z.string(),
+  status: z.enum(["processing", "done", "error"]),
+  total: z.number(),
+  processed: z.number(),
+  itemsCreated: z.number(),
+  partiesCreated: z.number(),
+  invoicesImported: z.number(),
+  invoicesSkipped: z.number(),
+  error: z.string().optional(),
+});
+export type BulkSaleImportJobStatus = z.infer<typeof BulkSaleImportJobStatusSchema>;
+
 export const TEAM_ROLES = [
   "secondary_admin",
   "salesman",

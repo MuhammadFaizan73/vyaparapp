@@ -68,7 +68,7 @@ export default function LicenseGateScreen() {
 
       <Text style={styles.title}>Mobile License Required</Text>
       <Text style={styles.sub}>
-        Your free trial has ended. Activate a Mobile license key to continue using Vyapar Pakistan on this device.
+        Your free trial has ended. Activate a Mobile license key to continue using Godigi on this device.
       </Text>
 
       {/* Key input */}

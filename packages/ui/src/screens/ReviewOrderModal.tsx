@@ -10,9 +10,9 @@ type Plan = {
 };
 
 const PLANS: Plan[] = [
-  { id: "platinum-desktop-3y", name: "Vyapar Platinum", platform: "Desktop", duration: "3 Years", price: 259.99, originalPrice: 489.99 },
-  { id: "platinum-desktop-1y", name: "Vyapar Platinum", platform: "Desktop", duration: "1 Year",  price: 119.99, originalPrice: 179.99 },
-  { id: "platinum-mobile-1y",  name: "Vyapar Platinum", platform: "Mobile",  duration: "1 Year",  price:  89.99, originalPrice: 139.99 },
+  { id: "platinum-desktop-3y", name: "Godigi Platinum", platform: "Desktop", duration: "3 Years", price: 259.99, originalPrice: 489.99 },
+  { id: "platinum-desktop-1y", name: "Godigi Platinum", platform: "Desktop", duration: "1 Year",  price: 119.99, originalPrice: 179.99 },
+  { id: "platinum-mobile-1y",  name: "Godigi Platinum", platform: "Mobile",  duration: "1 Year",  price:  89.99, originalPrice: 139.99 },
 ];
 
 type Props = {
