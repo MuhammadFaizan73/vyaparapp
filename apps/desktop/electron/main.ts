@@ -3,11 +3,32 @@ import path from "node:path";
 import { autoUpdater } from "electron-updater";
 
 const isDev = !app.isPackaged;
+let mainWindow: BrowserWindow | null = null;
+
+type UpdateStatusPayload =
+  | { state: "checking" }
+  | { state: "available"; version: string }
+  | { state: "not-available" }
+  | { state: "downloading"; percent: number }
+  | { state: "downloaded"; version: string }
+  | { state: "error"; message: string };
+
+function sendUpdateStatus(payload: UpdateStatusPayload) {
+  mainWindow?.webContents.send("update:status", payload);
+}
 
 function setupAutoUpdater() {
   autoUpdater.autoDownload = true;
 
+  autoUpdater.on("checking-for-update", () => sendUpdateStatus({ state: "checking" }));
+  autoUpdater.on("update-available", (info) => sendUpdateStatus({ state: "available", version: info.version }));
+  autoUpdater.on("update-not-available", () => sendUpdateStatus({ state: "not-available" }));
+  autoUpdater.on("download-progress", (progress) =>
+    sendUpdateStatus({ state: "downloading", percent: Math.round(progress.percent) })
+  );
+
   autoUpdater.on("update-downloaded", (info) => {
+    sendUpdateStatus({ state: "downloaded", version: info.version });
     dialog
       .showMessageBox({
         type: "info",
@@ -25,6 +46,7 @@ function setupAutoUpdater() {
 
   autoUpdater.on("error", (err) => {
     console.error("Auto-update error:", err);
+    sendUpdateStatus({ state: "error", message: err.message || String(err) });
   });
 
   autoUpdater.checkForUpdates();
@@ -45,6 +67,7 @@ function createWindow() {
       nodeIntegration: false,
     },
   });
+  mainWindow = win;
 
   win.maximize();
   win.show();
@@ -58,6 +81,14 @@ function createWindow() {
 }
 
 ipcMain.handle("app:get-version", () => app.getVersion());
+
+ipcMain.handle("app:check-for-updates", () => {
+  if (isDev) {
+    sendUpdateStatus({ state: "error", message: "Update checks are disabled in development." });
+    return;
+  }
+  autoUpdater.checkForUpdates();
+});
 
 app.whenReady().then(() => {
   createWindow();

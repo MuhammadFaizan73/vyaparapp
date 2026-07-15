@@ -163,6 +163,26 @@ function saveSettings(s: Settings) {
 
 type Tab = "general" | "transaction" | "print" | "taxes" | "message" | "party" | "item" | "reminders";
 
+type UpdateStatus =
+  | { state: "checking" }
+  | { state: "available"; version: string }
+  | { state: "not-available" }
+  | { state: "downloading"; percent: number }
+  | { state: "downloaded"; version: string }
+  | { state: "error"; message: string };
+
+function updateStatusText(status: UpdateStatus | null): string | null {
+  if (!status) return null;
+  switch (status.state) {
+    case "checking": return "Checking for updates…";
+    case "available": return `Update available: v${status.version}`;
+    case "not-available": return "You're up to date";
+    case "downloading": return `Downloading update… ${status.percent}%`;
+    case "downloaded": return `Update v${status.version} ready — restart to install`;
+    case "error": return `Update check failed: ${status.message}`;
+  }
+}
+
 const TABS: { key: Tab; label: string }[] = [
   { key: "general",     label: "GENERAL" },
   { key: "transaction", label: "TRANSACTION" },
@@ -184,13 +204,24 @@ export function SettingsScreen() {
   const [newTaxName, setNewTaxName] = useState("");
   const [newTaxRate, setNewTaxRate] = useState("");
   const [appVersion, setAppVersion] = useState<string | null>(null);
+  const [hasUpdateBridge, setHasUpdateBridge] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
 
   useEffect(() => {
     const bridge = (window as any).vyapar;
     if (bridge?.getAppVersion) {
       bridge.getAppVersion().then(setAppVersion).catch(() => {});
     }
+    if (bridge?.onUpdateStatus) {
+      setHasUpdateBridge(true);
+      return bridge.onUpdateStatus((status: UpdateStatus) => setUpdateStatus(status));
+    }
   }, []);
+
+  function handleCheckForUpdates() {
+    const bridge = (window as any).vyapar;
+    bridge?.checkForUpdates?.();
+  }
 
   function set<K extends keyof Settings>(key: K, val: Settings[K]) {
     setS(prev => {
@@ -780,7 +811,28 @@ export function SettingsScreen() {
             {t.key === "reminders" && <span className="st-tab-badge">●</span>}
           </button>
         ))}
-        {appVersion && <div className="st-sidebar-version">Version {appVersion}</div>}
+        {appVersion && (
+          <div className="st-sidebar-update">
+            <div className="st-sidebar-version">Version {appVersion}</div>
+            {hasUpdateBridge && (
+              <>
+                <button
+                  type="button"
+                  className="st-check-updates-btn"
+                  onClick={handleCheckForUpdates}
+                  disabled={updateStatus?.state === "checking" || updateStatus?.state === "downloading"}
+                >
+                  Check for Updates
+                </button>
+                {updateStatus && (
+                  <div className={`st-update-status st-update-status--${updateStatus.state}`}>
+                    {updateStatusText(updateStatus)}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
       </aside>
 
       {/* Content */}
@@ -851,13 +903,40 @@ const STYLES = `
 .st-tab:hover { color: #e2e8f0; background: rgba(255,255,255,0.05); }
 .st-tab--active { color: #fff; background: rgba(255,255,255,0.1); border-left-color: #3b82f6; }
 .st-tab-badge { color: #3b82f6; font-size: 10px; }
-.st-sidebar-version {
+.st-sidebar-update {
   margin-top: auto;
   padding: 12px 16px;
-  font-size: 11px;
-  color: #64748b;
   border-top: 1px solid rgba(255,255,255,0.08);
 }
+.st-sidebar-version {
+  font-size: 11px;
+  color: #64748b;
+}
+.st-check-updates-btn {
+  margin-top: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #cbd5e1;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.st-check-updates-btn:hover { background: rgba(255,255,255,0.1); }
+.st-check-updates-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.st-update-status {
+  margin-top: 8px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.st-update-status--checking,
+.st-update-status--downloading,
+.st-update-status--available { color: #60a5fa; }
+.st-update-status--not-available { color: #4ade80; }
+.st-update-status--downloaded { color: #4ade80; font-weight: 600; }
+.st-update-status--error { color: #f87171; }
 
 /* Content */
 .st-content {
