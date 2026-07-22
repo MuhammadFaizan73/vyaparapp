@@ -5,7 +5,7 @@ import type { Transaction, Party, Item } from "@vyapar/api-client";
 import { AddPartyModal } from "./AddPartyModal";
 import { AddItemModal } from "./AddItemModal";
 import { InvoicePreviewModal } from "./InvoicePreviewModal";
-import { PaymentInForm } from "./PaymentInScreen";
+import { PaymentInForm, RECENT_ROWS_LIMIT } from "./PaymentInScreen";
 import { DeliveryChallanModal } from "./DeliveryChallanModal";
 
 /* ── helpers ── */
@@ -162,7 +162,7 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
     setChallanLoading(true);
     try {
       const [txns, ps] = await Promise.all([
-        api.getTransactionsByType("delivery_challan"),
+        api.getTransactionsByType("delivery_challan", { take: RECENT_ROWS_LIMIT }),
         parties.length ? Promise.resolve(parties) : api.getParties(),
       ]);
       const map: Record<string, string> = {};
@@ -221,11 +221,15 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
     } catch { /* ignore */ } finally { setConvertingChallan(false); }
   }
 
-  /* ── load data ── */
+  /* ── load data ──
+     Sale's date filter (default "This Month") is real, unlike some other transaction
+     screens where it's decorative — so it's passed straight to the API instead of fetching
+     every sale ever and filtering client-side. Widening the range (e.g. to "This Year")
+     triggers a fresh, still-bounded fetch rather than an unbounded one. */
   async function loadSales() {
     try {
       const [txns, ps, its] = await Promise.all([
-        api.getTransactionsByType("sale"),
+        api.getTransactionsByType("sale", { from: filterFrom, to: filterTo }),
         api.getParties(),
         api.getItems(),
       ]);
@@ -247,7 +251,8 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
   useEffect(() => {
     setLoading(true);
     loadSales().finally(() => setLoading(false));
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterFrom, filterTo]);
 
   /* close row menu on outside click */
   useEffect(() => {

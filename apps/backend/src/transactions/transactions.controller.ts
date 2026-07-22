@@ -31,8 +31,13 @@ export class TransactionsController {
   }
 
   @Get("summary")
-  summary(@Req() req: AuthedRequest, @Query("type") type: string) {
-    return this.transactionsService.summaryByType(req.tenantId, type);
+  summary(
+    @Req() req: AuthedRequest,
+    @Query("type") type: string,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+  ) {
+    return this.transactionsService.summaryByType(req.tenantId, type, { from, to });
   }
 
   @Post()

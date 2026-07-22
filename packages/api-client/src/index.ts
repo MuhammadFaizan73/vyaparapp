@@ -200,9 +200,15 @@ export class VyaparApiClient {
     return data;
   }
 
-  async getTransactionsSummary(type: string): Promise<{ count: number; total: number; balance: number }> {
+  async getTransactionsSummary(
+    type: string,
+    opts?: { from?: string; to?: string },
+  ): Promise<{ count: number; total: number; balance: number }> {
+    const params = new URLSearchParams({ type });
+    if (opts?.from) params.set("from", opts.from);
+    if (opts?.to) params.set("to", opts.to);
     const { data } = await this.http.get<{ count: number; total: number; balance: number }>(
-      `/transactions/summary?type=${type}`,
+      `/transactions/summary?${params.toString()}`,
     );
     return data;
   }

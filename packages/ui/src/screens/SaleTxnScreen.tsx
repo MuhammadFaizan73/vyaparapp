@@ -190,7 +190,7 @@ export function SaleTxnScreen({ activeKey, isLocked = false, onLockedAction }: P
   async function load() {
     try {
       const [txns, ps, items] = await Promise.all([
-        api.getTransactionsByType(cfg.txnType),
+        api.getTransactionsByType(cfg.txnType, { from: filterFrom, to: filterTo }),
         api.getParties(),
         api.getItems(),
       ]);
@@ -205,7 +205,7 @@ export function SaleTxnScreen({ activeKey, isLocked = false, onLockedAction }: P
     setLoading(true);
     load().finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cfg.txnType]);
+  }, [cfg.txnType, filterFrom, filterTo]);
 
   useEffect(() => {
     if (!menuId) return;
@@ -243,12 +243,12 @@ export function SaleTxnScreen({ activeKey, isLocked = false, onLockedAction }: P
 
   async function handleDuplicate(row: TxnRow) {
     try {
-      const all = await api.getTransactionsByType(cfg.txnType);
+      const { count } = await api.getTransactionsSummary(cfg.txnType);
       const parsed = parseNotes(row.notes);
       await api.createTransaction({
         partyId: row.partyId,
         type: cfg.txnType as "estimate",
-        number: String(all.length + 1),
+        number: String(count + 1),
         date: new Date().toISOString(),
         total: row.total,
         balance: row.total,
@@ -281,8 +281,8 @@ export function SaleTxnScreen({ activeKey, isLocked = false, onLockedAction }: P
     if (saleItems.length === 0) { alert("Set quantity for at least one item."); return; }
     const total = saleItems.reduce((s: number, i: any) => s + i.qty * i.rate, 0);
     try {
-      const allTxns = await api.getTransactionsByType(convertTargetType);
-      const txnNumber = String(allTxns.length + 1);
+      const { count } = await api.getTransactionsSummary(convertTargetType);
+      const txnNumber = String(count + 1);
       const notesJson = JSON.stringify({
         items: saleItems,
         phone: parsed.phone ?? "",
@@ -992,8 +992,8 @@ function TxnForm({ cfg, parties, catalog, initialRow, existingCount, onClose, on
   /* Auto-number */
   useEffect(() => {
     if (!initialRow) {
-      api.getTransactionsByType(cfg.txnType)
-        .then((txns) => setTxnNumber(String(txns.length + 1)))
+      api.getTransactionsSummary(cfg.txnType)
+        .then(({ count }) => setTxnNumber(String(count + 1)))
         .catch(() => setTxnNumber(String(existingCount + 1)));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps

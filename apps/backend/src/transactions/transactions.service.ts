@@ -58,6 +58,12 @@ export class TransactionsService {
     return rows.map(toRow);
   }
 
+  private dateFilter(from?: string, to?: string) {
+    return from || to
+      ? { ...(from && { gte: new Date(from) }), ...(to && { lte: new Date(to) }) }
+      : undefined;
+  }
+
   // take/skip/from/to are all optional and additive — omitting them preserves the exact
   // previous behavior (return every matching row) for any caller that hasn't opted in yet.
   async listByType(
@@ -65,10 +71,7 @@ export class TransactionsService {
     type: string,
     opts?: { take?: number; skip?: number; from?: string; to?: string },
   ): Promise<TransactionRow[]> {
-    const dateFilter =
-      opts?.from || opts?.to
-        ? { ...(opts.from && { gte: new Date(opts.from) }), ...(opts.to && { lte: new Date(opts.to) }) }
-        : undefined;
+    const dateFilter = this.dateFilter(opts?.from, opts?.to);
     const rows = await this.prisma.transaction.findMany({
       where: { tenantId, type, ...(dateFilter && { date: dateFilter }) },
       orderBy: { date: "desc" },
@@ -79,14 +82,19 @@ export class TransactionsService {
   }
 
   // Cheap aggregate for header stats (total / received-or-paid) — computed entirely in
-  // Postgres via SUM, never by fetching and summing individual rows client-side.
-  async summaryByType(tenantId: string, type: string): Promise<{ count: number; total: number; balance: number }> {
+  // Postgres via SUM, never by fetching and summing individual rows client-side. from/to
+  // let a screen with a real date filter (e.g. Sale's "This Month") get an aggregate that
+  // matches exactly what's on screen, not an all-time total.
+  async summaryByType(
+    tenantId: string,
+    type: string,
+    opts?: { from?: string; to?: string },
+  ): Promise<{ count: number; total: number; balance: number }> {
+    const dateFilter = this.dateFilter(opts?.from, opts?.to);
+    const where = { tenantId, type, ...(dateFilter && { date: dateFilter }) };
     const [agg, count] = await Promise.all([
-      this.prisma.transaction.aggregate({
-        where: { tenantId, type },
-        _sum: { total: true, balance: true },
-      }),
-      this.prisma.transaction.count({ where: { tenantId, type } }),
+      this.prisma.transaction.aggregate({ where, _sum: { total: true, balance: true } }),
+      this.prisma.transaction.count({ where }),
     ]);
     return {
       count,

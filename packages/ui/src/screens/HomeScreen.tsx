@@ -123,18 +123,42 @@ export function HomeScreen() {
   const [purchases, setPurchases] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const range = useMemo(() => getRange(period), [period]);
+
+  const prevRange = useMemo(() => {
+    const now = new Date();
+    if (period === "This Month") return getRange("Last Month");
+    if (period === "Last Month") return {
+      start: new Date(now.getFullYear(), now.getMonth() - 2, 1),
+      end: new Date(now.getFullYear(), now.getMonth() - 1, 0, 23, 59, 59),
+    };
+    return { start: new Date(now.getFullYear() - 1, 0, 1), end: new Date(now.getFullYear() - 1, 11, 31) };
+  }, [period]);
+
+  // Bound the fetch to cover the selected period plus its comparison period — still a
+  // fixed window, never "every sale/purchase ever" — instead of fetching the whole history
+  // just to filter it down to a month or two client-side.
+  const fetchFrom = useMemo(
+    () => new Date(Math.min(range.start.getTime(), prevRange.start.getTime())).toISOString().slice(0, 10),
+    [range, prevRange]
+  );
+  const fetchTo = useMemo(
+    () => new Date(Math.max(range.end.getTime(), prevRange.end.getTime())).toISOString().slice(0, 10),
+    [range, prevRange]
+  );
+
   useEffect(() => {
     setLoading(true);
     Promise.all([
       api.getParties(),
-      api.getTransactionsByType("sale"),
-      api.getTransactionsByType("purchase"),
+      api.getTransactionsByType("sale", { from: fetchFrom, to: fetchTo }),
+      api.getTransactionsByType("purchase", { from: fetchFrom, to: fetchTo }),
     ]).then(([ps, ss, pur]) => {
       setParties(ps);
       setSales(ss);
       setPurchases(pur);
     }).catch(() => {}).finally(() => setLoading(false));
-  }, []);
+  }, [fetchFrom, fetchTo]);
 
   const receivable = useMemo(() => {
     const pos = parties.filter(p => p.balance > 0);
@@ -145,8 +169,6 @@ export function HomeScreen() {
     const neg = parties.filter(p => p.balance < 0);
     return { total: neg.reduce((s, p) => s + Math.abs(p.balance), 0), count: neg.length };
   }, [parties]);
-
-  const range = useMemo(() => getRange(period), [period]);
 
   const periodSales = useMemo(
     () => sales.filter(t => inRange(t.date, range)),
@@ -159,16 +181,6 @@ export function HomeScreen() {
 
   const totalSale = useMemo(() => periodSales.reduce((s, t) => s + t.total, 0), [periodSales]);
   const totalPurchase = useMemo(() => periodPurchases.reduce((s, t) => s + t.total, 0), [periodPurchases]);
-
-  const prevRange = useMemo(() => {
-    const now = new Date();
-    if (period === "This Month") return getRange("Last Month");
-    if (period === "Last Month") return {
-      start: new Date(now.getFullYear(), now.getMonth() - 2, 1),
-      end: new Date(now.getFullYear(), now.getMonth() - 1, 0, 23, 59, 59),
-    };
-    return { start: new Date(now.getFullYear() - 1, 0, 1), end: new Date(now.getFullYear() - 1, 11, 31) };
-  }, [period]);
 
   const prevSaleTotal = useMemo(
     () => sales.filter(t => inRange(t.date, prevRange)).reduce((s, t) => s + t.total, 0),

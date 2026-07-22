@@ -47,7 +47,7 @@ type Props = { isLocked?: boolean; onLockedAction?: () => void };
 // Recent-first cap on the list fetch — a normal user cares about recent payments, not
 // scrolling through years of history. Header totals below come from a separate cheap
 // aggregate call instead, so they stay accurate even though the visible list is capped.
-const RECENT_ROWS_LIMIT = 300;
+export const RECENT_ROWS_LIMIT = 300;
 
 export function PaymentInScreen({ isLocked = false, onLockedAction }: Props) {
   const [rows, setRows] = useState<PiRow[]>([]);

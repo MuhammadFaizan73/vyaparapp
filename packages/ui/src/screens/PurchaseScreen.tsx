@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { api, loadTenant } from "../lib/api";
 import type { Transaction, Party, Item } from "@vyapar/api-client";
+import { RECENT_ROWS_LIMIT } from "./PaymentInScreen";
 
 function fmt(n: number) {
   return n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -65,6 +66,7 @@ export function PurchaseScreen({ isLocked = false, onLockedAction, activeKey = "
   const [search, setSearch]   = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [purchases, setPurchases] = useState<PurchaseRow[]>([]);
+  const [summary, setSummary] = useState({ count: 0, total: 0, balance: 0 });
   const [parties,  setParties]   = useState<Party[]>([]);
   const [items,    setItems]     = useState<Item[]>([]);
   const [loading,  setLoading]   = useState(true);
@@ -92,10 +94,14 @@ export function PurchaseScreen({ isLocked = false, onLockedAction, activeKey = "
 
     // Load transactions for the current tab's type
     try {
-      const txns = await api.getTransactionsByType(tabCfg.txnType);
+      const [txns, sum] = await Promise.all([
+        api.getTransactionsByType(tabCfg.txnType, { take: RECENT_ROWS_LIMIT }),
+        api.getTransactionsSummary(tabCfg.txnType),
+      ]);
       const map: Record<string, string> = {};
       ps.forEach(p => { map[p.id] = p.name; });
       setPurchases(txns.map(t => ({ ...t, partyName: map[t.partyId] ?? "Unknown" })));
+      setSummary(sum);
     } catch { /* offline */ }
   }
 
@@ -123,9 +129,9 @@ export function PurchaseScreen({ isLocked = false, onLockedAction, activeKey = "
   const startDateStr = fmtDMY(new Date(now.getFullYear(), now.getMonth(), 1));
   const endDateStr   = fmtDMY(new Date(now.getFullYear(), now.getMonth() + 1, 0));
 
-  const totalPurchase = purchases.reduce((s, p) => s + p.total, 0);
-  const totalPaid     = purchases.reduce((s, p) => s + (p.total - p.balance), 0);
-  const totalBalance  = purchases.reduce((s, p) => s + p.balance, 0);
+  const totalPurchase = summary.total;
+  const totalPaid     = summary.total - summary.balance;
+  const totalBalance  = summary.balance;
 
   function handleAddPurchase() {
     if (isLocked) { onLockedAction?.(); return; }
@@ -182,7 +188,7 @@ export function PurchaseScreen({ isLocked = false, onLockedAction, activeKey = "
       <DebitNoteForm
         purchase={returnTarget}
         allParties={parties}
-        returnNum={purchases.length + 1}
+        returnNum={summary.count + 1}
         onClose={() => setReturnTarget(null)}
         onSaved={async () => { setReturnTarget(null); await loadPurchases(); }}
       />
@@ -196,7 +202,7 @@ export function PurchaseScreen({ isLocked = false, onLockedAction, activeKey = "
         txnType={tabCfg.txnType}
         title={tabCfg.title}
         allParties={parties}
-        txnNum={purchases.length + 1}
+        txnNum={summary.count + 1}
         onClose={closeForm}
         onSaved={async () => { closeForm(); await loadPurchases(); }}
       />
@@ -207,7 +213,7 @@ export function PurchaseScreen({ isLocked = false, onLockedAction, activeKey = "
   if (showForm || editPurchase) {
     const billNum = editPurchase
       ? (purchases.findIndex(p => p.id === editPurchase.id) + 1)
-      : purchases.length + 1;
+      : summary.count + 1;
     return (
       <PurchaseBillForm
         billNum={billNum}
@@ -415,7 +421,7 @@ export function PurchaseScreen({ isLocked = false, onLockedAction, activeKey = "
         <PaymentOutModal
           purchase={paymentTarget}
           allParties={parties}
-          receiptNum={purchases.length + 1}
+          receiptNum={summary.count + 1}
           onClose={() => setPaymentTarget(null)}
           onSaved={async () => { setPaymentTarget(null); await loadPurchases(); }}
         />
@@ -1328,27 +1334,30 @@ function InvoicePreview({
 ═══════════════════════════════════════════════════════════ */
 function PaymentOutSubScreen({ isLocked, onLockedAction }: { isLocked?: boolean; onLockedAction?: () => void }) {
   const [rows,      setRows]      = useState<PurchaseRow[]>([]);
+  const [summary, setSummary] = useState({ count: 0, total: 0, balance: 0 });
   const [parties,   setParties]   = useState<Party[]>([]);
   const [loading,   setLoading]   = useState(true);
   const [showAdd,   setShowAdd]   = useState(false);
 
   async function load() {
     try {
-      const [txns, ps] = await Promise.all([
-        api.getTransactionsByType("payment_out"),
+      const [txns, ps, sum] = await Promise.all([
+        api.getTransactionsByType("payment_out", { take: RECENT_ROWS_LIMIT }),
         api.getParties(),
+        api.getTransactionsSummary("payment_out"),
       ]);
       const map: Record<string, string> = {};
       ps.forEach(p => { map[p.id] = p.name; });
       setParties(ps);
       setRows(txns.map(t => ({ ...t, partyName: map[t.partyId] ?? "Unknown" })));
+      setSummary(sum);
     } catch { /* offline */ }
   }
 
   useEffect(() => { setLoading(true); load().finally(() => setLoading(false)); }, []);
 
-  const totalAmt  = rows.reduce((s, r) => s + r.total, 0);
-  const totalPaid = rows.reduce((s, r) => s + (r.total - r.balance), 0);
+  const totalAmt  = summary.total;
+  const totalPaid = summary.total - summary.balance;
 
   const now = new Date();
   const fmtDMY = (d: Date) =>
@@ -1476,7 +1485,7 @@ function PaymentOutSubScreen({ isLocked, onLockedAction }: { isLocked?: boolean;
       {showAdd && (
         <StandalonePaymentOutModal
           allParties={parties}
-          receiptNum={rows.length + 1}
+          receiptNum={summary.count + 1}
           onClose={() => setShowAdd(false)}
           onSaved={async () => { setShowAdd(false); await load(); }}
         />
@@ -2194,6 +2203,7 @@ function LinkPaymentModal({
 ═══════════════════════════════════════════════════════════ */
 function PurchaseReturnSubScreen({ isLocked, onLockedAction }: { isLocked?: boolean; onLockedAction?: () => void }) {
   const [rows,    setRows]    = useState<PurchaseRow[]>([]);
+  const [nextNum, setNextNum] = useState(1);
   const [parties, setParties] = useState<Party[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -2202,11 +2212,16 @@ function PurchaseReturnSubScreen({ isLocked, onLockedAction }: { isLocked?: bool
 
   async function load() {
     try {
-      const [ps, txns] = await Promise.all([api.getParties(), api.getTransactionsByType("debit_note")]);
+      const [ps, txns, sum] = await Promise.all([
+        api.getParties(),
+        api.getTransactionsByType("debit_note", { take: RECENT_ROWS_LIMIT }),
+        api.getTransactionsSummary("debit_note"),
+      ]);
       setParties(ps);
       const map: Record<string, string> = {};
       ps.forEach(p => { map[p.id] = p.name; });
       setRows(txns.map(t => ({ ...t, partyName: map[t.partyId] ?? "Unknown" })));
+      setNextNum(sum.count + 1);
     } catch { /* offline */ }
   }
 
@@ -2236,7 +2251,7 @@ function PurchaseReturnSubScreen({ isLocked, onLockedAction }: { isLocked?: bool
   if (showForm) {
     return (
       <DebitNoteForm
-        returnNum={rows.length + 1}
+        returnNum={nextNum}
         onClose={() => setShowForm(false)}
         onSaved={async () => { setShowForm(false); await load(); }}
       />
@@ -3279,6 +3294,7 @@ function saveExpenseCategories(cats: string[]) {
 
 function ExpenseSubScreen({ isLocked, onLockedAction }: { isLocked?: boolean; onLockedAction?: () => void }) {
   const [rows,    setRows]    = useState<PurchaseRow[]>([]);
+  const [nextNum, setNextNum] = useState(1);
   const [parties, setParties] = useState<Party[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -3296,11 +3312,20 @@ function ExpenseSubScreen({ isLocked, onLockedAction }: { isLocked?: boolean; on
 
   async function load() {
     try {
-      const [ps, txns] = await Promise.all([api.getParties(), api.getTransactionsByType("expense")]);
+      // Note: the category breakdown below is grouped from a JSON field inside `notes`,
+      // not a real column, so it can only reflect this capped, most-recent window — a
+      // proper category aggregate would need a dedicated backend endpoint doing the
+      // grouping in SQL, which this doesn't attempt.
+      const [ps, txns, sum] = await Promise.all([
+        api.getParties(),
+        api.getTransactionsByType("expense", { take: RECENT_ROWS_LIMIT }),
+        api.getTransactionsSummary("expense"),
+      ]);
       setParties(ps);
       const map: Record<string, string> = {};
       ps.forEach(p => { map[p.id] = p.name; });
       setRows(txns.map(t => ({ ...t, partyName: map[t.partyId] ?? "—" })));
+      setNextNum(sum.count + 1);
     } catch { /* offline */ }
   }
 
@@ -3347,7 +3372,7 @@ function ExpenseSubScreen({ isLocked, onLockedAction }: { isLocked?: boolean; on
   if (showForm) {
     return (
       <ExpenseForm
-        expenseNum={rows.length + 1}
+        expenseNum={nextNum}
         categories={categories}
         allParties={parties}
         onAddCategory={(name) => {
