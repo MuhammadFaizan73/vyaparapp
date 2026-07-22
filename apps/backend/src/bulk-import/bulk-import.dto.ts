@@ -35,3 +35,22 @@ export class BulkSaleImportRequestDto {
   @IsArray() parties!: BulkSaleImportPartyDto[];
   @IsArray() invoices!: BulkSaleImportInvoiceDto[];
 }
+
+export class BulkCashFlowPartyDto {
+  name!: string;
+}
+
+export class BulkCashFlowEntryDto {
+  partyName!: string;
+  type!: "payment_in" | "payment_out";
+  date!: string;
+  amount!: number;
+  number?: string;
+  description?: string;
+}
+
+export class BulkCashFlowImportRequestDto {
+  @IsOptional() @IsString() companyTag?: string;
+  @IsArray() parties!: BulkCashFlowPartyDto[];
+  @IsArray() entries!: BulkCashFlowEntryDto[];
+}

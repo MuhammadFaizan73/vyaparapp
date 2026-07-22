@@ -236,6 +236,7 @@ export type BulkSaleImportItem = z.infer<typeof BulkSaleImportItemSchema>;
 
 export const BulkSaleImportPartySchema = z.object({
   name: z.string(),
+  phone: z.string().optional(),
 });
 export type BulkSaleImportParty = z.infer<typeof BulkSaleImportPartySchema>;
 
@@ -245,6 +246,7 @@ export const BulkSaleImportInvoiceSchema = z.object({
   partyName: z.string(),
   transactionType: z.string(),
   total: z.number(),
+  balance: z.number().optional(),
   lineItems: z.array(BulkSaleImportLineItemSchema),
 });
 export type BulkSaleImportInvoice = z.infer<typeof BulkSaleImportInvoiceSchema>;
@@ -257,7 +259,7 @@ export const BulkSaleImportRequestSchema = z.object({
 });
 export type BulkSaleImportRequest = z.infer<typeof BulkSaleImportRequestSchema>;
 
-export const BulkSaleImportJobStatusSchema = z.object({
+export const BulkImportJobStatusSchema = z.object({
   jobId: z.string(),
   status: z.enum(["processing", "done", "error"]),
   total: z.number(),
@@ -266,9 +268,36 @@ export const BulkSaleImportJobStatusSchema = z.object({
   partiesCreated: z.number(),
   invoicesImported: z.number(),
   invoicesSkipped: z.number(),
+  entriesImported: z.number(),
+  entriesSkipped: z.number(),
   error: z.string().optional(),
 });
-export type BulkSaleImportJobStatus = z.infer<typeof BulkSaleImportJobStatusSchema>;
+export type BulkImportJobStatus = z.infer<typeof BulkImportJobStatusSchema>;
+// Retained alias — sale-history and cash-flow imports share the same job status shape.
+export const BulkSaleImportJobStatusSchema = BulkImportJobStatusSchema;
+export type BulkSaleImportJobStatus = BulkImportJobStatus;
+
+export const BulkCashFlowPartySchema = z.object({
+  name: z.string(),
+});
+export type BulkCashFlowParty = z.infer<typeof BulkCashFlowPartySchema>;
+
+export const BulkCashFlowEntrySchema = z.object({
+  partyName: z.string(),
+  type: z.enum(["payment_in", "payment_out"]),
+  date: z.string(),
+  amount: z.number(),
+  number: z.string().optional(),
+  description: z.string().optional(),
+});
+export type BulkCashFlowEntry = z.infer<typeof BulkCashFlowEntrySchema>;
+
+export const BulkCashFlowImportRequestSchema = z.object({
+  companyTag: z.string().optional(),
+  parties: z.array(BulkCashFlowPartySchema),
+  entries: z.array(BulkCashFlowEntrySchema),
+});
+export type BulkCashFlowImportRequest = z.infer<typeof BulkCashFlowImportRequestSchema>;
 
 export const TEAM_ROLES = [
   "secondary_admin",
