@@ -54,3 +54,19 @@ export class BulkCashFlowImportRequestDto {
   @IsArray() parties!: BulkCashFlowPartyDto[];
   @IsArray() entries!: BulkCashFlowEntryDto[];
 }
+
+export class BulkExpenseEntryDto {
+  category!: string;
+  paymentType!: string;
+  date!: string;
+  amount!: number;
+  balance?: number;
+  number?: string;
+  description?: string;
+}
+
+export class BulkExpenseImportRequestDto {
+  @IsOptional() @IsString() companyTag?: string;
+  @IsOptional() @IsString() partyName?: string;
+  @IsArray() entries!: BulkExpenseEntryDto[];
+}

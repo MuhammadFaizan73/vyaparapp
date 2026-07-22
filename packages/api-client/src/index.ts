@@ -19,6 +19,7 @@ import type {
   BulkSaleImportJobStatus,
   BulkCashFlowImportRequest,
   BulkImportJobStatus,
+  BulkExpenseImportRequest,
 } from "@vyapar/shared-types";
 
 export type BankAccount = {
@@ -237,6 +238,16 @@ export class VyaparApiClient {
 
   async getCashFlowImportStatus(jobId: string): Promise<BulkImportJobStatus> {
     const { data } = await this.http.get<BulkImportJobStatus>(`/bulk-import/cash-flow/${jobId}`);
+    return data;
+  }
+
+  async startExpenseImport(body: BulkExpenseImportRequest): Promise<{ jobId: string }> {
+    const { data } = await this.http.post<{ jobId: string }>("/bulk-import/expenses", body, { timeout: 60000 });
+    return data;
+  }
+
+  async getExpenseImportStatus(jobId: string): Promise<BulkImportJobStatus> {
+    const { data } = await this.http.get<BulkImportJobStatus>(`/bulk-import/expenses/${jobId}`);
     return data;
   }
 

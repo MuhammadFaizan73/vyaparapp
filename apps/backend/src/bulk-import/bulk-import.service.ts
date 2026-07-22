@@ -1,7 +1,9 @@
 import { Injectable } from "@nestjs/common";
 import { randomUUID } from "crypto";
 import { PrismaService } from "../prisma/prisma.service";
-import { BulkSaleImportRequestDto, BulkCashFlowImportRequestDto } from "./bulk-import.dto";
+import { BulkSaleImportRequestDto, BulkCashFlowImportRequestDto, BulkExpenseImportRequestDto } from "./bulk-import.dto";
+
+const DEFAULT_EXPENSE_PARTY_NAME = "Business Expenses";
 
 export type BulkImportJobStatus = {
   jobId: string;
@@ -82,6 +84,34 @@ export class BulkImportService {
 
     setImmediate(() => {
       this.processCashFlow(jobId, tenantId, dto).catch((err) => {
+        const job = this.jobs.get(jobId);
+        if (job) {
+          job.status = "error";
+          job.error = err instanceof Error ? err.message : String(err);
+        }
+      });
+    });
+
+    return { jobId };
+  }
+
+  startExpenses(tenantId: string, dto: BulkExpenseImportRequestDto): { jobId: string } {
+    const jobId = randomUUID();
+    this.jobs.set(jobId, {
+      jobId,
+      status: "processing",
+      total: dto.entries?.length ?? 0,
+      processed: 0,
+      itemsCreated: 0,
+      partiesCreated: 0,
+      invoicesImported: 0,
+      invoicesSkipped: 0,
+      entriesImported: 0,
+      entriesSkipped: 0,
+    });
+
+    setImmediate(() => {
+      this.processExpenses(jobId, tenantId, dto).catch((err) => {
         const job = this.jobs.get(jobId);
         if (job) {
           job.status = "error";
@@ -267,6 +297,71 @@ export class BulkImportService {
         // since this import has no invoice-linking data to consume any of it.
         balance: e.amount,
         notes: JSON.stringify({ paymentType: "Cash", receiptNo: e.number, description: e.description }),
+      });
+
+      if (buffer.length >= CHUNK_SIZE) await flush();
+    }
+    await flush();
+
+    job.status = "done";
+  }
+
+  private async processExpenses(jobId: string, tenantId: string, dto: BulkExpenseImportRequestDto): Promise<void> {
+    const job = this.jobs.get(jobId);
+    if (!job) return;
+
+    // 1. Expenses have no real vendor in the source data — find or create one placeholder
+    // party to hold them all, same fallback PurchaseScreen's own "Add Expense" form uses
+    // when no "Paid To" party is picked (an arbitrary existing party), except deliberate
+    // and dedicated so it doesn't land on an unrelated real customer's ledger.
+    // Case-insensitive lookup done in application code, not via Prisma's `mode: "insensitive"`
+    // filter — that's Postgres-only and breaks the SQLite Prisma Client used in local dev.
+    const partyName = (dto.partyName || DEFAULT_EXPENSE_PARTY_NAME).trim();
+    const existingParties = await this.prisma.party.findMany({ where: { tenantId }, select: { id: true, name: true } });
+    let party = existingParties.find((p) => p.name.trim().toLowerCase() === partyName.toLowerCase());
+    if (!party) {
+      party = await this.prisma.party.create({ data: { tenantId, name: partyName } });
+      job.partiesCreated = 1;
+    }
+
+    // 2. Existing transaction numbers (per type) — makes re-running the same file a no-op.
+    const existingTxns = await this.prisma.transaction.findMany({ where: { tenantId }, select: { number: true, type: true } });
+    const seenTxnKeys = new Set(existingTxns.filter((t) => t.number).map((t) => `${t.type}:${t.number}`));
+
+    // 3. Build + batch-insert expense transactions.
+    const entries = dto.entries ?? [];
+    let buffer: Array<{ tenantId: string; partyId: string; type: string; number: string; date: Date; total: number; balance: number; notes: string }> = [];
+
+    const flush = async () => {
+      if (!buffer.length) return;
+      await this.prisma.transaction.createMany({ data: buffer });
+      job.entriesImported += buffer.length;
+      buffer = [];
+    };
+
+    for (const e of entries) {
+      job.processed++;
+      const date = e.date ? new Date(e.date) : null;
+      const key = `expense:${e.number}`;
+
+      if (!e.number || !date || Number.isNaN(date.getTime()) || !(e.amount > 0) || seenTxnKeys.has(key)) {
+        job.entriesSkipped++;
+        continue;
+      }
+      seenTxnKeys.add(key);
+
+      buffer.push({
+        tenantId,
+        partyId: party.id,
+        type: "expense",
+        number: e.number,
+        date,
+        total: e.amount,
+        // Matches PurchaseScreen's own expense notes shape exactly: { category, paymentType, items }.
+        // Balance comes straight from the source file's Balance Due — this data is historical
+        // and already settled (all rows show 0), unlike the manual form's always-unpaid default.
+        balance: e.balance ?? e.amount,
+        notes: JSON.stringify({ category: e.category, paymentType: e.paymentType, items: [], description: e.description }),
       });
 
       if (buffer.length >= CHUNK_SIZE) await flush();

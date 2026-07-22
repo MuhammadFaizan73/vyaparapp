@@ -299,6 +299,24 @@ export const BulkCashFlowImportRequestSchema = z.object({
 });
 export type BulkCashFlowImportRequest = z.infer<typeof BulkCashFlowImportRequestSchema>;
 
+export const BulkExpenseEntrySchema = z.object({
+  category: z.string(),
+  paymentType: z.string(),
+  date: z.string(),
+  amount: z.number(),
+  balance: z.number().optional(),
+  number: z.string().optional(),
+  description: z.string().optional(),
+});
+export type BulkExpenseEntry = z.infer<typeof BulkExpenseEntrySchema>;
+
+export const BulkExpenseImportRequestSchema = z.object({
+  companyTag: z.string().optional(),
+  partyName: z.string().optional(),
+  entries: z.array(BulkExpenseEntrySchema),
+});
+export type BulkExpenseImportRequest = z.infer<typeof BulkExpenseImportRequestSchema>;
+
 export const TEAM_ROLES = [
   "secondary_admin",
   "salesman",
