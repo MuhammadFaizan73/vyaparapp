@@ -2,27 +2,31 @@ import { useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import { api } from "../lib/api";
 
-const EXPECTED_HEADERS = [
-  "Date", "Invoice No./Txn No.", "Party Name", "Item Name", "Item Code",
-  "Category", "Challan/Order No.", "Quantity", "Unit", "UnitPrice",
-  "Transaction Type", "Amount",
-];
+const SALE_REPORT_SHEET = "Sale Report";
+const ITEM_DETAILS_SHEET = "Item Details";
+
+const REQUIRED_SALE_REPORT_HEADERS = ["Date", "Invoice No", "Party Name", "Total Amount"];
+const REQUIRED_ITEM_DETAILS_HEADERS = ["Invoice No./Txn No.", "Item Name", "Quantity", "UnitPrice"];
 
 type RawRow = Record<string, unknown>;
 
+type LineItem = { name: string; qty: number; unit?: string; rate: number };
 type AggregatedItem = { name: string; unit?: string; sku?: string; salePrice?: number; lastTimestamp: number };
-type AggregatedParty = { name: string };
+type AggregatedParty = { name: string; phone?: string };
 type AggregatedInvoice = {
   number: string; date: string; partyName: string; transactionType: string;
-  total: number; lineItems: Array<{ name: string; qty: number; unit?: string; rate: number }>;
+  total: number; balance: number;
+  lineItems: LineItem[];
 };
 
 type Summary = {
-  totalRows: number;
+  totalInvoiceRows: number;
+  totalItemRows: number;
   items: AggregatedItem[];
   parties: AggregatedParty[];
   invoices: AggregatedInvoice[];
-  skippedRows: number;
+  skippedInvoices: number;
+  skippedItemRows: number;
   minDate: string | null;
   maxDate: string | null;
 };
@@ -49,59 +53,94 @@ function parseSheetDate(v: unknown): string | null {
   return null;
 }
 
-function buildSummary(rows: RawRow[]): Summary {
+// "Sale Report" is the invoice-level tab (one row per invoice: totals, balance, party).
+// "Item Details" is the line-item tab (one row per item sold, joined back to an invoice
+// via "Invoice No./Txn No." <-> "Invoice No"). Both tabs describe the same invoices —
+// the totals/balance always come from Sale Report, never from summing line items,
+// since Sale Report already reflects discounts/rounding the line items don't capture.
+function buildSummary(saleRows: RawRow[], itemRows: RawRow[]): Summary {
+  const itemRowsByInvoice = new Map<string, RawRow[]>();
+  for (const r of itemRows) {
+    const invoiceNo = String(r["Invoice No./Txn No."] ?? "").trim();
+    if (!invoiceNo) continue;
+    const list = itemRowsByInvoice.get(invoiceNo);
+    if (list) list.push(r); else itemRowsByInvoice.set(invoiceNo, [r]);
+  }
+
   const itemsByKey = new Map<string, AggregatedItem>();
   const partiesByKey = new Map<string, AggregatedParty>();
-  const invoicesByNumber = new Map<string, AggregatedInvoice>();
-  let skippedRows = 0;
+  const invoices: AggregatedInvoice[] = [];
+  const seenInvoiceNumbers = new Set<string>();
+  let skippedInvoices = 0;
+  let skippedItemRows = 0;
   let minMs = Infinity;
   let maxMs = -Infinity;
 
-  for (const r of rows) {
-    const itemName = String(r["Item Name"] ?? "").trim();
+  for (const r of saleRows) {
+    const invoiceNo = String(r["Invoice No"] ?? "").trim();
     const partyName = String(r["Party Name"] ?? "").trim();
-    const invoiceNo = String(r["Invoice No./Txn No."] ?? "").trim();
     const dateIso = parseSheetDate(r["Date"]);
-    const qty = Number(r["Quantity"]) || 0;
-    const unitPrice = Number(r["UnitPrice"]) || 0;
-    const amount = Number(r["Amount"]) || 0;
-    const unit = String(r["Unit"] ?? "").trim() || undefined;
-    const sku = String(r["Item Code"] ?? "").trim() || undefined;
-    const txnType = String(r["Transaction Type"] ?? "").trim() || "Sale";
+    const total = Number(r["Total Amount"]) || 0;
+    const balanceRaw = r["Balance Due"];
+    const balance = balanceRaw !== undefined && String(balanceRaw).trim() !== "" ? Number(balanceRaw) || 0 : total;
+    const phone = String(r["Party Phone No."] ?? "").trim() || undefined;
 
-    if (!itemName || !partyName || !invoiceNo || !dateIso) { skippedRows++; continue; }
+    if (!invoiceNo || !partyName || !dateIso || seenInvoiceNumbers.has(invoiceNo)) { skippedInvoices++; continue; }
+    seenInvoiceNumbers.add(invoiceNo);
 
     const timestamp = new Date(dateIso).getTime();
     minMs = Math.min(minMs, timestamp);
     maxMs = Math.max(maxMs, timestamp);
 
-    const itemKey = itemName.toLowerCase();
-    const existingItem = itemsByKey.get(itemKey);
-    if (!existingItem || timestamp >= existingItem.lastTimestamp) {
-      itemsByKey.set(itemKey, { name: itemName, unit, sku, salePrice: unitPrice || undefined, lastTimestamp: timestamp });
-    }
-
     const partyKey = partyName.toLowerCase();
-    if (!partiesByKey.has(partyKey)) partiesByKey.set(partyKey, { name: partyName });
+    const existingParty = partiesByKey.get(partyKey);
+    if (!existingParty) partiesByKey.set(partyKey, { name: partyName, phone });
+    else if (!existingParty.phone && phone) existingParty.phone = phone;
 
-    let invoice = invoicesByNumber.get(invoiceNo);
-    if (!invoice) {
-      invoice = { number: invoiceNo, date: dateIso, partyName, transactionType: txnType, total: 0, lineItems: [] };
-      invoicesByNumber.set(invoiceNo, invoice);
+    const rawLineItems = itemRowsByInvoice.get(invoiceNo) ?? [];
+    const lineItems: LineItem[] = [];
+    let transactionType = "Sale";
+    for (const lr of rawLineItems) {
+      const itemName = String(lr["Item Name"] ?? "").trim();
+      if (!itemName) { skippedItemRows++; continue; }
+      const qty = Number(lr["Quantity"]) || 0;
+      const unit = String(lr["Unit"] ?? "").trim() || undefined;
+      const sku = String(lr["Item Code"] ?? "").trim() || undefined;
+      const rate = Number(lr["UnitPrice"]) || 0;
+      const lrType = String(lr["Transaction Type"] ?? "").trim();
+      if (lrType) transactionType = lrType;
+
+      lineItems.push({ name: itemName, qty, unit, rate });
+
+      const itemKey = itemName.toLowerCase();
+      const existingItem = itemsByKey.get(itemKey);
+      if (!existingItem || timestamp >= existingItem.lastTimestamp) {
+        itemsByKey.set(itemKey, { name: itemName, unit, sku, salePrice: rate || undefined, lastTimestamp: timestamp });
+      }
     }
-    invoice.total += amount;
-    invoice.lineItems.push({ name: itemName, qty, unit, rate: unitPrice });
+
+    invoices.push({
+      number: invoiceNo, date: dateIso, partyName, transactionType,
+      total, balance, lineItems,
+    });
   }
 
   return {
-    totalRows: rows.length,
+    totalInvoiceRows: saleRows.length,
+    totalItemRows: itemRows.length,
     items: [...itemsByKey.values()],
     parties: [...partiesByKey.values()],
-    invoices: [...invoicesByNumber.values()],
-    skippedRows,
+    invoices,
+    skippedInvoices,
+    skippedItemRows,
     minDate: Number.isFinite(minMs) ? new Date(minMs).toISOString() : null,
     maxDate: Number.isFinite(maxMs) ? new Date(maxMs).toISOString() : null,
   };
+}
+
+function getSheetHeaders(ws: XLSX.WorkSheet): string[] {
+  const headerRow = (XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1 })[0] ?? []) as unknown[];
+  return headerRow.map((h) => String(h ?? "").trim()).filter(Boolean);
 }
 
 type Stage = "upload" | "preview" | "importing" | "done";
@@ -145,20 +184,34 @@ export function ImportSaleHistoryPage({ onGoToParties }: Props) {
       try {
         const data = new Uint8Array(e.target!.result as ArrayBuffer);
         const wb = XLSX.read(data, { type: "array" });
-        const ws = wb.Sheets[wb.SheetNames[0]!];
-        if (!ws) { setParseError("This file has no readable sheet."); return; }
-        const headerRow = (XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1 })[0] ?? []) as unknown[];
-        const cleanHeaders = headerRow.map((h) => String(h ?? "").trim()).filter(Boolean);
-        const missing = EXPECTED_HEADERS.filter((h) => !cleanHeaders.includes(h));
-        if (missing.length) {
-          setParseError(`This doesn't look like a Vyapar sale-history export. Missing columns: ${missing.join(", ")}`);
+
+        const findSheet = (name: string) => wb.SheetNames.find((n) => n.trim().toLowerCase() === name.toLowerCase());
+        const saleSheetName = findSheet(SALE_REPORT_SHEET);
+        const itemSheetName = findSheet(ITEM_DETAILS_SHEET);
+        if (!saleSheetName || !itemSheetName) {
+          const missingTabs = [!saleSheetName && `"${SALE_REPORT_SHEET}"`, !itemSheetName && `"${ITEM_DETAILS_SHEET}"`].filter(Boolean);
+          setParseError(`This file is missing the ${missingTabs.join(" and ")} tab. Found: ${wb.SheetNames.join(", ")}`);
           return;
         }
-        const rows = XLSX.utils.sheet_to_json<RawRow>(ws, { defval: "" });
-        setSummary(buildSummary(rows));
+
+        const saleWs = wb.Sheets[saleSheetName]!;
+        const itemWs = wb.Sheets[itemSheetName]!;
+        const missingSale = REQUIRED_SALE_REPORT_HEADERS.filter((h) => !getSheetHeaders(saleWs).includes(h));
+        const missingItem = REQUIRED_ITEM_DETAILS_HEADERS.filter((h) => !getSheetHeaders(itemWs).includes(h));
+        if (missingSale.length || missingItem.length) {
+          const parts: string[] = [];
+          if (missingSale.length) parts.push(`"${SALE_REPORT_SHEET}" is missing: ${missingSale.join(", ")}`);
+          if (missingItem.length) parts.push(`"${ITEM_DETAILS_SHEET}" is missing: ${missingItem.join(", ")}`);
+          setParseError(parts.join(" — "));
+          return;
+        }
+
+        const saleRows = XLSX.utils.sheet_to_json<RawRow>(saleWs, { defval: "" });
+        const itemRows = XLSX.utils.sheet_to_json<RawRow>(itemWs, { defval: "" });
+        setSummary(buildSummary(saleRows, itemRows));
         setStage("preview");
       } catch {
-        setParseError("Couldn't read this file. Make sure it's a valid .xls or .xlsx file.");
+        setParseError(`Couldn't read this file. Make sure it's a valid .xls or .xlsx file with "${SALE_REPORT_SHEET}" and "${ITEM_DETAILS_SHEET}" tabs.`);
       }
     };
     reader.readAsArrayBuffer(file);
@@ -172,10 +225,11 @@ export function ImportSaleHistoryPage({ onGoToParties }: Props) {
       const { jobId } = await api.startSaleHistoryImport({
         companyTag: companyTag || undefined,
         items: summary.items.map((i) => ({ name: i.name, unit: i.unit, sku: i.sku, salePrice: i.salePrice })),
-        parties: summary.parties.map((p) => ({ name: p.name })),
+        parties: summary.parties.map((p) => ({ name: p.name, phone: p.phone })),
         invoices: summary.invoices.map((inv) => ({
           number: inv.number, date: inv.date, partyName: inv.partyName,
-          transactionType: inv.transactionType, total: inv.total, lineItems: inv.lineItems,
+          transactionType: inv.transactionType, total: inv.total, balance: inv.balance,
+          lineItems: inv.lineItems,
         })),
       });
       const poll = async () => {
@@ -221,19 +275,24 @@ export function ImportSaleHistoryPage({ onGoToParties }: Props) {
             <div className="impg-step">
               <span className="impg-step__num">STEP 1</span>
               <p className="impg-step__text">
-                Export your old sale register as an Excel file with these columns (in any order):
+                Export your old sale register as an Excel file with two tabs: a "{SALE_REPORT_SHEET}" tab (one row per invoice) and an "{ITEM_DETAILS_SHEET}" tab (one row per item sold, linked back by invoice number).
               </p>
+              <p className="impg-step__text" style={{ fontWeight: 600, marginBottom: 4 }}>{SALE_REPORT_SHEET} needs:</p>
               <div className="impg-fields-hint">
-                {EXPECTED_HEADERS.map((h) => <span key={h} className="impg-fields-hint__chip">{h}</span>)}
+                {REQUIRED_SALE_REPORT_HEADERS.map((h) => <span key={h} className="impg-fields-hint__chip">{h}</span>)}
+              </div>
+              <p className="impg-step__text" style={{ fontWeight: 600, margin: "10px 0 4px" }}>{ITEM_DETAILS_SHEET} needs:</p>
+              <div className="impg-fields-hint">
+                {REQUIRED_ITEM_DETAILS_HEADERS.map((h) => <span key={h} className="impg-fields-hint__chip">{h}</span>)}
               </div>
             </div>
             <div className="impg-step">
               <span className="impg-step__num">STEP 2</span>
-              <p className="impg-step__text">Upload the file below — no column mapping needed, this importer reads the fixed export format directly.</p>
+              <p className="impg-step__text">Upload the file below — no column mapping needed, this importer reads both tabs directly.</p>
             </div>
             <div className="impg-step">
               <span className="impg-step__num">STEP 3</span>
-              <p className="impg-step__text">Review the summary, then import. Items, Parties, and Sale invoices are created automatically.</p>
+              <p className="impg-step__text">Review the summary — including how many items landed in each invoice — then import. Items, Parties, and Sale invoices are created automatically.</p>
             </div>
           </div>
 
@@ -266,7 +325,8 @@ export function ImportSaleHistoryPage({ onGoToParties }: Props) {
             <span className="impg-file-badge">{fileName}</span>
           </div>
           <div className="impg-fields-hint" style={{ marginBottom: 20 }}>
-            <span className="impg-fields-hint__chip">{summary.totalRows.toLocaleString()} rows read</span>
+            <span className="impg-fields-hint__chip">{summary.totalInvoiceRows.toLocaleString()} invoice rows read</span>
+            <span className="impg-fields-hint__chip">{summary.totalItemRows.toLocaleString()} item-detail rows read</span>
             <span className="impg-fields-hint__chip">{summary.items.length.toLocaleString()} unique items</span>
             <span className="impg-fields-hint__chip">{summary.parties.length.toLocaleString()} unique parties</span>
             <span className="impg-fields-hint__chip">{summary.invoices.length.toLocaleString()} invoices</span>
@@ -276,13 +336,41 @@ export function ImportSaleHistoryPage({ onGoToParties }: Props) {
               </span>
             )}
           </div>
-          {summary.skippedRows > 0 && (
+          {(summary.skippedInvoices > 0 || summary.skippedItemRows > 0) && (
             <div className="impg-error-banner" style={{ marginBottom: 16 }}>
-              {summary.skippedRows.toLocaleString()} row(s) were skipped — missing item, party, invoice number, or date.
+              {summary.skippedInvoices > 0 && `${summary.skippedInvoices.toLocaleString()} invoice row(s) skipped — missing invoice no., party, date, or a duplicate invoice no.`}
+              {summary.skippedInvoices > 0 && summary.skippedItemRows > 0 && " "}
+              {summary.skippedItemRows > 0 && `${summary.skippedItemRows.toLocaleString()} item-detail row(s) skipped — missing item name.`}
             </div>
           )}
+          <div className="impg-table-wrap" style={{ marginBottom: 20, maxHeight: 320, overflowY: "auto" }}>
+            <table className="impg-preview-table">
+              <thead>
+                <tr>
+                  <th>Invoice No</th><th>Party</th><th>Date</th><th>Total</th><th>Balance</th><th>Items</th>
+                </tr>
+              </thead>
+              <tbody>
+                {summary.invoices.slice(0, 200).map((inv) => (
+                  <tr key={inv.number}>
+                    <td>{inv.number}</td>
+                    <td>{inv.partyName}</td>
+                    <td>{new Date(inv.date).toLocaleDateString()}</td>
+                    <td>{inv.total.toLocaleString()}</td>
+                    <td>{inv.balance.toLocaleString()}</td>
+                    <td>{inv.lineItems.length}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {summary.invoices.length > 200 && (
+              <div style={{ padding: 10, textAlign: "center", color: "#94a3b8", fontSize: 12 }}>
+                + {(summary.invoices.length - 200).toLocaleString()} more invoices not shown
+              </div>
+            )}
+          </div>
           <p className="impg-step__text">
-            Each invoice will be recorded as an outstanding Sale (full amount added to that party's balance).
+            Each invoice is imported with its recorded total and balance due from the {SALE_REPORT_SHEET} tab.
             Re-running this same file later will skip invoices already imported — it's safe to retry.
           </p>
           <div className="impg-card__footer">

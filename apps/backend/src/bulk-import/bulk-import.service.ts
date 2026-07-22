@@ -99,14 +99,19 @@ export class BulkImportService {
 
     const seenNewPartyNames = new Set<string>();
     const newPartyNames: string[] = [];
+    const partyPhoneByName = new Map<string, string>();
     for (const p of dto.parties ?? []) {
       const key = p.name?.trim().toLowerCase();
-      if (!key || partyIdByName.has(key) || seenNewPartyNames.has(key)) continue;
+      if (!key) continue;
+      if (p.phone?.trim() && !partyPhoneByName.has(key)) partyPhoneByName.set(key, p.phone.trim());
+      if (partyIdByName.has(key) || seenNewPartyNames.has(key)) continue;
       seenNewPartyNames.add(key);
       newPartyNames.push(p.name.trim());
     }
     if (newPartyNames.length) {
-      await this.prisma.party.createMany({ data: newPartyNames.map((name) => ({ tenantId, name })) });
+      await this.prisma.party.createMany({
+        data: newPartyNames.map((name) => ({ tenantId, name, phone: partyPhoneByName.get(name.toLowerCase()) ?? null })),
+      });
       job.partiesCreated = newPartyNames.length;
       const refreshed = await this.prisma.party.findMany({
         where: { tenantId, name: { in: newPartyNames } },
@@ -150,8 +155,11 @@ export class BulkImportService {
         number: inv.number,
         date,
         total: inv.total,
-        balance: inv.total,
-        notes: JSON.stringify({ items: (inv.lineItems ?? []).map((li) => ({ name: li.name, qty: li.qty, unit: li.unit, rate: li.rate })) }),
+        balance: inv.balance ?? inv.total,
+        // Every other transaction-creation path (SaleScreen, DeliveryChallanModal) stores
+        // line items as a bare JSON array in `notes`, not wrapped in an object — match that
+        // convention exactly or the invoice-edit/view screen won't recognize the items.
+        notes: JSON.stringify((inv.lineItems ?? []).map((li) => ({ name: li.name, qty: li.qty, unit: li.unit, rate: li.rate }))),
       });
 
       if (buffer.length >= CHUNK_SIZE) await flush();

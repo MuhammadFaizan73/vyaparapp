@@ -16,6 +16,7 @@ export class BulkSaleImportItemDto {
 
 export class BulkSaleImportPartyDto {
   name!: string;
+  phone?: string;
 }
 
 export class BulkSaleImportInvoiceDto {
@@ -24,6 +25,7 @@ export class BulkSaleImportInvoiceDto {
   partyName!: string;
   transactionType!: string;
   total!: number;
+  balance?: number;
   lineItems!: BulkSaleImportLineItemDto[];
 }
 

@@ -315,7 +315,11 @@ function parseNotesItems(notes: string | null | undefined): Array<{ name: string
   if (!notes) return [];
   try {
     const parsed = JSON.parse(notes);
-    return Array.isArray(parsed.items) ? parsed.items : [];
+    // Every transaction-creation path (SaleScreen, DeliveryChallanModal, bulk-import) stores
+    // line items as a bare array; the `.items`-wrapped shape is kept as a defensive fallback.
+    if (Array.isArray(parsed)) return parsed;
+    if (Array.isArray(parsed?.items)) return parsed.items;
+    return [];
   } catch { return []; }
 }
 
