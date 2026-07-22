@@ -43,4 +43,19 @@ export class BulkImportController {
     if (!status) throw new NotFoundException("Import job not found");
     return status;
   }
+
+  // Reuses the same processor as sale-history: TXN_TYPE_MAP already maps "Purchase" to the
+  // "purchase" transaction type, and the DTO shape (item/party/invoice with a free-text
+  // transactionType) isn't sale-specific, so no separate service method is needed.
+  @Post("purchase-history")
+  startPurchase(@Req() req: AuthedRequest, @Body() dto: BulkSaleImportRequestDto) {
+    return this.bulkImportService.start(req.tenantId, dto);
+  }
+
+  @Get("purchase-history/:jobId")
+  purchaseStatus(@Param("jobId") jobId: string) {
+    const status = this.bulkImportService.getStatus(jobId);
+    if (!status) throw new NotFoundException("Import job not found");
+    return status;
+  }
 }

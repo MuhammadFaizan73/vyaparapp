@@ -231,6 +231,7 @@ export const BulkSaleImportItemSchema = z.object({
   unit: z.string().optional(),
   sku: z.string().optional(),
   salePrice: z.number().optional(),
+  purchasePrice: z.number().optional(),
 });
 export type BulkSaleImportItem = z.infer<typeof BulkSaleImportItemSchema>;
 

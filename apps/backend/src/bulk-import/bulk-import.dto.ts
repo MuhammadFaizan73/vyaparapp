@@ -12,6 +12,7 @@ export class BulkSaleImportItemDto {
   unit?: string;
   sku?: string;
   salePrice?: number;
+  purchasePrice?: number;
 }
 
 export class BulkSaleImportPartyDto {

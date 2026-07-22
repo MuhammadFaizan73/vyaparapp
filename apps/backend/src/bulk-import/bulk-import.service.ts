@@ -135,7 +135,7 @@ export class BulkImportService {
     const existingItems = await this.prisma.item.findMany({ where: { tenantId }, select: { name: true } });
     const existingItemNames = new Set(existingItems.map((i) => i.name.trim().toLowerCase()));
     const seenNewItemNames = new Set<string>();
-    const newItems: Array<{ tenantId: string; name: string; unit: string | null; sku: string | null; salePrice: number | null; companyTag: string | null }> = [];
+    const newItems: Array<{ tenantId: string; name: string; unit: string | null; sku: string | null; salePrice: number | null; purchasePrice: number | null; companyTag: string | null }> = [];
     for (const it of dto.items ?? []) {
       const key = it.name?.trim().toLowerCase();
       if (!key || existingItemNames.has(key) || seenNewItemNames.has(key)) continue;
@@ -146,6 +146,7 @@ export class BulkImportService {
         unit: it.unit || null,
         sku: it.sku || null,
         salePrice: it.salePrice ?? null,
+        purchasePrice: it.purchasePrice ?? null,
         companyTag: dto.companyTag || null,
       });
     }

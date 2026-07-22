@@ -91,6 +91,7 @@ import { SettingsScreen } from "./SettingsScreen";
 import { SyncDataScreen, BackupScreen } from "./SyncScreen";
 import { ImportItemsPage } from "./ImportItemsPage";
 import { ImportSaleHistoryPage } from "./ImportSaleHistoryPage";
+import { ImportPurchaseHistoryPage } from "./ImportPurchaseHistoryPage";
 import { ImportCashFlowPage } from "./ImportCashFlowPage";
 import { ImportExpensesPage } from "./ImportExpensesPage";
 import {
@@ -191,6 +192,7 @@ const navStructure: NavEntry[] = [
     children: [
       { key: "utilities-import-items", label: "Import Items",  action: "none" },
       { key: "utilities-import-sales", label: "Import Sale History", action: "none" },
+      { key: "utilities-import-purchases", label: "Import Purchase History", action: "none" },
       { key: "utilities-import-cash-flow", label: "Import Cash Flow", action: "none" },
       { key: "utilities-import-expenses", label: "Import Expenses", action: "none" },
       { key: "utilities-tools",        label: "Tools",         action: "none" },
@@ -325,6 +327,7 @@ export function Shell({ status, onLogout, onLicenseActivated }: Props) {
     if (active === "items")                 return "items";
     if (active === "utilities-import-items") return "import-items";
     if (active === "utilities-import-sales") return "import-sale-history";
+    if (active === "utilities-import-purchases") return "import-purchase-history";
     if (active === "utilities-import-cash-flow") return "import-cash-flow";
     if (active === "utilities-import-expenses") return "import-expenses";
     if (active.startsWith("parties"))       return "parties";
@@ -531,6 +534,7 @@ export function Shell({ status, onLogout, onLicenseActivated }: Props) {
         {screenKey === "items"       && <ItemsScreen    isLocked={isLocked} onLockedAction={handleLockedAction} onOpenImportItems={() => setActive("utilities-import-items")} />}
         {screenKey === "import-items" && <ImportItemsPage onGoToItems={() => setActive("items")} />}
         {screenKey === "import-sale-history" && <ImportSaleHistoryPage onGoToParties={() => setActive("parties")} />}
+        {screenKey === "import-purchase-history" && <ImportPurchaseHistoryPage onGoToPurchases={() => setActive("purchase-bills")} />}
         {screenKey === "import-cash-flow" && <ImportCashFlowPage onGoToParties={() => setActive("parties")} />}
         {screenKey === "import-expenses" && <ImportExpensesPage onGoToExpenses={() => setActive("purchase-expense")} />}
         {screenKey === "payment-in"  && <PaymentInScreen isLocked={isLocked} onLockedAction={handleLockedAction} />}

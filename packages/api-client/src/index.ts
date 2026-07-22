@@ -251,6 +251,16 @@ export class VyaparApiClient {
     return data;
   }
 
+  async startPurchaseHistoryImport(body: BulkSaleImportRequest): Promise<{ jobId: string }> {
+    const { data } = await this.http.post<{ jobId: string }>("/bulk-import/purchase-history", body, { timeout: 60000 });
+    return data;
+  }
+
+  async getPurchaseHistoryImportStatus(jobId: string): Promise<BulkSaleImportJobStatus> {
+    const { data } = await this.http.get<BulkSaleImportJobStatus>(`/bulk-import/purchase-history/${jobId}`);
+    return data;
+  }
+
   async updateItem(id: string, body: UpdateItemRequest): Promise<Item> {
     const { data } = await this.http.patch<Item>(`/items/${id}`, body);
     return data;
