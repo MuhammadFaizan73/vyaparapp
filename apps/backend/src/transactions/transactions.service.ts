@@ -58,12 +58,41 @@ export class TransactionsService {
     return rows.map(toRow);
   }
 
-  async listByType(tenantId: string, type: string): Promise<TransactionRow[]> {
+  // take/skip/from/to are all optional and additive — omitting them preserves the exact
+  // previous behavior (return every matching row) for any caller that hasn't opted in yet.
+  async listByType(
+    tenantId: string,
+    type: string,
+    opts?: { take?: number; skip?: number; from?: string; to?: string },
+  ): Promise<TransactionRow[]> {
+    const dateFilter =
+      opts?.from || opts?.to
+        ? { ...(opts.from && { gte: new Date(opts.from) }), ...(opts.to && { lte: new Date(opts.to) }) }
+        : undefined;
     const rows = await this.prisma.transaction.findMany({
-      where: { tenantId, type },
+      where: { tenantId, type, ...(dateFilter && { date: dateFilter }) },
       orderBy: { date: "desc" },
+      ...(opts?.take !== undefined && { take: opts.take }),
+      ...(opts?.skip !== undefined && { skip: opts.skip }),
     });
     return rows.map(toRow);
+  }
+
+  // Cheap aggregate for header stats (total / received-or-paid) — computed entirely in
+  // Postgres via SUM, never by fetching and summing individual rows client-side.
+  async summaryByType(tenantId: string, type: string): Promise<{ count: number; total: number; balance: number }> {
+    const [agg, count] = await Promise.all([
+      this.prisma.transaction.aggregate({
+        where: { tenantId, type },
+        _sum: { total: true, balance: true },
+      }),
+      this.prisma.transaction.count({ where: { tenantId, type } }),
+    ]);
+    return {
+      count,
+      total: agg._sum.total ?? 0,
+      balance: agg._sum.balance ?? 0,
+    };
   }
 
   async create(tenantId: string, dto: CreateTransactionDto): Promise<TransactionRow> {

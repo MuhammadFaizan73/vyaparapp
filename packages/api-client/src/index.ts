@@ -187,8 +187,23 @@ export class VyaparApiClient {
     return data;
   }
 
-  async getTransactionsByType(type: string): Promise<Transaction[]> {
-    const { data } = await this.http.get<Transaction[]>(`/transactions?type=${type}`);
+  async getTransactionsByType(
+    type: string,
+    opts?: { take?: number; skip?: number; from?: string; to?: string },
+  ): Promise<Transaction[]> {
+    const params = new URLSearchParams({ type });
+    if (opts?.take !== undefined) params.set("take", String(opts.take));
+    if (opts?.skip !== undefined) params.set("skip", String(opts.skip));
+    if (opts?.from) params.set("from", opts.from);
+    if (opts?.to) params.set("to", opts.to);
+    const { data } = await this.http.get<Transaction[]>(`/transactions?${params.toString()}`);
+    return data;
+  }
+
+  async getTransactionsSummary(type: string): Promise<{ count: number; total: number; balance: number }> {
+    const { data } = await this.http.get<{ count: number; total: number; balance: number }>(
+      `/transactions/summary?type=${type}`,
+    );
     return data;
   }
 

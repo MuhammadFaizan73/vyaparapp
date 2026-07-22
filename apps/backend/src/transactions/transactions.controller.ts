@@ -13,10 +13,26 @@ export class TransactionsController {
     @Req() req: AuthedRequest,
     @Query("partyId") partyId?: string,
     @Query("type") type?: string,
+    @Query("take") take?: string,
+    @Query("skip") skip?: string,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
   ) {
     if (partyId) return this.transactionsService.listForParty(req.tenantId, partyId);
-    if (type) return this.transactionsService.listByType(req.tenantId, type);
+    if (type) {
+      return this.transactionsService.listByType(req.tenantId, type, {
+        take: take ? Number(take) : undefined,
+        skip: skip ? Number(skip) : undefined,
+        from,
+        to,
+      });
+    }
     return this.transactionsService.listAll(req.tenantId);
+  }
+
+  @Get("summary")
+  summary(@Req() req: AuthedRequest, @Query("type") type: string) {
+    return this.transactionsService.summaryByType(req.tenantId, type);
   }
 
   @Post()

@@ -44,9 +44,15 @@ function getPaymentType(notes: string | null): string {
 ═══════════════════════════════════════════════════════════ */
 type Props = { isLocked?: boolean; onLockedAction?: () => void };
 
+// Recent-first cap on the list fetch — a normal user cares about recent payments, not
+// scrolling through years of history. Header totals below come from a separate cheap
+// aggregate call instead, so they stay accurate even though the visible list is capped.
+const RECENT_ROWS_LIMIT = 300;
+
 export function PaymentInScreen({ isLocked = false, onLockedAction }: Props) {
   const [rows, setRows] = useState<PiRow[]>([]);
   const [parties, setParties] = useState<Party[]>([]);
+  const [summary, setSummary] = useState({ count: 0, total: 0, balance: 0 });
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editRow, setEditRow] = useState<PiRow | null>(null);
@@ -57,13 +63,15 @@ export function PaymentInScreen({ isLocked = false, onLockedAction }: Props) {
 
   async function loadData() {
     try {
-      const [txns, ps] = await Promise.all([
-        api.getTransactionsByType("payment_in"),
+      const [txns, ps, sum] = await Promise.all([
+        api.getTransactionsByType("payment_in", { take: RECENT_ROWS_LIMIT }),
         api.getParties(),
+        api.getTransactionsSummary("payment_in"),
       ]);
       const map = Object.fromEntries(ps.map((p: Party) => [p.id, p]));
       setRows(txns.map((t) => ({ ...t, partyName: map[t.partyId]?.name ?? "Unknown" })));
       setParties(ps);
+      setSummary(sum);
     } catch { /* offline */ }
   }
 
@@ -79,8 +87,8 @@ export function PaymentInScreen({ isLocked = false, onLockedAction }: Props) {
     return () => document.removeEventListener("click", close);
   }, [menuId]);
 
-  const totalAmount = rows.reduce((s, r) => s + r.total, 0);
-  const receivedAmount = rows.reduce((s, r) => s + (r.total - r.balance), 0);
+  const totalAmount = summary.total;
+  const receivedAmount = summary.total - summary.balance;
 
   function handleAdd() {
     if (isLocked) { onLockedAction?.(); return; }
@@ -90,11 +98,11 @@ export function PaymentInScreen({ isLocked = false, onLockedAction }: Props) {
 
   async function handleDuplicate(row: PiRow) {
     try {
-      const allTxns = await api.getTransactionsByType("payment_in");
+      const { count } = await api.getTransactionsSummary("payment_in");
       await api.createTransaction({
         partyId: row.partyId,
         type: "payment_in",
-        number: String(allTxns.length + 1),
+        number: String(count + 1),
         date: new Date().toISOString(),
         total: row.total,
         balance: row.total,
@@ -345,8 +353,8 @@ export function PaymentInForm({
   /* Auto-compute receipt number when opened fresh */
   useEffect(() => {
     if (!initialRow) {
-      api.getTransactionsByType("payment_in")
-        .then((txns) => setReceiptNo(String(txns.length + 1)))
+      api.getTransactionsSummary("payment_in")
+        .then(({ count }) => setReceiptNo(String(count + 1)))
         .catch(() => {});
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps

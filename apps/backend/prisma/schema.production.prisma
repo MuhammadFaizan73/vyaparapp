@@ -130,6 +130,9 @@ model Transaction {
   notes     String?
   createdAt DateTime             @default(now())
   history   TransactionHistory[]
+
+  @@index([tenantId, type, date])
+  @@index([tenantId, partyId])
 }
 
 model TransactionHistory {
@@ -140,6 +143,8 @@ model TransactionHistory {
   changes       String      // JSON array of change description strings
   ipAddress     String?
   createdAt     DateTime    @default(now())
+
+  @@index([tenantId, transactionId])
 }
 
 model TeamMember {
