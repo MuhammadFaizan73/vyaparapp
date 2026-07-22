@@ -2,6 +2,13 @@ name: Desktop Release
 
 on:
   push:
+    branches: [main]
+    paths:
+      - "apps/desktop/**"
+      - "packages/ui/**"
+      - "packages/api-client/**"
+      - "packages/shared-types/**"
+      - ".github/workflows/desktop-release.yml"
     tags:
       - "desktop-v*"
   workflow_dispatch:
@@ -26,6 +33,23 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --filter "@vyapar/desktop..." --frozen-lockfile
+
+      # Auto-triggered runs never commit a version bump back to the repo (that would
+      # re-trigger this same workflow on push). Instead the build number comes from the
+      # ever-increasing workflow run number, appended onto the human-controlled major.minor
+      # already in package.json — e.g. 0.1.<run_number>.
+      - name: Compute auto-incrementing version
+        working-directory: apps/desktop
+        shell: bash
+        run: |
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            const parts = pkg.version.split('.');
+            pkg.version = parts[0] + '.' + parts[1] + '.${{ github.run_number }}';
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+            console.log('Building version ' + pkg.version);
+          "
 
       - name: Build renderer + electron
         working-directory: apps/desktop
