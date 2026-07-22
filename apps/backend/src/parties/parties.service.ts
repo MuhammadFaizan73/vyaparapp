@@ -74,11 +74,25 @@ export class PartiesService {
     const parties = await this.prisma.party.findMany({
       where: { tenantId },
       orderBy: { createdAt: "asc" },
-      include: { transactions: { select: { total: true } }, group: true },
+      include: { transactions: { select: { balance: true, type: true } }, group: true },
     });
     return parties.map((p) => {
-      const txnSum = (p.transactions ?? []).reduce((s: number, t: { total: number }) => s + t.total, 0);
-      return { ...toRow(p), balance: (p.openingBalance ?? 0) + txnSum };
+      let receivable = 0;
+      let payable = 0;
+      // payment_in/payment_out are cash-flow ledger entries whose effect is already applied
+      // to the linked sale/purchase invoice's own `balance` (see PaymentInScreen/PurchaseScreen
+      // allocation logic) — summing them here too would double-count every settled payment.
+      for (const t of p.transactions ?? []) {
+        if (t.type === "sale" || t.type === "credit_note") {
+          receivable += t.balance;
+        } else if (t.type === "purchase" || t.type === "debit_note") {
+          payable += t.balance;
+        }
+      }
+      const opening = p.openingBalance ?? 0;
+      if (opening > 0) receivable += opening;
+      else if (opening < 0) payable += Math.abs(opening);
+      return { ...toRow(p), balance: receivable - payable };
     });
   }
 
