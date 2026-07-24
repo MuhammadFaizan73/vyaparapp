@@ -489,7 +489,10 @@ export class ReportsService {
       const received = t.total - t.balance;
       const txnBalance = t.balance;
 
-      // Running receivable / payable
+      // Running receivable / payable — payment_in/payment_out already reduce the linked
+      // invoice's own `balance` at the point they're applied, so they only track the cash
+      // totals here, not a second subtraction from the running balance (see the identical
+      // fix in parties.service.ts's list()).
       if (t.type === 'sale' || t.type === 'credit_note') {
         totalSale += t.total;
         receivableBalance += txnBalance;
@@ -498,10 +501,8 @@ export class ReportsService {
         payableBalance += txnBalance;
       } else if (t.type === 'payment_in') {
         totalMoneyIn += t.total;
-        receivableBalance -= t.total;
       } else if (t.type === 'payment_out') {
         totalMoneyOut += t.total;
-        payableBalance -= t.total;
       }
 
       return {
@@ -546,15 +547,14 @@ export class ReportsService {
       let receivableBalance = 0;
       let payableBalance = 0;
 
+      // payment_in/payment_out already reduce the linked sale/purchase invoice's own
+      // `balance` at the point they're applied — summing them here too would double-count
+      // every settled payment (see the identical fix in parties.service.ts's list()).
       for (const t of p.transactions) {
         if (t.type === 'sale' || t.type === 'credit_note') {
           receivableBalance += t.balance;
         } else if (t.type === 'purchase' || t.type === 'debit_note') {
           payableBalance += t.balance;
-        } else if (t.type === 'payment_in') {
-          receivableBalance -= t.total;
-        } else if (t.type === 'payment_out') {
-          payableBalance -= t.total;
         }
       }
 

@@ -4373,7 +4373,7 @@ body,
 
 /* KPI row — two cards side by side inside one white card */
 .hs-kpi-row {
-  display: grid; grid-template-columns: 1fr 1fr;
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
   background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden;
 }
 .hs-kpi-card {

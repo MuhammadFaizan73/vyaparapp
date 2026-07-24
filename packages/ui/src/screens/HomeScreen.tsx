@@ -170,6 +170,11 @@ export function HomeScreen() {
     return { total: neg.reduce((s, p) => s + Math.abs(p.balance), 0), count: neg.length };
   }, [parties]);
 
+  const outstanding = useMemo(() => {
+    const involved = parties.filter(p => p.balance !== 0);
+    return { total: receivable.total + payable.total, count: involved.length };
+  }, [parties, receivable.total, payable.total]);
+
   const periodSales = useMemo(
     () => sales.filter(t => inRange(t.date, range)),
     [sales, range]
@@ -253,7 +258,7 @@ export function HomeScreen() {
               }
             </div>
 
-            <div className="hs-kpi-card">
+            <div className="hs-kpi-card hs-kpi-card--border-r">
               <div className="hs-kpi-top">
                 <span className="hs-kpi-label">Total Payable</span>
                 <div className="hs-kpi-circle hs-kpi-circle--red">
@@ -268,6 +273,27 @@ export function HomeScreen() {
                     <span className="hs-kpi-amt">Rs {fmt(payable.total)}</span>
                     <span className="hs-kpi-sub">
                       {payable.count === 0 ? "No outstanding payables" : `From ${payable.count} ${payable.count === 1 ? "Party" : "Parties"}`}
+                    </span>
+                  </>
+              }
+            </div>
+
+            <div className="hs-kpi-card">
+              <div className="hs-kpi-top">
+                <span className="hs-kpi-label">Total Outstanding</span>
+                <div className="hs-kpi-circle hs-kpi-circle--green">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="20" height="20">
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M12 7v5l3 3" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
+              </div>
+              {loading
+                ? <span className="hs-kpi-loading">…</span>
+                : <>
+                    <span className="hs-kpi-amt">Rs {fmt(outstanding.total)}</span>
+                    <span className="hs-kpi-sub">
+                      {outstanding.count === 0 ? "No outstanding balances" : `Across ${outstanding.count} ${outstanding.count === 1 ? "Party" : "Parties"}`}
                     </span>
                   </>
               }

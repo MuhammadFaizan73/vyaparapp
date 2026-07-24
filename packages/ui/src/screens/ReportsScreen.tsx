@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
+import * as XLSX from "xlsx";
 import { api } from "../lib/api";
 
 // ─── Report list structure ────────────────────────────────────────────────────
@@ -731,10 +732,27 @@ function PartyStatementReport() {
 function AllPartiesReport() {
   const { data, loading, error } = useReport("all-parties", {});
 
+  function handleExport() {
+    if (!data?.parties?.length) return;
+    exportToExcel(
+      data.parties.map((r: any, i: number) => ({
+        "#": i + 1,
+        "Party Name": r.name,
+        "Email": r.email || "",
+        "Phone No.": r.phone || "",
+        "Receivable Balance": r.receivableBalance || 0,
+        "Payable Balance": r.payableBalance || 0,
+        "Credit Limit": r.creditLimit || 0,
+      })),
+      "Party Wise Outstanding",
+      "All Parties",
+    );
+  }
+
   return (
     <div className="rpt-content">
       <div className="rpt-filters">
-        <ExcelPrint />
+        <ExcelPrint onExport={handleExport} />
       </div>
       <ReportWrap loading={loading} error={error}>
         {data && (
@@ -1840,13 +1858,28 @@ function PremiumGate() {
 
 // ─── Small shared UI ──────────────────────────────────────────────────────────
 
-function ExcelPrint() {
+// Builds and downloads an .xlsx file from plain row objects — sheetName kept short since
+// Excel rejects sheet names over 31 chars.
+function exportToExcel(rows: Record<string, unknown>[], filename: string, sheetName = "Report") {
+  const sheet = XLSX.utils.json_to_sheet(rows);
+  const book = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(book, sheet, sheetName.slice(0, 31));
+  XLSX.writeFile(book, `${filename}.xlsx`);
+}
+
+function ExcelPrint({ onExport }: { onExport?: () => void }) {
   return (
     <div className="rpt-toolbar-right">
-      <button type="button" className="rpt-icon-btn" title="Excel Report">
+      <button
+        type="button"
+        className="rpt-icon-btn"
+        title="Excel Report"
+        disabled={!onExport}
+        onClick={onExport}
+      >
         <ExcelIcon />
       </button>
-      <button type="button" className="rpt-icon-btn" title="Print">
+      <button type="button" className="rpt-icon-btn" title="Print" onClick={() => window.print()}>
         <PrintIcon />
       </button>
     </div>
