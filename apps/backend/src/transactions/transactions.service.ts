@@ -103,6 +103,17 @@ export class TransactionsService {
     };
   }
 
+  // Sum of every transaction of this type strictly before `before` — the "opening balance"
+  // a running-balance column starts from, so the visible page doesn't have to fetch (and
+  // sum) the entire history just to show an accurate cumulative total per row.
+  async openingBalance(tenantId: string, type: string, before: string): Promise<number> {
+    const agg = await this.prisma.transaction.aggregate({
+      where: { tenantId, type, date: { lt: new Date(before) } },
+      _sum: { total: true },
+    });
+    return agg._sum.total ?? 0;
+  }
+
   async create(tenantId: string, dto: CreateTransactionDto): Promise<TransactionRow> {
     const party = await this.prisma.party.findUnique({ where: { id: dto.partyId } });
     if (!party || party.tenantId !== tenantId) {

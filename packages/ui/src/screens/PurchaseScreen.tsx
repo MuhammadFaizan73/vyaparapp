@@ -11,7 +11,7 @@ function formatDate(iso: string) {
 }
 function today() { return new Date().toISOString().slice(0, 10); }
 
-type PurchaseRow = Transaction & { partyName: string };
+type PurchaseRow = Transaction & { partyName: string; runningBalance?: number };
 type LineItem = { id: string; name: string; mrp: number; qty: number; unit: string; rate: number; stock?: number };
 type SubTab = "bills" | "payment_out" | "purchase_order" | "debit_note" | "purchase_return";
 
@@ -1349,7 +1349,14 @@ function PaymentOutSubScreen({ isLocked, onLockedAction }: { isLocked?: boolean;
       const map: Record<string, string> = {};
       ps.forEach(p => { map[p.id] = p.name; });
       setParties(ps);
-      setRows(txns.map(t => ({ ...t, partyName: map[t.partyId] ?? "Unknown" })));
+      const oldest = txns[txns.length - 1];
+      const opening = oldest ? (await api.getOpeningBalance("payment_out", oldest.date)).total : 0;
+      let acc = opening;
+      const withBalance = [...txns].reverse().map(t => {
+        acc += t.total;
+        return { ...t, partyName: map[t.partyId] ?? "Unknown", runningBalance: acc };
+      }).reverse();
+      setRows(withBalance);
       setSummary(sum);
     } catch { /* offline */ }
   }
@@ -1441,6 +1448,7 @@ function PaymentOutSubScreen({ isLocked, onLockedAction }: { isLocked?: boolean;
               <span>Party Name <span className="purchase-sort-icon">▾</span></span>
               <span style={{ textAlign: "right" }}>Total Amount <span className="purchase-sort-icon">▾</span></span>
               <span style={{ textAlign: "right" }}>Paid <span className="purchase-sort-icon">▾</span></span>
+              <span style={{ textAlign: "right" }}>Running Balance <span className="purchase-sort-icon">▾</span></span>
               <span>Payment Type <span className="purchase-sort-icon">▾</span></span>
               <span>Status <span className="purchase-sort-icon">▾</span></span>
               <span>Actions</span>
@@ -1462,6 +1470,7 @@ function PaymentOutSubScreen({ isLocked, onLockedAction }: { isLocked?: boolean;
                   </div>
                   <span className="pout-cell pout-cell--right">Rs {fmt(row.total)}</span>
                   <span className="pout-cell pout-cell--right">Rs {fmt(row.total - row.balance)}</span>
+                  <span className="pout-cell pout-cell--right">Rs {fmt(row.runningBalance ?? 0)}</span>
                   <span className="pout-cell">{pt}</span>
                   <span className={isUsed ? "pout-status-used" : "pout-status-unused"}>
                     {isUsed ? "Used" : "Unused"}

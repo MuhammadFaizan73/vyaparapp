@@ -213,6 +213,12 @@ export class VyaparApiClient {
     return data;
   }
 
+  async getOpeningBalance(type: string, before: string): Promise<{ total: number }> {
+    const params = new URLSearchParams({ type, before });
+    const { data } = await this.http.get<{ total: number }>(`/transactions/opening-balance?${params.toString()}`);
+    return data;
+  }
+
   async createTransaction(body: CreateTransactionRequest): Promise<Transaction> {
     const { data } = await this.http.post<Transaction>("/transactions", body);
     return data;

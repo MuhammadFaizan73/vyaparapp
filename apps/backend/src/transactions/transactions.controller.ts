@@ -40,6 +40,15 @@ export class TransactionsController {
     return this.transactionsService.summaryByType(req.tenantId, type, { from, to });
   }
 
+  @Get("opening-balance")
+  openingBalance(
+    @Req() req: AuthedRequest,
+    @Query("type") type: string,
+    @Query("before") before: string,
+  ) {
+    return this.transactionsService.openingBalance(req.tenantId, type, before).then((total) => ({ total }));
+  }
+
   @Post()
   create(@Req() req: AuthedRequest, @Body() dto: CreateTransactionDto) {
     return this.transactionsService.create(req.tenantId, dto);

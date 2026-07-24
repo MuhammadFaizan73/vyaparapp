@@ -13,7 +13,21 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
-type PiRow = Transaction & { partyName: string };
+type PiRow = Transaction & { partyName: string; runningBalance: number };
+
+// Rows arrive most-recent-first; running balance accumulates chronologically (oldest
+// first), starting from whatever came before the oldest row currently on screen.
+function withRunningBalance<T extends { date: string; total: number }>(
+  rowsDesc: T[],
+  openingBalance: number,
+): (T & { runningBalance: number })[] {
+  let acc = openingBalance;
+  const ascWithBalance = [...rowsDesc].reverse().map((r) => {
+    acc += r.total;
+    return { ...r, runningBalance: acc };
+  });
+  return ascWithBalance.reverse();
+}
 
 const AVATAR_PALETTES = [
   { bg: "#dcfce7", fg: "#15803d" },
@@ -69,7 +83,10 @@ export function PaymentInScreen({ isLocked = false, onLockedAction }: Props) {
         api.getTransactionsSummary("payment_in"),
       ]);
       const map = Object.fromEntries(ps.map((p: Party) => [p.id, p]));
-      setRows(txns.map((t) => ({ ...t, partyName: map[t.partyId]?.name ?? "Unknown" })));
+      const oldest = txns[txns.length - 1];
+      const opening = oldest ? (await api.getOpeningBalance("payment_in", oldest.date)).total : 0;
+      const withParty = txns.map((t) => ({ ...t, partyName: map[t.partyId]?.name ?? "Unknown", runningBalance: 0 }));
+      setRows(withRunningBalance(withParty, opening));
       setParties(ps);
       setSummary(sum);
     } catch { /* offline */ }
@@ -175,6 +192,7 @@ export function PaymentInScreen({ isLocked = false, onLockedAction }: Props) {
             <span style={{ flex: 2 }}>PARTY NAME</span>
             <span style={{ textAlign: "right", flex: 1.2 }}>TOTAL AMOUNT</span>
             <span style={{ textAlign: "right", flex: 1.2 }}>RECEIVED</span>
+            <span style={{ textAlign: "right", flex: 1.4 }}>RUNNING BALANCE</span>
             <span style={{ flex: 1.2 }}>PAYMENT TYPE</span>
             <span style={{ textAlign: "center", flex: 1 }}>STATUS</span>
             <span style={{ flex: 0.6 }} />
@@ -201,6 +219,9 @@ export function PaymentInScreen({ isLocked = false, onLockedAction }: Props) {
                 <span className="pi-row__cell" style={{ textAlign: "right", flex: 1.2 }}>Rs {fmt(row.total)}</span>
                 <span className="pi-row__cell" style={{ textAlign: "right", flex: 1.2, color: "#16a34a" }}>
                   Rs {fmt(row.total - row.balance)}
+                </span>
+                <span className="pi-row__cell" style={{ textAlign: "right", flex: 1.4 }}>
+                  Rs {fmt(row.runningBalance)}
                 </span>
                 <span className="pi-row__cell" style={{ flex: 1.2 }}>{paymentType}</span>
                 <span className="pi-row__cell" style={{ textAlign: "center", flex: 1 }}>

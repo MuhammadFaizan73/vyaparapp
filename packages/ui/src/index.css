@@ -9279,14 +9279,14 @@ body,
 .pout-table { flex: 1; overflow-y: auto; }
 .pout-table-head {
   display: grid;
-  grid-template-columns: 100px 80px 1fr 120px 120px 130px 110px 90px;
+  grid-template-columns: 100px 80px 1fr 120px 120px 140px 130px 110px 90px;
   padding: 9px 24px; background: #f9fafb; border-bottom: 1px solid #e5e7eb;
   font-size: 11.5px; font-weight: 700; color: #6b7280; letter-spacing: 0.04em;
   position: sticky; top: 0;
 }
 .pout-row {
   display: grid;
-  grid-template-columns: 100px 80px 1fr 120px 120px 130px 110px 90px;
+  grid-template-columns: 100px 80px 1fr 120px 120px 140px 130px 110px 90px;
   padding: 12px 24px; border-bottom: 1px solid #f3f4f6;
   align-items: center; cursor: default;
 }
