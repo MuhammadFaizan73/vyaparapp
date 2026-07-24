@@ -489,20 +489,26 @@ export class ReportsService {
       const received = t.total - t.balance;
       const txnBalance = t.balance;
 
-      // Running receivable / payable — payment_in/payment_out already reduce the linked
-      // invoice's own `balance` at the point they're applied, so they only track the cash
-      // totals here, not a second subtraction from the running balance (see the identical
-      // fix in parties.service.ts's list()).
+      // Running receivable: sale invoices track their own outstanding `balance` reliably
+      // (payment_in already reduces it when applied), so this just accumulates that.
+      // Running payable: purchase invoices don't — the Purchase Report always shows every
+      // invoice as 100% unpaid regardless of what's actually paid, while real supplier
+      // payments only show up as payment_out — so payable nets purchase totals against
+      // payment_out cash directly (see the identical fix in parties.service.ts's list()).
       if (t.type === 'sale' || t.type === 'credit_note') {
         totalSale += t.total;
         receivableBalance += txnBalance;
-      } else if (t.type === 'purchase' || t.type === 'debit_note') {
+      } else if (t.type === 'purchase') {
         totalPurchase += t.total;
-        payableBalance += txnBalance;
+        payableBalance += t.total;
+      } else if (t.type === 'debit_note') {
+        totalPurchase += t.total;
+        payableBalance -= t.total;
       } else if (t.type === 'payment_in') {
         totalMoneyIn += t.total;
       } else if (t.type === 'payment_out') {
         totalMoneyOut += t.total;
+        payableBalance -= t.total;
       }
 
       return {
@@ -545,18 +551,27 @@ export class ReportsService {
 
     const result = parties.map((p, i) => {
       let receivableBalance = 0;
-      let payableBalance = 0;
+      let purchaseTotal = 0;
+      let paymentOutTotal = 0;
 
-      // payment_in/payment_out already reduce the linked sale/purchase invoice's own
-      // `balance` at the point they're applied — summing them here too would double-count
-      // every settled payment (see the identical fix in parties.service.ts's list()).
+      // Sale invoices track their own outstanding `balance` reliably (payment_in already
+      // reduces it when applied). Purchase invoices don't for this data — the Purchase
+      // Report always shows every invoice as 100% unpaid regardless of what's actually
+      // been paid, while real supplier payments only show up in the payment_out cash
+      // ledger — so payable is netted against actual cash paid per supplier instead
+      // (see the identical fix in parties.service.ts's list()).
       for (const t of p.transactions) {
         if (t.type === 'sale' || t.type === 'credit_note') {
           receivableBalance += t.balance;
-        } else if (t.type === 'purchase' || t.type === 'debit_note') {
-          payableBalance += t.balance;
+        } else if (t.type === 'purchase') {
+          purchaseTotal += t.total;
+        } else if (t.type === 'debit_note') {
+          purchaseTotal -= t.total;
+        } else if (t.type === 'payment_out') {
+          paymentOutTotal += t.total;
         }
       }
+      let payableBalance = Math.max(0, purchaseTotal - paymentOutTotal);
 
       // Opening balance affects receivable/payable
       if (p.openingBalance > 0) receivableBalance += p.openingBalance;

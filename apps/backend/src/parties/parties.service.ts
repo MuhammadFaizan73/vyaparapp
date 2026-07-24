@@ -74,21 +74,30 @@ export class PartiesService {
     const parties = await this.prisma.party.findMany({
       where: { tenantId },
       orderBy: { createdAt: "asc" },
-      include: { transactions: { select: { balance: true, type: true } }, group: true },
+      include: { transactions: { select: { total: true, balance: true, type: true } }, group: true },
     });
     return parties.map((p) => {
       let receivable = 0;
-      let payable = 0;
-      // payment_in/payment_out are cash-flow ledger entries whose effect is already applied
-      // to the linked sale/purchase invoice's own `balance` (see PaymentInScreen/PurchaseScreen
-      // allocation logic) — summing them here too would double-count every settled payment.
+      let purchaseTotal = 0;
+      let paymentOutTotal = 0;
+      // Sale invoices track their own outstanding `balance` reliably (payment_in already
+      // reduces it when applied — see PaymentInScreen), so receivable reads straight from
+      // that. Purchase invoices don't: this client's Purchase Report always shows every
+      // invoice as 100% unpaid regardless of what's actually been paid, while real supplier
+      // payments only show up in the separate payment_out cash ledger. So payable is netted
+      // against actual cash paid per supplier instead of trusting purchase.balance.
       for (const t of p.transactions ?? []) {
         if (t.type === "sale" || t.type === "credit_note") {
           receivable += t.balance;
-        } else if (t.type === "purchase" || t.type === "debit_note") {
-          payable += t.balance;
+        } else if (t.type === "purchase") {
+          purchaseTotal += t.total;
+        } else if (t.type === "debit_note") {
+          purchaseTotal -= t.total;
+        } else if (t.type === "payment_out") {
+          paymentOutTotal += t.total;
         }
       }
+      let payable = Math.max(0, purchaseTotal - paymentOutTotal);
       const opening = p.openingBalance ?? 0;
       if (opening > 0) receivable += opening;
       else if (opening < 0) payable += Math.abs(opening);
