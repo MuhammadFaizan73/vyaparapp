@@ -760,6 +760,9 @@ export class ReportsService {
         salePrice: item.salePrice ?? 0,
         purchasePrice: pp,
         stockQty,
+        unit: item.unit ?? '',
+        secondaryUnit: item.secondaryUnit ?? null,
+        conversionRate: item.conversionRate ? Number(item.conversionRate) : null,
         stockValue,
       };
     });

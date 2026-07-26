@@ -930,6 +930,19 @@ function SalePurchaseByPartyGroupReport() {
 
 // ─── STOCK SUMMARY ────────────────────────────────────────────────────────────
 
+// Splits a raw stock quantity into "X <primary unit> Y <secondary unit>" when the item
+// has a conversion rate set (e.g. 1 Box = 12 Pcs) — otherwise falls back to a plain qty + unit.
+function formatStockQty(qty: number, unit: string, secondaryUnit: string | null, conversionRate: number | null): string {
+  if (!conversionRate || conversionRate <= 0 || !secondaryUnit) {
+    return unit ? `${qty} ${unit}` : String(qty);
+  }
+  const sign = qty < 0 ? "-" : "";
+  const abs = Math.abs(qty);
+  const whole = Math.floor(abs / conversionRate);
+  const remainder = abs % conversionRate;
+  return `${sign}${whole} ${unit} ${remainder} ${secondaryUnit}`;
+}
+
 function StockSummaryReport() {
   const [asOf,   setAsOf]   = useState(todayStr);
   const { data, loading, error } = useReport("stock-summary", { asOf });
@@ -960,7 +973,9 @@ function StockSummaryReport() {
                       <td>{i + 1}</td><td>{r.name}</td>
                       <td className="rpt-num">{rs(r.salePrice ?? 0)}</td>
                       <td className="rpt-num">{rs(r.purchasePrice ?? 0)}</td>
-                      <td className={`rpt-num ${r.stockQty < 0 ? "rpt-red" : "rpt-green"}`}>{r.stockQty}</td>
+                      <td className={`rpt-num ${r.stockQty < 0 ? "rpt-red" : "rpt-green"}`}>
+                        {formatStockQty(r.stockQty, r.unit, r.secondaryUnit, r.conversionRate)}
+                      </td>
                       <td className="rpt-num">{rs(r.stockValue ?? 0)}</td>
                     </tr>
                   ))}
