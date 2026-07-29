@@ -289,6 +289,18 @@ function SaleReport() {
   const companies = useCompanies();
   const { data, loading, error } = useReport("sale", { from, to, ...(companyTag ? { companyTag } : {}) });
 
+  function handleExport() {
+    if (!data?.transactions?.length) return;
+    exportToExcel(
+      data.transactions.map((r: any) => ({
+        Date: fmt(r.date), "Invoice No": r.invoiceNo || "", "Party Name": r.partyName,
+        Transaction: txnLabel(r.type), "Payment Type": r.paymentType,
+        Amount: r.amount, Balance: r.balance, Status: r.status,
+      })),
+      "Sale Invoices", "Sale",
+    );
+  }
+
   return (
     <div className="rpt-content">
       <div className="rpt-page-header">
@@ -297,7 +309,7 @@ function SaleReport() {
       </div>
       <div className="rpt-filters">
         <DateRange from={from} to={to} onFrom={setFrom} onTo={setTo} />
-        <ExcelPrint />
+        <ExcelPrint onExport={handleExport} />
       </div>
       {companies.length > 1 && (
         <div className="nsf-company-chips" style={{ padding: "8px 0 4px" }}>
@@ -358,6 +370,18 @@ function PurchaseReport() {
   const [to,   setTo]   = useState(monthEnd);
   const { data, loading, error } = useReport("purchase", { from, to });
 
+  function handleExport() {
+    if (!data?.transactions?.length) return;
+    exportToExcel(
+      data.transactions.map((r: any) => ({
+        Date: fmt(r.date), "Invoice No.": r.invoiceNo || "", "Party Name": r.partyName,
+        Transaction: txnLabel(r.type), "Payment Type": r.paymentType,
+        Amount: r.amount, "Balance Due": r.balance, Status: r.status,
+      })),
+      "Purchase Bills", "Purchase",
+    );
+  }
+
   return (
     <div className="rpt-content">
       <div className="rpt-page-header">
@@ -366,7 +390,7 @@ function PurchaseReport() {
       </div>
       <div className="rpt-filters">
         <DateRange from={from} to={to} onFrom={setFrom} onTo={setTo} />
-        <ExcelPrint />
+        <ExcelPrint onExport={handleExport} />
       </div>
       <ReportWrap loading={loading} error={error}>
         {data && (
@@ -423,12 +447,23 @@ function DayBookReport() {
   const [date, setDate] = useState(todayStr);
   const { data, loading, error } = useReport("day-book", { date });
 
+  function handleExport() {
+    if (!data?.transactions?.length) return;
+    exportToExcel(
+      data.transactions.map((r: any) => ({
+        Name: r.name, "Ref No.": r.refNo || "", Type: txnLabel(r.type), "Payment Type": r.paymentType,
+        Total: r.total, "Money In": r.moneyIn || 0, "Money Out": r.moneyOut || 0,
+      })),
+      "Day Book", "Day Book",
+    );
+  }
+
   return (
     <div className="rpt-content">
       <div className="rpt-filters">
         <span className="rpt-filter-label">Date</span>
         <input type="date" className="rpt-date-input" value={date} onChange={e => setDate(e.target.value)} />
-        <ExcelPrint />
+        <ExcelPrint onExport={handleExport} />
       </div>
       <ReportWrap loading={loading} error={error}>
         {data && (
@@ -473,6 +508,18 @@ function AllTransactionsReport() {
   const [txnType, setTxnType] = useState("");
   const { data, loading, error } = useReport("all-transactions", { from, to, txnType: txnType || undefined });
 
+  function handleExport() {
+    if (!data?.transactions?.length) return;
+    exportToExcel(
+      data.transactions.map((r: any, i: number) => ({
+        "#": i + 1, Date: fmt(r.date), "Ref No.": r.refNo || "", "Party Name": r.partyName,
+        Category: r.category || "", Type: txnLabel(r.type),
+        Total: r.total, "Received/Paid": r.received, Balance: r.balance, Status: r.status,
+      })),
+      "All Transactions", "Transactions",
+    );
+  }
+
   return (
     <div className="rpt-content">
       <div className="rpt-filters">
@@ -489,7 +536,7 @@ function AllTransactionsReport() {
           <option value="sale_order">Sale Order</option>
           <option value="estimate">Estimate</option>
         </select>
-        <ExcelPrint />
+        <ExcelPrint onExport={handleExport} />
       </div>
       <ReportWrap loading={loading} error={error}>
         {data && (
@@ -536,11 +583,29 @@ function ProfitAndLossReport() {
   const [view, setView] = useState<"godigi" | "accounting">("godigi");
   const { data, loading, error } = useReport("profit-and-loss", { from, to });
 
+  function handleExport() {
+    if (!data) return;
+    exportToExcel(
+      [
+        { Particulars: "Sale (+)", Amount: data.saleTotal },
+        { Particulars: "Credit Note (-)", Amount: data.creditNoteTotal },
+        { Particulars: "Purchase (-)", Amount: data.purchaseTotal },
+        { Particulars: "Debit Note (+)", Amount: data.debitNoteTotal },
+        { Particulars: "Opening Stock (-)", Amount: data.openingStockValue },
+        { Particulars: "Closing Stock (+)", Amount: data.closingStockValue },
+        { Particulars: "Gross Profit", Amount: data.grossProfit },
+        { Particulars: "Indirect Expenses (-)", Amount: data.expenseTotal },
+        { Particulars: "Net Profit", Amount: data.netProfit },
+      ],
+      "Profit And Loss", "P&L",
+    );
+  }
+
   return (
     <div className="rpt-content">
       <div className="rpt-filters">
         <DateRange from={from} to={to} onFrom={setFrom} onTo={setTo} />
-        <ExcelPrint />
+        <ExcelPrint onExport={handleExport} />
       </div>
       <ReportWrap loading={loading} error={error}>
         {data && (
@@ -615,11 +680,23 @@ function CashFlowReport() {
   const [to,   setTo]   = useState(monthEnd);
   const { data, loading, error } = useReport("cash-flow", { from, to });
 
+  function handleExport() {
+    if (!data?.transactions?.length) return;
+    exportToExcel(
+      data.transactions.map((r: any) => ({
+        Date: fmt(r.date), "Ref No.": r.refNo || "", Name: r.name, Category: r.category || "",
+        Type: txnLabel(r.type), "Cash In": r.cashIn || 0, "Cash Out": r.cashOut || 0,
+        "Running Balance": r.runningBalance,
+      })),
+      "Cash Flow", "Cash Flow",
+    );
+  }
+
   return (
     <div className="rpt-content">
       <div className="rpt-filters">
         <DateRange from={from} to={to} onFrom={setFrom} onTo={setTo} />
-        <ExcelPrint />
+        <ExcelPrint onExport={handleExport} />
       </div>
       <ReportWrap loading={loading} error={error}>
         {data && (
@@ -666,11 +743,23 @@ function PartyStatementReport() {
   const [view, setView] = useState<"godigi" | "accounting">("godigi");
   const { data, loading, error } = useReport("party-statement", { from, to });
 
+  function handleExport() {
+    if (!data?.transactions?.length) return;
+    exportToExcel(
+      data.transactions.map((r: any) => ({
+        Date: fmt(r.date), "TXN Type": txnLabel(r.type), "Ref No.": r.refNo || "", "Payment Type": r.paymentType,
+        Total: r.total, Received: r.received, "TXN Balance": r.txnBalance,
+        "Receivable Balance": r.receivableBalance, "Payable Balance": r.payableBalance,
+      })),
+      "Party Statement", "Statement",
+    );
+  }
+
   return (
     <div className="rpt-content">
       <div className="rpt-filters">
         <DateRange from={from} to={to} onFrom={setFrom} onTo={setTo} />
-        <ExcelPrint />
+        <ExcelPrint onExport={handleExport} />
       </div>
       <div className="rpt-pnl-view-toggle">
         <span className="rpt-filter-label">View :</span>
@@ -800,11 +889,23 @@ function PartyReportByItemReport() {
   const [to,   setTo]   = useState(monthEnd);
   const { data, loading, error } = useReport("party-report-by-item", { from, to });
 
+  function handleExport() {
+    if (!data?.parties?.length) return;
+    exportToExcel(
+      data.parties.map((r: any, i: number) => ({
+        "#": i + 1, "Party Name": r.partyName,
+        "Sale Quantity": r.saleQty, "Sale Amount": r.saleAmount,
+        "Purchase Quantity": r.purchaseQty, "Purchase Amount": r.purchaseAmount,
+      })),
+      "Party Report By Item", "By Item",
+    );
+  }
+
   return (
     <div className="rpt-content">
       <div className="rpt-filters">
         <DateRange from={from} to={to} onFrom={setFrom} onTo={setTo} />
-        <ExcelPrint />
+        <ExcelPrint onExport={handleExport} />
       </div>
       <ReportWrap loading={loading} error={error}>
         {data && (
@@ -852,11 +953,21 @@ function SalePurchaseByPartyReport() {
   const [to,   setTo]   = useState(monthEnd);
   const { data, loading, error } = useReport("sale-purchase-by-party", { from, to });
 
+  function handleExport() {
+    if (!data?.parties?.length) return;
+    exportToExcel(
+      data.parties.map((r: any, i: number) => ({
+        "#": i + 1, "Party Name": r.partyName, "Sale Amount": r.saleAmount, "Purchase Amount": r.purchaseAmount,
+      })),
+      "Sale Purchase By Party", "By Party",
+    );
+  }
+
   return (
     <div className="rpt-content">
       <div className="rpt-filters">
         <DateRange from={from} to={to} onFrom={setFrom} onTo={setTo} />
-        <ExcelPrint />
+        <ExcelPrint onExport={handleExport} />
       </div>
       <ReportWrap loading={loading} error={error}>
         {data && (
@@ -897,11 +1008,19 @@ function SalePurchaseByPartyGroupReport() {
   const [to,   setTo]   = useState(monthEnd);
   const { data, loading, error } = useReport("sale-purchase-by-party-group", { from, to });
 
+  function handleExport() {
+    if (!data?.groups?.length) return;
+    exportToExcel(
+      data.groups.map((r: any) => ({ "Group Name": r.groupName, "Sale Amount": r.saleAmount, "Purchase Amount": r.purchaseAmount })),
+      "Sale Purchase By Party Group", "By Group",
+    );
+  }
+
   return (
     <div className="rpt-content">
       <div className="rpt-filters">
         <DateRange from={from} to={to} onFrom={setFrom} onTo={setTo} />
-        <ExcelPrint />
+        <ExcelPrint onExport={handleExport} />
       </div>
       <h3 className="rpt-section-title">SALE PURCHASE BY PARTY GROUP</h3>
       <ReportWrap loading={loading} error={error}>
@@ -970,12 +1089,28 @@ function StockSummaryReport() {
   const [asOf,   setAsOf]   = useState(todayStr);
   const { data, loading, error } = useReport("stock-summary", { asOf });
 
+  function handleExport() {
+    if (!data?.items?.length) return;
+    exportToExcel(
+      data.items.map((r: any, i: number) => ({
+        "#": i + 1,
+        "Item Name": r.name,
+        "Sale Price": r.salePrice ?? 0,
+        "Purchase Price": r.purchasePrice ?? 0,
+        "Stock Qty": formatStockQty(r.stockQty, r.unit, r.secondaryUnit, r.conversionRate, r.tertiaryUnit, r.tertiaryConversionRate),
+        "Stock Value": r.stockValue ?? 0,
+      })),
+      "Stock Summary",
+      "Stock Summary",
+    );
+  }
+
   return (
     <div className="rpt-content">
       <div className="rpt-filters">
         <span className="rpt-filter-label">Date</span>
         <input type="date" className="rpt-date-input" value={asOf} onChange={e => setAsOf(e.target.value)} />
-        <ExcelPrint />
+        <ExcelPrint onExport={handleExport} />
       </div>
       <h3 className="rpt-section-title">STOCK SUMMARY</h3>
       <ReportWrap loading={loading} error={error}>
@@ -1026,11 +1161,22 @@ function ItemReportByPartyReport() {
   const [to,   setTo]   = useState(todayStr);
   const { data, loading, error } = useReport("item-report-by-party", { from, to });
 
+  function handleExport() {
+    if (!data?.items?.length) return;
+    exportToExcel(
+      data.items.map((r: any) => ({
+        "Item Name": r.itemName, "Sale Quantity": r.saleQty, "Sale Amount": r.saleAmount,
+        "Purchase Quantity": r.purchaseQty, "Purchase Amount": r.purchaseAmount,
+      })),
+      "Item Report By Party", "Details",
+    );
+  }
+
   return (
     <div className="rpt-content">
       <div className="rpt-filters">
         <DateRange from={from} to={to} onFrom={setFrom} onTo={setTo} />
-        <ExcelPrint />
+        <ExcelPrint onExport={handleExport} />
       </div>
       <h3 className="rpt-section-title">DETAILS</h3>
       <ReportWrap loading={loading} error={error}>
@@ -1079,11 +1225,24 @@ function ItemWisePnlReport() {
   const [to,   setTo]   = useState(todayStr);
   const { data, loading, error } = useReport("item-wise-pnl", { from, to });
 
+  function handleExport() {
+    if (!data?.items?.length) return;
+    exportToExcel(
+      data.items.map((r: any) => ({
+        "Item Name": r.name, Sale: r.sale, "Cr. Note/Sale Return": r.creditNote,
+        Purchase: r.purchase, "Dr. Note/Purchase Return": r.debitNote,
+        "Opening Stock": r.openingStock, "Closing Stock": r.closingStock,
+        "Net Profit/Loss": r.netProfit,
+      })),
+      "Item Wise Profit And Loss", "Details",
+    );
+  }
+
   return (
     <div className="rpt-content">
       <div className="rpt-filters">
         <DateRange from={from} to={to} onFrom={setFrom} onTo={setTo} />
-        <ExcelPrint />
+        <ExcelPrint onExport={handleExport} />
       </div>
       <h3 className="rpt-section-title">DETAILS</h3>
       <ReportWrap loading={loading} error={error}>
@@ -1137,11 +1296,24 @@ function ItemCategoryPnlReport() {
   const [to,   setTo]   = useState(todayStr);
   const { data, loading, error } = useReport("item-category-pnl", { from, to });
 
+  function handleExport() {
+    if (!data?.categories?.length) return;
+    exportToExcel(
+      data.categories.map((r: any) => ({
+        "Category Name": r.name, Sale: r.sale, "Cr. Note": r.creditNote,
+        Purchase: r.purchase, "Dr. Note": r.debitNote,
+        "Opening Stock": r.openingStock, "Closing Stock": r.closingStock,
+        "Net Profit/Loss": r.netProfit,
+      })),
+      "Item Category Wise Profit And Loss", "Details",
+    );
+  }
+
   return (
     <div className="rpt-content">
       <div className="rpt-filters">
         <DateRange from={from} to={to} onFrom={setFrom} onTo={setTo} />
-        <ExcelPrint />
+        <ExcelPrint onExport={handleExport} />
       </div>
       <h3 className="rpt-section-title">DETAILS</h3>
       <ReportWrap loading={loading} error={error}>
@@ -1184,9 +1356,20 @@ function ItemCategoryPnlReport() {
 function LowStockReport() {
   const { data, loading, error } = useReport("low-stock", {});
 
+  function handleExport() {
+    if (!data?.items?.length) return;
+    exportToExcel(
+      data.items.map((r: any, i: number) => ({
+        "#": i + 1, "Item Name": r.name, "Minimum Stock Qty": r.minStockQty,
+        "Stock Qty": r.stockQty, "Stock Value": r.stockValue ?? 0,
+      })),
+      "Low Stock Summary", "Low Stock",
+    );
+  }
+
   return (
     <div className="rpt-content">
-      <div className="rpt-filters"><ExcelPrint /></div>
+      <div className="rpt-filters"><ExcelPrint onExport={handleExport} /></div>
       <ReportWrap loading={loading} error={error}>
         {data && (
           <>
@@ -1224,11 +1407,23 @@ function StockDetailReport() {
   const [to,   setTo]   = useState(todayStr);
   const { data, loading, error } = useReport("stock-detail", { from, to });
 
+  function handleExport() {
+    if (!data?.items?.length) return;
+    exportToExcel(
+      data.items.map((r: any) => ({
+        "Item Name": r.name, "Beginning Quantity": r.beginningQty, "Quantity In": r.qtyIn,
+        "Purchase Amount": r.purchaseAmount, "Quantity Out": r.qtyOut,
+        "Sale Amount": r.saleAmount, "Closing Quantity": r.closingQty,
+      })),
+      "Stock Detail", "Details",
+    );
+  }
+
   return (
     <div className="rpt-content">
       <div className="rpt-filters">
         <DateRange from={from} to={to} onFrom={setFrom} onTo={setTo} />
-        <ExcelPrint />
+        <ExcelPrint onExport={handleExport} />
       </div>
       <h3 className="rpt-section-title">DETAILS</h3>
       <ReportWrap loading={loading} error={error}>
@@ -1283,12 +1478,23 @@ function ItemDetailReport() {
   const [itemName, setItemName] = useState("");
   const { data, loading, error } = useReport("item-detail", { from, to, itemName: itemName || undefined });
 
+  function handleExport() {
+    if (!data?.items?.length) return;
+    exportToExcel(
+      data.items.map((r: any) => ({
+        Date: fmt(r.date), "Sale Quantity": r.saleQty, "Purchase Quantity": r.purchaseQty,
+        "Adjustment Quantity": r.adjustmentQty, "Closing Quantity": r.closingQty,
+      })),
+      "Item Detail", "Details",
+    );
+  }
+
   return (
     <div className="rpt-content">
       <div className="rpt-filters">
         <DateRange from={from} to={to} onFrom={setFrom} onTo={setTo} />
         <input className="rpt-text-input" placeholder="Item name…" value={itemName} onChange={e => setItemName(e.target.value)} />
-        <ExcelPrint />
+        <ExcelPrint onExport={handleExport} />
       </div>
       <h3 className="rpt-section-title">DETAILS</h3>
       <ReportWrap loading={loading} error={error}>
@@ -1330,11 +1536,22 @@ function SalePurchaseByItemCategoryReport() {
   const [to,   setTo]   = useState(todayStr);
   const { data, loading, error } = useReport("sale-purchase-by-item-category", { from, to });
 
+  function handleExport() {
+    if (!data?.categories?.length) return;
+    exportToExcel(
+      data.categories.map((r: any) => ({
+        "Item Category": r.category, "Sale Quantity": r.saleQty, "Total Sale Amount": r.saleAmount,
+        "Purchase Quantity": r.purchaseQty, "Total Purchase Amount": r.purchaseAmount,
+      })),
+      "Sale Purchase Report By Item Category", "By Category",
+    );
+  }
+
   return (
     <div className="rpt-content">
       <div className="rpt-filters">
         <DateRange from={from} to={to} onFrom={setFrom} onTo={setTo} />
-        <ExcelPrint />
+        <ExcelPrint onExport={handleExport} />
       </div>
       <h3 className="rpt-section-title">SALE/PURCHASE REPORT BY ITEM CATEGORY</h3>
       <ReportWrap loading={loading} error={error}>
@@ -1366,9 +1583,17 @@ function SalePurchaseByItemCategoryReport() {
 function StockSummaryByCategoryReport() {
   const { data, loading, error } = useReport("stock-summary-by-category", {});
 
+  function handleExport() {
+    if (!data?.categories?.length) return;
+    exportToExcel(
+      data.categories.map((r: any) => ({ "Item Category": r.category, "Stock Quantity": r.stockQty, "Stock Value": r.stockValue })),
+      "Stock Summary By Item Category", "By Category",
+    );
+  }
+
   return (
     <div className="rpt-content">
-      <div className="rpt-filters"><ExcelPrint /></div>
+      <div className="rpt-filters"><ExcelPrint onExport={handleExport} /></div>
       <h3 className="rpt-section-title">STOCK SUMMARY BY ITEM CATEGORY</h3>
       <ReportWrap loading={loading} error={error}>
         {data && (
@@ -1401,11 +1626,23 @@ function ItemWiseDiscountReport() {
   const [to,   setTo]   = useState(monthEnd);
   const { data, loading, error } = useReport("item-wise-discount", { from, to });
 
+  function handleExport() {
+    if (!data?.items?.length) return;
+    exportToExcel(
+      data.items.map((r: any, i: number) => ({
+        "#": i + 1, "Item Name": r.name, "Total Qty Sold": r.qtySold,
+        "Total Sale Amount": r.saleAmount, "Total Disc. Amount": r.discountAmount,
+        "Avg. Disc. (%)": r.avgDiscount.toFixed(1),
+      })),
+      "Item Wise Discount", "Discount",
+    );
+  }
+
   return (
     <div className="rpt-content">
       <div className="rpt-filters">
         <DateRange from={from} to={to} onFrom={setFrom} onTo={setTo} />
-        <ExcelPrint />
+        <ExcelPrint onExport={handleExport} />
       </div>
       <h3 className="rpt-section-title">Item Wise Discount</h3>
       <ReportWrap loading={loading} error={error}>
@@ -1480,11 +1717,19 @@ function DiscountReport() {
   const [to,   setTo]   = useState(todayStr);
   const { data, loading, error } = useReport("discount-report", { from, to });
 
+  function handleExport() {
+    if (!data?.parties?.length) return;
+    exportToExcel(
+      data.parties.map((r: any) => ({ "Party Name": r.name, "Sale Discount": r.saleDiscount, "Purchase / Expense Discount": r.purchaseDiscount })),
+      "Discount Report", "Discount",
+    );
+  }
+
   return (
     <div className="rpt-content">
       <div className="rpt-filters">
         <DateRange from={from} to={to} onFrom={setFrom} onTo={setTo} />
-        <ExcelPrint />
+        <ExcelPrint onExport={handleExport} />
       </div>
       <h3 className="rpt-section-title">DISCOUNT REPORT</h3>
       <ReportWrap loading={loading} error={error}>
@@ -1526,11 +1771,19 @@ function TaxReport() {
   const [to,   setTo]   = useState(todayStr);
   const { data, loading, error } = useReport("tax-report", { from, to });
 
+  function handleExport() {
+    if (!data?.parties?.length) return;
+    exportToExcel(
+      data.parties.map((r: any) => ({ "Party Name": r.name, "Sale Tax": r.saleTax, "Purchase /Expense Tax": r.purchaseTax })),
+      "Tax Report", "Tax",
+    );
+  }
+
   return (
     <div className="rpt-content">
       <div className="rpt-filters">
         <DateRange from={from} to={to} onFrom={setFrom} onTo={setTo} />
-        <ExcelPrint />
+        <ExcelPrint onExport={handleExport} />
       </div>
       <h3 className="rpt-section-title">TAX REPORT</h3>
       <ReportWrap loading={loading} error={error}>
@@ -1606,12 +1859,23 @@ function ExpenseReport() {
   const [to,   setTo]   = useState(monthEnd);
   const { data, loading, error } = useReport("expense", { from, to });
 
+  function handleExport() {
+    if (!data?.transactions?.length) return;
+    exportToExcel(
+      data.transactions.map((r: any) => ({
+        Date: fmt(r.date), "Exp No.": r.expNo || "", Party: r.party, "Category Name": r.category,
+        "Payment Type": r.paymentType, Amount: r.amount, "Balance Due": r.balanceDue, Status: r.status,
+      })),
+      "Expense", "Expense",
+    );
+  }
+
   return (
     <div className="rpt-content">
       <div className="rpt-filters">
         <DateRange from={from} to={to} onFrom={setFrom} onTo={setTo} />
         <button className="rpt-add-btn rpt-add-btn--red" type="button">+ Add Expense</button>
-        <ExcelPrint />
+        <ExcelPrint onExport={handleExport} />
       </div>
       <h3 className="rpt-section-title">TRANSACTIONS</h3>
       <ReportWrap loading={loading} error={error}>
@@ -1653,11 +1917,19 @@ function ExpenseCategoryReport() {
   const [to,   setTo]   = useState(todayStr);
   const { data, loading, error } = useReport("expense-category", { from, to });
 
+  function handleExport() {
+    if (!data?.categories?.length) return;
+    exportToExcel(
+      data.categories.map((r: any) => ({ "Expense Category": r.category, "Category Type": r.categoryType, Amount: r.amount })),
+      "Expense Category Report", "By Category",
+    );
+  }
+
   return (
     <div className="rpt-content">
       <div className="rpt-filters">
         <DateRange from={from} to={to} onFrom={setFrom} onTo={setTo} />
-        <ExcelPrint />
+        <ExcelPrint onExport={handleExport} />
       </div>
       <h3 className="rpt-section-title">EXPENSE</h3>
       <ReportWrap loading={loading} error={error}>
@@ -1698,12 +1970,20 @@ function ExpenseItemReport() {
   const [to,   setTo]   = useState(monthEnd);
   const { data, loading, error } = useReport("expense-item", { from, to });
 
+  function handleExport() {
+    if (!data?.items?.length) return;
+    exportToExcel(
+      data.items.map((r: any) => ({ "Expense Item": r.expenseItem, "Unit Price": r.unitPrice, Quantity: r.quantity, Amount: r.amount })),
+      "Expense Item Report", "Items",
+    );
+  }
+
   return (
     <div className="rpt-content">
       <div className="rpt-filters">
         <DateRange from={from} to={to} onFrom={setFrom} onTo={setTo} />
         <button className="rpt-add-btn rpt-add-btn--red" type="button">+ Add Expense</button>
-        <ExcelPrint />
+        <ExcelPrint onExport={handleExport} />
       </div>
       <ReportWrap loading={loading} error={error}>
         {data && (
@@ -1747,6 +2027,17 @@ function SalePurchaseOrdersReport() {
   const [orderType, setOrderType] = useState("sale_order");
   const { data, loading, error } = useReport("sale-purchase-orders", { from, to, orderType });
 
+  function handleExport() {
+    if (!data?.orders?.length) return;
+    exportToExcel(
+      data.orders.map((r: any) => ({
+        Date: fmt(r.date), "Order No.": r.orderNo, Name: r.name, "Due Date": r.dueDate ? fmt(r.dueDate) : "",
+        Status: r.status, Type: txnLabel(r.type), Total: r.total, Advance: r.advance, Balance: r.balance,
+      })),
+      "Sale Purchase Orders", "Orders",
+    );
+  }
+
   return (
     <div className="rpt-content">
       <div className="rpt-filters">
@@ -1757,7 +2048,7 @@ function SalePurchaseOrdersReport() {
           <option value="estimate">Estimate</option>
           <option value="proforma_invoice">Proforma Invoice</option>
         </select>
-        <ExcelPrint />
+        <ExcelPrint onExport={handleExport} />
       </div>
       <ReportWrap loading={loading} error={error}>
         {data && (
@@ -1803,6 +2094,14 @@ function SalePurchaseOrderItemsReport() {
   const [orderType, setOrderType] = useState("sale_order");
   const { data, loading, error } = useReport("sale-purchase-order-items", { from, to, orderType });
 
+  function handleExport() {
+    if (!data?.items?.length) return;
+    exportToExcel(
+      data.items.map((r: any) => ({ "Item Name": r.name, Quantity: r.qty, Amount: r.amount })),
+      "Sale Purchase Order Items", "Items",
+    );
+  }
+
   return (
     <div className="rpt-content">
       <div className="rpt-filters">
@@ -1812,7 +2111,7 @@ function SalePurchaseOrderItemsReport() {
           <option value="purchase_order">Purchase Order</option>
           <option value="estimate">Estimate</option>
         </select>
-        <ExcelPrint />
+        <ExcelPrint onExport={handleExport} />
       </div>
       <ReportWrap loading={loading} error={error}>
         {data && (
