@@ -35,7 +35,11 @@ export function AddItemModal({ onClose, onSaved }: Props) {
   const [purchasePrice,  setPurchasePrice]  = useState("");
   const [discountType,   setDiscountType]   = useState("Discount %");
   const [discount,       setDiscount]       = useState("");
-  const [openingStock,   setOpeningStock]   = useState("");
+  // Opening stock is entered per-tier (e.g. "1 Carton + 20 Box") and combined into a single
+  // Unit-denominated number for storage — matches how the item's own conversion rates work.
+  const [openingStockTop,    setOpeningStockTop]    = useState("");
+  const [openingStock,       setOpeningStock]       = useState("");
+  const [openingStockPieces, setOpeningStockPieces] = useState("");
   const [minStock,       setMinStock]       = useState("");
   const [itemLocation,   setItemLocation]   = useState("");
   const [taxRate,        setTaxRate]        = useState("");
@@ -55,6 +59,15 @@ export function AddItemModal({ onClose, onSaved }: Props) {
 
   function handleSecondaryUnitChange(val: string) {
     setSecondaryUnit(val);
+  }
+
+  // Combines the per-tier opening stock inputs (e.g. 1 Carton + 20 Box + 6 Pcs) into a
+  // single number denominated in `unit`, matching how openingStock is stored.
+  function combinedOpeningStock(): number {
+    const units = parseFloat(openingStock) || 0;
+    const top = hasTertiary ? (parseFloat(openingStockTop) || 0) * (parseFloat(tertiaryConversionRate) || 0) : 0;
+    const pieces = hasSecondary && conversionRate ? (parseFloat(openingStockPieces) || 0) / parseFloat(conversionRate) : 0;
+    return top + units + pieces;
   }
 
   async function save(andNew = false) {
@@ -84,7 +97,7 @@ export function AddItemModal({ onClose, onSaved }: Props) {
         purchasePrice:  purchasePrice ? parseFloat(purchasePrice) : undefined,
         discountType:   discount ? discountType : undefined,
         discount:       discount      ? parseFloat(discount)      : undefined,
-        openingStock:   openingStock  ? parseFloat(openingStock)  : undefined,
+        openingStock:   (openingStock || openingStockTop || openingStockPieces) ? combinedOpeningStock() : undefined,
         minStock:       minStock      ? parseFloat(minStock)      : undefined,
         itemLocation:   itemLocation.trim() || undefined,
         taxRate:        taxRate ? parseFloat(taxRate) : undefined,
@@ -94,7 +107,8 @@ export function AddItemModal({ onClose, onSaved }: Props) {
         setName(""); setSku(""); setCategory(""); setUnit("NONE"); setSecondaryUnit("NONE");
         setConversionRate(""); setTertiaryUnit("NONE"); setTertiaryConversionRate("");
         setMrp(""); setSalePrice(""); setPurchasePrice("");
-        setDiscountType("Discount %"); setDiscount(""); setOpeningStock(""); setMinStock("");
+        setDiscountType("Discount %"); setDiscount("");
+        setOpeningStockTop(""); setOpeningStock(""); setOpeningStockPieces(""); setMinStock("");
         setItemLocation(""); setTaxRate(""); setInclusiveOfTax("Inclusive");
         setTab("pricing"); setError(null);
       } else {
@@ -327,19 +341,63 @@ export function AddItemModal({ onClose, onSaved }: Props) {
           {tab === "stock" && (
             <div className="ai-stock-grid">
 
-              <div className="ai-price-card">
+              <div className={`ai-price-card${(hasTertiary || hasSecondary) ? " ai-price-card--full" : ""}`}>
                 <div className="ai-price-card__top">
                   <span className="ai-price-card__label">OPENING STOCK</span>
+                  {(hasTertiary || hasSecondary) && (
+                    <span className="ai-price-card__hint-inline">e.g. 1 {tertiaryUnit !== "NONE" ? tertiaryUnit : unit} + 20 {unit}</span>
+                  )}
                 </div>
-                <div className="ai-price-card__input-row">
-                  <input
-                    className="ai-price-card__input"
-                    style={{ paddingLeft: 12 }}
-                    type="number" min="0" placeholder="0"
-                    value={openingStock}
-                    onChange={(e) => setOpeningStock(e.target.value)}
-                  />
-                </div>
+                {!hasTertiary && !hasSecondary ? (
+                  <div className="ai-price-card__input-row">
+                    <input
+                      className="ai-price-card__input"
+                      style={{ paddingLeft: 12 }}
+                      type="number" min="0" placeholder="0"
+                      value={openingStock}
+                      onChange={(e) => setOpeningStock(e.target.value)}
+                    />
+                  </div>
+                ) : (
+                  <>
+                    <div className="item-conversion__row" style={{ marginTop: 8 }}>
+                      {hasTertiary && (
+                        <>
+                          <input
+                            className="party-modal__input item-conversion__qty"
+                            type="number" min="0" placeholder="0"
+                            value={openingStockTop}
+                            onChange={(e) => setOpeningStockTop(e.target.value)}
+                          />
+                          <span className="item-conversion__unit-badge">{tertiaryUnit}</span>
+                          <span className="item-conversion__eq">+</span>
+                        </>
+                      )}
+                      <input
+                        className="party-modal__input item-conversion__qty"
+                        type="number" min="0" placeholder="0"
+                        value={openingStock}
+                        onChange={(e) => setOpeningStock(e.target.value)}
+                      />
+                      <span className="item-conversion__unit-badge">{unit}</span>
+                      {hasSecondary && (
+                        <>
+                          <span className="item-conversion__eq">+</span>
+                          <input
+                            className="party-modal__input item-conversion__qty"
+                            type="number" min="0" placeholder="0"
+                            value={openingStockPieces}
+                            onChange={(e) => setOpeningStockPieces(e.target.value)}
+                          />
+                          <span className="item-conversion__unit-badge">{secondaryUnit}</span>
+                        </>
+                      )}
+                    </div>
+                    <div className="item-conversion__preview">
+                      = {combinedOpeningStock().toFixed(hasSecondary ? 4 : 0)} {unit} total
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="ai-price-card">

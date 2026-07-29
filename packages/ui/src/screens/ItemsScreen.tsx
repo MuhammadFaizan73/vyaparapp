@@ -63,7 +63,11 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
   const [purchasePrice, setPurchasePrice] = useState("");
   const [discountType, setDiscountType] = useState("Discount %");
   const [discount, setDiscount] = useState("");
+  // Opening stock is entered per-tier (e.g. "1 Carton + 20 Box") and combined into a single
+  // Unit-denominated number for storage — matches how the item's own conversion rates work.
+  const [openingStockTop, setOpeningStockTop] = useState("");
   const [openingStock, setOpeningStock] = useState("");
+  const [openingStockPieces, setOpeningStockPieces] = useState("");
   const [minStock, setMinStock] = useState("");
   const [itemLocation, setItemLocation] = useState("");
   const [taxRate, setTaxRate] = useState("");
@@ -137,6 +141,35 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
     return () => document.removeEventListener("click", close);
   }, [dotsMenuId]);
 
+  // Combines the per-tier opening stock inputs (e.g. 1 Carton + 20 Box + 6 Pcs) into a
+  // single number denominated in `unit` (baseUnit), matching how openingStock is stored.
+  function combinedOpeningStock(): number {
+    const units = parseFloat(openingStock) || 0;
+    const top = tertiaryUnit !== "None" ? (parseFloat(openingStockTop) || 0) * (parseFloat(tertiaryConversionRate) || 0) : 0;
+    const pieces = secondaryUnit !== "None" && conversionRate ? (parseFloat(openingStockPieces) || 0) / parseFloat(conversionRate) : 0;
+    return top + units + pieces;
+  }
+
+  // Inverse of combinedOpeningStock — splits a stored openingStock value back into its
+  // per-tier display inputs when opening an existing item for editing.
+  function decomposeOpeningStock(qty: number, rate?: string | null, topRate?: string | null) {
+    const rate2 = rate ? Number(rate) : 0; // 1 unit = rate2 secondaryUnit (pieces)
+    const rate3 = topRate ? Number(topRate) : 0; // 1 tertiaryUnit = rate3 unit
+    if (rate3 > 0) {
+      const topCount = Math.floor(qty / rate3);
+      const remainder = qty % rate3;
+      const unitWhole = Math.floor(remainder);
+      const piecesCount = rate2 > 0 ? Math.round((remainder - unitWhole) * rate2) : 0;
+      return { top: topCount ? String(topCount) : "", unit: unitWhole ? String(unitWhole) : "", pieces: piecesCount ? String(piecesCount) : "" };
+    }
+    if (rate2 > 0) {
+      const unitWhole = Math.floor(qty);
+      const piecesCount = Math.round((qty - unitWhole) * rate2);
+      return { top: "", unit: unitWhole ? String(unitWhole) : "", pieces: piecesCount ? String(piecesCount) : "" };
+    }
+    return { top: "", unit: qty ? String(qty) : "", pieces: "" };
+  }
+
   async function handleSaveItem() {
     if (!itemName.trim()) return;
     try {
@@ -154,7 +187,7 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
         purchasePrice: purchasePrice ? Number(purchasePrice) : undefined,
         discountType: discount ? discountType : undefined,
         discount: discount ? Number(discount) : undefined,
-        openingStock: openingStock ? Number(openingStock) : undefined,
+        openingStock: (openingStock || openingStockTop || openingStockPieces) ? combinedOpeningStock() : undefined,
         minStock: minStock ? Number(minStock) : undefined,
         itemLocation: itemLocation || undefined,
         taxRate: taxRate ? Number(taxRate) : undefined,
@@ -188,7 +221,9 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
     setPurchasePrice("");
     setDiscountType("Discount %");
     setDiscount("");
+    setOpeningStockTop("");
     setOpeningStock("");
+    setOpeningStockPieces("");
     setMinStock("");
     setItemLocation("");
     setTaxRate("");
@@ -216,7 +251,12 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
     setPurchasePrice(item.purchasePrice != null ? String(item.purchasePrice) : "");
     setDiscountType((item as any).discountType ?? "Discount %");
     setDiscount(item.discount != null ? String(item.discount) : "");
-    setOpeningStock(item.openingStock != null ? String(item.openingStock) : "");
+    {
+      const decomposed = decomposeOpeningStock(item.openingStock ?? 0, item.conversionRate, (item as any).tertiaryConversionRate);
+      setOpeningStockTop(decomposed.top);
+      setOpeningStock(decomposed.unit);
+      setOpeningStockPieces(decomposed.pieces);
+    }
     setMinStock(item.minStock != null ? String(item.minStock) : "");
     setItemLocation((item as any).itemLocation ?? "");
     setTaxRate((item as any).taxRate != null ? String((item as any).taxRate) : "");
@@ -250,7 +290,7 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
         purchasePrice: purchasePrice ? Number(purchasePrice) : undefined,
         discountType: discount ? discountType : undefined,
         discount: discount ? Number(discount) : undefined,
-        openingStock: openingStock ? Number(openingStock) : undefined,
+        openingStock: (openingStock || openingStockTop || openingStockPieces) ? combinedOpeningStock() : undefined,
         minStock: minStock ? Number(minStock) : undefined,
         itemLocation: itemLocation || undefined,
         taxRate: taxRate ? Number(taxRate) : undefined,
@@ -544,41 +584,104 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
 
               {formTab === "stock" && (
                 <div className="items-form-section">
-                  {/* Opening Stock + Min Stock side by side */}
-                  <div className="items-price-card-row">
-                    <div className="items-price-card">
-                      <span className="items-price-card__label">Opening Stock</span>
-                      <div className="items-form-price-double">
-                        <div className="items-form-price-input-wrap" style={{ flex: 1 }}>
+                  {(tertiaryUnit === "None" && secondaryUnit === "None") ? (
+                    /* Opening Stock + Min Stock side by side — simple single-unit item */
+                    <div className="items-price-card-row">
+                      <div className="items-price-card">
+                        <span className="items-price-card__label">Opening Stock</span>
+                        <div className="items-form-price-double">
+                          <div className="items-form-price-input-wrap" style={{ flex: 1 }}>
+                            <span className="items-form-price-prefix">{baseUnit !== "None" ? baseUnit : "Qty"}</span>
+                            <input
+                              type="number"
+                              className="items-form-price-input"
+                              placeholder="0"
+                              value={openingStock}
+                              onChange={(e) => setOpeningStock(e.target.value)}
+                            />
+                          </div>
+                          <div className="items-form-price-input-wrap" style={{ flex: 1 }}>
+                            <span className="items-form-price-prefix">Rs</span>
+                            <input type="number" className="items-form-price-input" placeholder="At price" />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="items-price-card">
+                        <span className="items-price-card__label">Minimum Stock to Maintain</span>
+                        <div className="items-form-price-input-wrap">
                           <span className="items-form-price-prefix">{baseUnit !== "None" ? baseUnit : "Qty"}</span>
                           <input
                             type="number"
                             className="items-form-price-input"
-                            placeholder="0"
-                            value={openingStock}
-                            onChange={(e) => setOpeningStock(e.target.value)}
+                            placeholder="e.g. 5"
+                            value={minStock}
+                            onChange={(e) => setMinStock(e.target.value)}
                           />
                         </div>
-                        <div className="items-form-price-input-wrap" style={{ flex: 1 }}>
-                          <span className="items-form-price-prefix">Rs</span>
-                          <input type="number" className="items-form-price-input" placeholder="At price" />
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Opening Stock entered per-tier, e.g. "1 Carton + 20 Box + 6 Pcs" */}
+                      <div className="items-price-card">
+                        <span className="items-price-card__label">Opening Stock</span>
+                        <div className="items-form-price-double">
+                          {tertiaryUnit !== "None" && (
+                            <div className="items-form-price-input-wrap" style={{ flex: 1 }}>
+                              <span className="items-form-price-prefix">{tertiaryUnit}</span>
+                              <input
+                                type="number"
+                                className="items-form-price-input"
+                                placeholder="0"
+                                value={openingStockTop}
+                                onChange={(e) => setOpeningStockTop(e.target.value)}
+                              />
+                            </div>
+                          )}
+                          <div className="items-form-price-input-wrap" style={{ flex: 1 }}>
+                            <span className="items-form-price-prefix">{baseUnit}</span>
+                            <input
+                              type="number"
+                              className="items-form-price-input"
+                              placeholder="0"
+                              value={openingStock}
+                              onChange={(e) => setOpeningStock(e.target.value)}
+                            />
+                          </div>
+                          {secondaryUnit !== "None" && (
+                            <div className="items-form-price-input-wrap" style={{ flex: 1 }}>
+                              <span className="items-form-price-prefix">{secondaryUnit}</span>
+                              <input
+                                type="number"
+                                className="items-form-price-input"
+                                placeholder="0"
+                                value={openingStockPieces}
+                                onChange={(e) => setOpeningStockPieces(e.target.value)}
+                              />
+                            </div>
+                          )}
+                        </div>
+                        <div className="items-form-price-hint" style={{ marginTop: 6, fontSize: 12, color: "#6b7280" }}>
+                          = {combinedOpeningStock().toFixed(secondaryUnit !== "None" ? 4 : 0)} {baseUnit} total
                         </div>
                       </div>
-                    </div>
-                    <div className="items-price-card">
-                      <span className="items-price-card__label">Minimum Stock to Maintain</span>
-                      <div className="items-form-price-input-wrap">
-                        <span className="items-form-price-prefix">{baseUnit !== "None" ? baseUnit : "Qty"}</span>
-                        <input
-                          type="number"
-                          className="items-form-price-input"
-                          placeholder="e.g. 5"
-                          value={minStock}
-                          onChange={(e) => setMinStock(e.target.value)}
-                        />
+                      <div className="items-price-card-row">
+                        <div className="items-price-card">
+                          <span className="items-price-card__label">Minimum Stock to Maintain</span>
+                          <div className="items-form-price-input-wrap">
+                            <span className="items-form-price-prefix">{baseUnit}</span>
+                            <input
+                              type="number"
+                              className="items-form-price-input"
+                              placeholder="e.g. 5"
+                              value={minStock}
+                              onChange={(e) => setMinStock(e.target.value)}
+                            />
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
+                    </>
+                  )}
 
                   {/* Location card */}
                   <div className="items-price-card">
