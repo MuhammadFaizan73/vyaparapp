@@ -3,7 +3,7 @@ import * as XLSX from "xlsx";
 import { api } from "../lib/api";
 
 type TargetKey =
-  | "name" | "sku" | "category"
+  | "name" | "sku" | "companyTag" | "category"
   | "mrp" | "salePrice" | "purchasePrice"
   | "discountType" | "discount"
   | "openingStock" | "minStock" | "itemLocation"
@@ -13,10 +13,13 @@ type TargetKey =
 type FieldDef = { key: TargetKey; label: string; required?: boolean; kind: "text" | "number" };
 
 // Order matches the source system's own Item import template exactly, so a file exported
-// from there maps column-for-column with no reshuffling.
-const TARGET_FIELDS: FieldDef[] = [
+// from there maps column-for-column with no reshuffling. Exported so every other "download
+// items template" entry point (e.g. ItemsScreen's dropdown) uses the exact same column set
+// instead of drifting out of sync with its own hardcoded list.
+export const TARGET_FIELDS: FieldDef[] = [
   { key: "name",                   label: "Item Name*",              required: true, kind: "text" },
   { key: "sku",                    label: "Item Code",               kind: "text" },
+  { key: "companyTag",             label: "Company Name",            kind: "text" },
   { key: "category",               label: "Category",                kind: "text" },
   { key: "mrp",                    label: "MRP",                     kind: "number" },
   { key: "salePrice",              label: "Sale Price",              kind: "number" },
@@ -41,6 +44,7 @@ const TARGET_FIELDS: FieldDef[] = [
 const FIELD_SYNONYMS: Record<TargetKey, string[]> = {
   name:            ["itemname", "name", "productname", "item", "description", "productitemname"],
   sku:             ["itemcode", "code", "sku", "itemsku", "productcode", "barcode"],
+  companyTag:      ["companyname", "company", "companytag", "firm", "firmname"],
   category:        ["category", "itemcategory", "productcategory"],
   unit:            ["unit", "baseunit", "primaryunit", "uom"],
   secondaryUnit:   ["secondaryunit", "secunit", "pieces", "pcs"],
@@ -81,7 +85,7 @@ function autoMapHeaders(headers: string[]): Record<TargetKey, string> {
 }
 
 type ParsedRow = {
-  name: string; sku: string; category: string;
+  name: string; sku: string; companyTag: string; category: string;
   unit: string; secondaryUnit: string; conversionRate: string;
   tertiaryUnit: string; tertiaryConversionRate: string;
   mrp?: number; salePrice?: number; purchasePrice?: number;
@@ -94,11 +98,11 @@ type ParsedRow = {
 function downloadSample() {
   const headers = TARGET_FIELDS.map((f) => f.label);
   const sample = [
-    // name, sku, category, mrp, salePrice, purchasePrice, discountType, discount,
+    // name, sku, companyTag, category, mrp, salePrice, purchasePrice, discountType, discount,
     // openingStock, minStock, itemLocation, taxRate, inclusiveOfTax,
     // tertiaryUnit, unit, secondaryUnit(Pieces), conversionRate(Unit=nPieces), tertiaryConversionRate(TopUnit=nUnit)
-    ["Sample Item A", "ITM-A1B2C3", "General", "120", "150", "100", "Discount %", "0", "50", "5", "Store 1", "17", "Inclusive", "", "PIECES", "", "", ""],
-    ["Sample Item B", "ITM-D4E5F6", "General", "", "800", "650", "Discount %", "5", "20", "2", "Store 1", "17", "Inclusive", "CARTON", "BOX", "PIECES", "20", "12"],
+    ["Sample Item A", "ITM-A1B2C3", "", "General", "120", "150", "100", "Discount %", "0", "50", "5", "Store 1", "17", "Inclusive", "", "PIECES", "", "", ""],
+    ["Sample Item B", "ITM-D4E5F6", "", "General", "", "800", "650", "Discount %", "5", "20", "2", "Store 1", "17", "Inclusive", "CARTON", "BOX", "PIECES", "20", "12"],
   ];
   const ws = XLSX.utils.aoa_to_sheet([headers, ...sample]);
   ws["!cols"] = headers.map((h) => ({ wch: Math.max(h.length + 4, 16) }));
@@ -183,6 +187,7 @@ export function ImportItemsPage({ onGoToItems }: Props) {
       return {
         name,
         sku: String(get("sku") ?? "").trim(),
+        companyTag: String(get("companyTag") ?? "").trim(),
         category: String(get("category") ?? "").trim(),
         unit: String(get("unit") ?? "").trim(),
         secondaryUnit: String(get("secondaryUnit") ?? "").trim(),
@@ -238,7 +243,7 @@ export function ImportItemsPage({ onGoToItems }: Props) {
           itemLocation: r.itemLocation || undefined,
           taxRate: r.taxRate,
           inclusiveOfTax: r.inclusiveOfTax || undefined,
-          companyTag: companyTag || undefined,
+          companyTag: r.companyTag || companyTag || undefined,
         });
         ok++;
       } catch {
@@ -394,6 +399,7 @@ export function ImportItemsPage({ onGoToItems }: Props) {
                   <tr key={i} className={row.errors.length ? "impg-preview-table__row--error" : ""}>
                     <td className={row.errors.length ? "impg-preview-table__cell--invalid" : ""}>{row.name}</td>
                     <td>{row.sku}</td>
+                    <td>{row.companyTag}</td>
                     <td>{row.category}</td>
                     <td>{row.mrp ?? ""}</td>
                     <td>{row.salePrice ?? ""}</td>

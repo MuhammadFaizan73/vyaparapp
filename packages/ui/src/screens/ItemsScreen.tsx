@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { api } from "../lib/api";
 import type { Item } from "@vyapar/api-client";
+import { TARGET_FIELDS as ITEM_IMPORT_FIELDS } from "./ImportItemsPage";
 
 type TabKey = "products" | "services" | "category" | "units";
 type FormTab = "pricing" | "stock";
@@ -263,17 +264,10 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
   }
 
   function handleExportItems() {
-    const headers = ["Item Name", "Item Code", "Unit", "MRP", "Sale Price", "Purchase Price", "Opening Stock", "Min Stock"];
-    const rows = items.map((it) => [
-      it.name,
-      it.sku ?? "",
-      it.unit ?? "",
-      it.mrp ?? "",
-      it.salePrice ?? "",
-      it.purchasePrice ?? "",
-      it.openingStock ?? "",
-      it.minStock ?? "",
-    ]);
+    // Same column set (and order) as the Import Items template, built from each item's own
+    // field of the same key — keeps export/import/template all in lockstep automatically.
+    const headers = ITEM_IMPORT_FIELDS.map((f) => f.label);
+    const rows = items.map((it) => ITEM_IMPORT_FIELDS.map((f) => (it as any)[f.key] ?? ""));
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
     ws["!cols"] = headers.map((h) => ({ wch: Math.max(h.length + 4, 16) }));
     const wb = XLSX.utils.book_new();
@@ -282,7 +276,10 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
   }
 
   function handleDownloadItemsTemplate() {
-    const headers = ["Item Name*", "Item Code", "Unit", "MRP", "Sale Price", "Purchase Price", "Opening Stock", "Min Stock"];
+    // Same column set as the Import Items page's own sample download — kept in one place
+    // (ImportItemsPage's TARGET_FIELDS) so the two "download a template" entry points can't
+    // drift out of sync with each other again.
+    const headers = ITEM_IMPORT_FIELDS.map((f) => f.label);
     const ws = XLSX.utils.aoa_to_sheet([headers]);
     ws["!cols"] = headers.map((h) => ({ wch: Math.max(h.length + 4, 16) }));
     const wb = XLSX.utils.book_new();
