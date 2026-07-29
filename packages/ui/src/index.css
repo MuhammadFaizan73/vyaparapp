@@ -436,6 +436,16 @@ body,
   overflow: hidden;
 }
 
+/* Screen content sits below the (fixed) topbar/banners — this is the one element that
+   actually scrolls when a screen's content is taller than the viewport (e.g. a long
+   field-mapping table). Without this, .main's overflow:hidden silently clips content with
+   no way to reach it, since none of the screen components provide their own page scroll. */
+.main__scroll-area {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 /* ───────── Topbar ───────── */
 .topbar {
   display: flex;

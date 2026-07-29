@@ -529,6 +529,7 @@ export function Shell({ status, onLogout, onLicenseActivated }: Props) {
         )}
 
         {/* ── Screen content ── */}
+        <div className="main__scroll-area">
         {screenKey === "home"        && <HomeScreen />}
         {screenKey === "parties"     && <PartiesScreen  isLocked={isLocked} onLockedAction={handleLockedAction} />}
         {screenKey === "items"       && <ItemsScreen    isLocked={isLocked} onLockedAction={handleLockedAction} onOpenImportItems={() => setActive("utilities-import-items")} />}
@@ -563,6 +564,7 @@ export function Shell({ status, onLogout, onLicenseActivated }: Props) {
             <p>{activeLabel} — coming soon.</p>
           </section>
         )}
+        </div>
       </main>
 
       {showReviewOrder && (
