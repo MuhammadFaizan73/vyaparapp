@@ -70,7 +70,7 @@ const ROLE_ALLOWED: Record<string, string[]> = {
     "purchase", "purchase-bills", "purchase-payment-out",
     "purchase-expense", "purchase-order", "purchase-return",
     "cash-bank", "grow", "grow-reports", "reports",
-    "utilities", "settings", "plans",
+    "utilities", "team", "settings", "plans",
   ],
 };
 import { ActivateLicenseModal } from "./ActivateLicenseModal";
@@ -94,6 +94,7 @@ import { ImportSaleHistoryPage } from "./ImportSaleHistoryPage";
 import { ImportPurchaseHistoryPage } from "./ImportPurchaseHistoryPage";
 import { ImportCashFlowPage } from "./ImportCashFlowPage";
 import { ImportExpensesPage } from "./ImportExpensesPage";
+import { TeamScreen } from "./TeamScreen";
 import {
   HomeIcon,
   PartiesIcon,
@@ -105,6 +106,7 @@ import {
   ReportsIcon,
   SyncIcon,
   UtilitiesIcon,
+  TeamIcon,
   SettingsIcon,
   PlansIcon,
   SearchIcon,
@@ -198,6 +200,7 @@ const navStructure: NavEntry[] = [
       { key: "utilities-tools",        label: "Tools",         action: "none" },
     ],
   },
+  { type: "item", key: "team",      label: "Team",               icon: <TeamIcon />,     action: "none" },
   { type: "item", key: "settings",  label: "Settings",           icon: <SettingsIcon />, action: "none" },
   { type: "item", key: "plans",     label: "Plans & Pricing",    icon: <PlansIcon />,    action: "none" },
 ];
@@ -344,6 +347,7 @@ export function Shell({ status, onLogout, onLicenseActivated }: Props) {
     if (active === "sync-data")             return "sync-data";
     if (active === "sync-backup")           return "sync-backup";
     if (active === "sync-devices")          return "sync-devices";
+    if (active === "team")                  return "team";
     return "placeholder";
   })();
 
@@ -548,6 +552,7 @@ export function Shell({ status, onLogout, onLicenseActivated }: Props) {
         {screenKey === "cash-in-hand"  && <CashInHandScreen />}
         {screenKey === "loan-accounts" && <LoanAccountsScreen />}
         {screenKey === "settings"      && <SettingsScreen />}
+        {screenKey === "team"          && <TeamScreen />}
         {screenKey === "sync-data"     && <SyncDataScreen />}
         {screenKey === "sync-backup"   && <BackupScreen />}
         {screenKey === "sync-devices"  && (

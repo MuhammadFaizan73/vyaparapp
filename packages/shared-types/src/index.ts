@@ -356,3 +356,124 @@ export const TeamMemberSchema = z.object({
   updatedAt: z.string().datetime(),
 });
 export type TeamMember = z.infer<typeof TeamMemberSchema>;
+
+// ── Team permissions ──────────────────────────────────────────────────────────
+// Canonical permission catalog + per-role defaults, shared so mobile and desktop
+// always offer the exact same permission options. Mobile currently keeps its own
+// copy inline (apps/mobile/app/add-user.tsx) for historical reasons — this export
+// is the source of truth for any NEW client (desktop, future web) built against it.
+
+export type TeamPermission = { id: string; label: string; group: string };
+
+export const ALL_PERMISSIONS: TeamPermission[] = [
+  // Sales
+  { id: "sale_view",          label: "View Sale Invoices",        group: "Sales" },
+  { id: "sale_create",        label: "Create Sale Invoice",       group: "Sales" },
+  { id: "payment_in_view",    label: "Payment-In",                group: "Sales" },
+  { id: "sale_return_view",   label: "Sale Return / Credit Note", group: "Sales" },
+  { id: "estimate_view",      label: "Estimate / Quotation",      group: "Sales" },
+  { id: "proforma_view",      label: "Proforma Invoice",          group: "Sales" },
+  { id: "sale_order_view",    label: "Sale Order",                group: "Sales" },
+  { id: "delivery_note_view", label: "Delivery Note",             group: "Sales" },
+  { id: "sale_edit_own",      label: "Edit Own Sales",            group: "Sales" },
+  { id: "sale_edit_all",      label: "Edit All Sales",            group: "Sales" },
+  { id: "sale_delete",        label: "Delete Sales",              group: "Sales" },
+  // Purchase
+  { id: "purchase_view",        label: "View Purchase Bills",   group: "Purchase" },
+  { id: "purchase_create",      label: "Create Purchase Bill",  group: "Purchase" },
+  { id: "purchase_order_view",  label: "Purchase Order",        group: "Purchase" },
+  { id: "purchase_return_view", label: "Purchase Return",       group: "Purchase" },
+  { id: "payment_out_view",     label: "Payment-Out",           group: "Purchase" },
+  { id: "purchase_edit_own",    label: "Edit Own Purchases",    group: "Purchase" },
+  { id: "purchase_edit_all",    label: "Edit All Purchases",    group: "Purchase" },
+  { id: "purchase_delete",      label: "Delete Purchases",      group: "Purchase" },
+  // Parties
+  { id: "parties_view",    label: "View Parties",       group: "Parties" },
+  { id: "parties_create",  label: "Add Parties",        group: "Parties" },
+  { id: "parties_edit",    label: "Edit Parties",       group: "Parties" },
+  { id: "parties_balance", label: "View Party Balance", group: "Parties" },
+  // Items
+  { id: "items_view",   label: "View Items",   group: "Items" },
+  { id: "items_create", label: "Add Items",    group: "Items" },
+  { id: "items_edit",   label: "Edit Items",   group: "Items" },
+  { id: "items_delete", label: "Delete Items", group: "Items" },
+  // Reports
+  { id: "reports_view",   label: "View Reports",              group: "Reports" },
+  { id: "reports_export", label: "Export / Download Reports", group: "Reports" },
+  // Cash & Bank
+  { id: "cash_view",   label: "View Cash & Bank",    group: "Cash & Bank" },
+  { id: "cash_create", label: "Add Cash/Bank Entry", group: "Cash & Bank" },
+  // Expenses
+  { id: "expense_view",   label: "View Expenses",   group: "Expenses" },
+  { id: "expense_create", label: "Create Expenses", group: "Expenses" },
+  // Team
+  { id: "team_view",   label: "View Team Members",         group: "Team" },
+  { id: "team_manage", label: "Add / Remove Team Members", group: "Team" },
+];
+
+export const ROLE_DEFAULT_PERMISSIONS: Record<TeamRole, string[]> = {
+  secondary_admin: [
+    "sale_view", "sale_create", "payment_in_view", "sale_return_view", "estimate_view",
+    "proforma_view", "sale_order_view", "delivery_note_view",
+    "sale_edit_own", "sale_edit_all", "sale_delete",
+    "purchase_view", "purchase_create", "purchase_order_view", "purchase_return_view",
+    "payment_out_view", "purchase_edit_own", "purchase_edit_all", "purchase_delete",
+    "parties_view", "parties_create", "parties_edit", "parties_balance",
+    "items_view", "items_create", "items_edit", "items_delete",
+    "reports_view", "reports_export",
+    "cash_view", "cash_create",
+    "expense_view", "expense_create",
+    "team_view",
+  ],
+  salesman: [
+    "sale_view", "sale_create", "payment_in_view", "sale_edit_own",
+    "parties_view",
+    "items_view",
+    "expense_view", "expense_create",
+  ],
+  biller: [
+    "sale_view", "sale_create", "payment_in_view", "sale_edit_own",
+    "parties_view", "parties_balance",
+  ],
+  biller_salesman: [
+    "sale_view", "sale_create", "payment_in_view", "sale_edit_own",
+    "parties_view", "parties_balance",
+    "items_view",
+    "expense_view", "expense_create",
+  ],
+  ca_accountant: [
+    "sale_view",
+    "purchase_view",
+    "parties_view", "parties_balance",
+    "items_view",
+    "reports_view", "reports_export",
+    "cash_view",
+  ],
+  ca_accountant_edit: [
+    "sale_view", "sale_create", "payment_in_view", "sale_return_view",
+    "sale_edit_own", "sale_edit_all", "sale_delete",
+    "purchase_view", "purchase_create", "purchase_order_view", "purchase_return_view",
+    "purchase_edit_own", "purchase_edit_all",
+    "parties_view", "parties_create", "parties_edit", "parties_balance",
+    "items_view", "items_create", "items_edit",
+    "reports_view", "reports_export",
+    "cash_view",
+    "expense_view", "expense_create",
+  ],
+  stock_keeper: [
+    "purchase_view", "purchase_create", "purchase_order_view", "purchase_return_view",
+    "purchase_edit_own",
+    "items_view", "items_create", "items_edit",
+    "expense_view", "expense_create",
+  ],
+};
+
+export const TEAM_ROLE_LABELS: Record<TeamRole, string> = {
+  secondary_admin: "Secondary Admin",
+  salesman: "Salesman",
+  biller: "Biller",
+  biller_salesman: "Biller & Salesman",
+  ca_accountant: "CA / Accountant",
+  stock_keeper: "Stock Keeper",
+  ca_accountant_edit: "CA / Accountant (Edit)",
+};
