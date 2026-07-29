@@ -3,43 +3,60 @@ import * as XLSX from "xlsx";
 import { api } from "../lib/api";
 
 type TargetKey =
-  | "name" | "sku" | "unit" | "secondaryUnit" | "conversionRate"
-  | "tertiaryUnit" | "tertiaryConversionRate"
-  | "mrp" | "salePrice" | "purchasePrice" | "discount" | "openingStock" | "minStock";
+  | "name" | "sku" | "category"
+  | "mrp" | "salePrice" | "purchasePrice"
+  | "discountType" | "discount"
+  | "openingStock" | "minStock" | "itemLocation"
+  | "taxRate" | "inclusiveOfTax"
+  | "tertiaryUnit" | "unit" | "secondaryUnit" | "conversionRate" | "tertiaryConversionRate";
 
 type FieldDef = { key: TargetKey; label: string; required?: boolean; kind: "text" | "number" };
 
+// Order matches the source system's own Item import template exactly, so a file exported
+// from there maps column-for-column with no reshuffling.
 const TARGET_FIELDS: FieldDef[] = [
   { key: "name",                   label: "Item Name*",              required: true, kind: "text" },
   { key: "sku",                    label: "Item Code",               kind: "text" },
-  { key: "unit",                   label: "Unit",                     kind: "text" },
-  { key: "secondaryUnit",          label: "Secondary Unit",           kind: "text" },
-  { key: "conversionRate",         label: "Conversion Rate",          kind: "text" },
-  { key: "tertiaryUnit",           label: "Top Pack Unit",            kind: "text" },
-  { key: "tertiaryConversionRate", label: "Top Pack Conversion Rate", kind: "text" },
-  { key: "mrp",                    label: "MRP",                      kind: "number" },
-  { key: "salePrice",              label: "Sale Price",               kind: "number" },
-  { key: "purchasePrice",          label: "Purchase Price",           kind: "number" },
-  { key: "discount",               label: "Discount (%)",             kind: "number" },
-  { key: "openingStock",           label: "Opening Stock",            kind: "number" },
-  { key: "minStock",               label: "Minimum Stock",            kind: "number" },
+  { key: "category",               label: "Category",                kind: "text" },
+  { key: "mrp",                    label: "MRP",                     kind: "number" },
+  { key: "salePrice",              label: "Sale Price",              kind: "number" },
+  { key: "purchasePrice",          label: "Purchase Price",          kind: "number" },
+  { key: "discountType",           label: "Discount Type",           kind: "text" },
+  { key: "discount",               label: "Sale Discount",           kind: "number" },
+  { key: "openingStock",           label: "Opening Stock Quantity",  kind: "number" },
+  { key: "minStock",               label: "Minimum Stock Quantity",  kind: "number" },
+  { key: "itemLocation",           label: "Item Location",           kind: "text" },
+  { key: "taxRate",                label: "Tax Rate",                kind: "number" },
+  { key: "inclusiveOfTax",         label: "Inclusive Of Tax",        kind: "text" },
+  // Unit hierarchy, biggest to smallest: Top Pack Unit (Carton) -> Unit (Box, the item's
+  // normal stocking unit) -> Pieces (a finer subdivision of Unit).
+  { key: "tertiaryUnit",           label: "Top Pack Unit",           kind: "text" },
+  { key: "unit",                   label: "Unit",                    kind: "text" },
+  { key: "secondaryUnit",          label: "Pieces",                  kind: "text" },
+  { key: "conversionRate",         label: "Conversion Rate (Unit = n Pieces)",       kind: "text" },
+  { key: "tertiaryConversionRate", label: "Top Pack Conversion Rate (Top Unit = n Unit)", kind: "text" },
 ];
 
 // Smart column-to-field auto-mapping (docs/FEATURES.md #6): match on normalized header text.
 const FIELD_SYNONYMS: Record<TargetKey, string[]> = {
   name:            ["itemname", "name", "productname", "item", "description", "productitemname"],
   sku:             ["itemcode", "code", "sku", "itemsku", "productcode", "barcode"],
+  category:        ["category", "itemcategory", "productcategory"],
   unit:            ["unit", "baseunit", "primaryunit", "uom"],
-  secondaryUnit:   ["secondaryunit", "secunit"],
+  secondaryUnit:   ["secondaryunit", "secunit", "pieces", "pcs"],
   conversionRate:  ["conversionrate", "conversion", "convrate"],
   tertiaryUnit:    ["tertiaryunit", "toppackunit", "topunit", "cartonunit"],
   tertiaryConversionRate: ["tertiaryconversionrate", "toppackconversionrate", "topconversion", "cartonconversion"],
   mrp:             ["mrp", "defaultmrp", "maxretailprice"],
   salePrice:       ["saleprice", "sellingprice", "price", "retailprice"],
   purchasePrice:   ["purchaseprice", "costprice", "buyprice", "purchaserate"],
-  discount:        ["discount", "salediscount", "discountpercent"],
-  openingStock:    ["openingstock", "openingstockquantity", "stock", "qty", "quantity", "openingqty"],
-  minStock:        ["minstock", "minimumstock", "minimumstockquantity", "minqty", "reorderlevel"],
+  discount:        ["saliscount", "discount", "salediscount", "discountpercent", "discountamount"],
+  discountType:    ["discounttype"],
+  openingStock:    ["openingstockquantity", "openingstock", "stock", "qty", "quantity", "openingqty"],
+  minStock:        ["minimumstockquantity", "minstock", "minimumstock", "minqty", "reorderlevel"],
+  itemLocation:    ["itemlocation", "location", "storelocation"],
+  taxRate:         ["taxrate", "tax", "gstrate"],
+  inclusiveOfTax:  ["inclusiveoftax", "inclusiveoftax", "taxinclusive"],
 };
 
 const NO_MAP = "__none__";
@@ -64,19 +81,24 @@ function autoMapHeaders(headers: string[]): Record<TargetKey, string> {
 }
 
 type ParsedRow = {
-  name: string; sku: string; unit: string; secondaryUnit: string; conversionRate: string;
+  name: string; sku: string; category: string;
+  unit: string; secondaryUnit: string; conversionRate: string;
   tertiaryUnit: string; tertiaryConversionRate: string;
-  mrp?: number; salePrice?: number; purchasePrice?: number; discount?: number;
-  openingStock?: number; minStock?: number; errors: string[];
+  mrp?: number; salePrice?: number; purchasePrice?: number;
+  discountType: string; discount?: number;
+  openingStock?: number; minStock?: number; itemLocation: string;
+  taxRate?: number; inclusiveOfTax: string;
+  errors: string[];
 };
 
 function downloadSample() {
   const headers = TARGET_FIELDS.map((f) => f.label);
   const sample = [
-    // unit is the base/smallest stocking unit; secondaryUnit/conversionRate = 1 secondaryUnit
-    // in base units; tertiaryUnit/tertiaryConversionRate = 1 tertiaryUnit in secondaryUnits.
-    ["Sample Item A", "ITM-A1B2C3", "PIECES", "", "", "", "", "120", "150", "100", "0", "50", "5"],
-    ["Sample Item B", "ITM-D4E5F6", "PIECES", "BOX", "20", "CARTON", "12", "", "800", "650", "5", "20", "2"],
+    // name, sku, category, mrp, salePrice, purchasePrice, discountType, discount,
+    // openingStock, minStock, itemLocation, taxRate, inclusiveOfTax,
+    // tertiaryUnit, unit, secondaryUnit(Pieces), conversionRate(Unit=nPieces), tertiaryConversionRate(TopUnit=nUnit)
+    ["Sample Item A", "ITM-A1B2C3", "General", "120", "150", "100", "Discount %", "0", "50", "5", "Store 1", "17", "Inclusive", "", "PIECES", "", "", ""],
+    ["Sample Item B", "ITM-D4E5F6", "General", "", "800", "650", "Discount %", "5", "20", "2", "Store 1", "17", "Inclusive", "CARTON", "BOX", "PIECES", "20", "12"],
   ];
   const ws = XLSX.utils.aoa_to_sheet([headers, ...sample]);
   ws["!cols"] = headers.map((h) => ({ wch: Math.max(h.length + 4, 16) }));
@@ -161,6 +183,7 @@ export function ImportItemsPage({ onGoToItems }: Props) {
       return {
         name,
         sku: String(get("sku") ?? "").trim(),
+        category: String(get("category") ?? "").trim(),
         unit: String(get("unit") ?? "").trim(),
         secondaryUnit: String(get("secondaryUnit") ?? "").trim(),
         conversionRate: String(get("conversionRate") ?? "").trim(),
@@ -169,9 +192,13 @@ export function ImportItemsPage({ onGoToItems }: Props) {
         mrp: num(get("mrp")),
         salePrice: num(get("salePrice")),
         purchasePrice: num(get("purchasePrice")),
+        discountType: String(get("discountType") ?? "").trim(),
         discount: num(get("discount")),
         openingStock: num(get("openingStock")),
         minStock: num(get("minStock")),
+        itemLocation: String(get("itemLocation") ?? "").trim(),
+        taxRate: num(get("taxRate")),
+        inclusiveOfTax: String(get("inclusiveOfTax") ?? "").trim(),
         errors,
       };
     });
@@ -195,6 +222,7 @@ export function ImportItemsPage({ onGoToItems }: Props) {
         await api.createItem({
           name: r.name,
           sku: r.sku || undefined,
+          category: r.category || undefined,
           unit: r.unit || undefined,
           secondaryUnit: r.secondaryUnit || undefined,
           conversionRate: r.conversionRate || undefined,
@@ -203,9 +231,13 @@ export function ImportItemsPage({ onGoToItems }: Props) {
           mrp: r.mrp,
           salePrice: r.salePrice,
           purchasePrice: r.purchasePrice,
+          discountType: r.discountType || undefined,
           discount: r.discount,
           openingStock: r.openingStock,
           minStock: r.minStock,
+          itemLocation: r.itemLocation || undefined,
+          taxRate: r.taxRate,
+          inclusiveOfTax: r.inclusiveOfTax || undefined,
           companyTag: companyTag || undefined,
         });
         ok++;
@@ -362,17 +394,22 @@ export function ImportItemsPage({ onGoToItems }: Props) {
                   <tr key={i} className={row.errors.length ? "impg-preview-table__row--error" : ""}>
                     <td className={row.errors.length ? "impg-preview-table__cell--invalid" : ""}>{row.name}</td>
                     <td>{row.sku}</td>
-                    <td>{row.unit}</td>
-                    <td>{row.secondaryUnit}</td>
-                    <td>{row.conversionRate}</td>
-                    <td>{row.tertiaryUnit}</td>
-                    <td>{row.tertiaryConversionRate}</td>
+                    <td>{row.category}</td>
                     <td>{row.mrp ?? ""}</td>
                     <td>{row.salePrice ?? ""}</td>
                     <td>{row.purchasePrice ?? ""}</td>
+                    <td>{row.discountType}</td>
                     <td>{row.discount ?? ""}</td>
                     <td>{row.openingStock ?? ""}</td>
                     <td>{row.minStock ?? ""}</td>
+                    <td>{row.itemLocation}</td>
+                    <td>{row.taxRate ?? ""}</td>
+                    <td>{row.inclusiveOfTax}</td>
+                    <td>{row.tertiaryUnit}</td>
+                    <td>{row.unit}</td>
+                    <td>{row.secondaryUnit}</td>
+                    <td>{row.conversionRate}</td>
+                    <td>{row.tertiaryConversionRate}</td>
                   </tr>
                 ))}
                 {displayRows.length === 0 && (

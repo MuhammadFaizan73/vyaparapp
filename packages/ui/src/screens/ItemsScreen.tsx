@@ -60,8 +60,13 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
   const [wholesalePrice, setWholesalePrice] = useState("");
   const [minWholesaleQty, setMinWholesaleQty] = useState("");
   const [purchasePrice, setPurchasePrice] = useState("");
+  const [discountType, setDiscountType] = useState("Discount %");
+  const [discount, setDiscount] = useState("");
   const [openingStock, setOpeningStock] = useState("");
   const [minStock, setMinStock] = useState("");
+  const [itemLocation, setItemLocation] = useState("");
+  const [taxRate, setTaxRate] = useState("");
+  const [inclusiveOfTax, setInclusiveOfTax] = useState("Inclusive");
   const [selectedCategory, setSelectedCategory] = useState("");
   const [categories, setCategories] = useState<string[]>(["Mobiles"]);
   const [baseUnit, setBaseUnit] = useState("None");
@@ -137,16 +142,22 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
       const created = await api.createItem({
         name: itemName.trim(),
         sku: itemCode || undefined,
+        category: selectedCategory || undefined,
         unit: baseUnit !== "None" ? baseUnit : undefined,
         secondaryUnit: secondaryUnit !== "None" ? secondaryUnit : undefined,
         conversionRate: conversionRate || undefined,
-        tertiaryUnit: secondaryUnit !== "None" && tertiaryUnit !== "None" ? tertiaryUnit : undefined,
-        tertiaryConversionRate: secondaryUnit !== "None" && tertiaryUnit !== "None" ? (tertiaryConversionRate || undefined) : undefined,
+        tertiaryUnit: baseUnit !== "None" && tertiaryUnit !== "None" ? tertiaryUnit : undefined,
+        tertiaryConversionRate: baseUnit !== "None" && tertiaryUnit !== "None" ? (tertiaryConversionRate || undefined) : undefined,
         mrp: mrpValue ? Number(mrpValue) : undefined,
         salePrice: salePrice ? Number(salePrice) : undefined,
         purchasePrice: purchasePrice ? Number(purchasePrice) : undefined,
+        discountType: discount ? discountType : undefined,
+        discount: discount ? Number(discount) : undefined,
         openingStock: openingStock ? Number(openingStock) : undefined,
         minStock: minStock ? Number(minStock) : undefined,
+        itemLocation: itemLocation || undefined,
+        taxRate: taxRate ? Number(taxRate) : undefined,
+        inclusiveOfTax: taxRate ? inclusiveOfTax : undefined,
         companyTag: selectedCompanyTag || undefined,
       });
       setItems((prev) => [created, ...prev]);
@@ -174,8 +185,13 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
     setWholesalePrice("");
     setMinWholesaleQty("");
     setPurchasePrice("");
+    setDiscountType("Discount %");
+    setDiscount("");
     setOpeningStock("");
     setMinStock("");
+    setItemLocation("");
+    setTaxRate("");
+    setInclusiveOfTax("Inclusive");
     setSelectedCategory("");
     setFormTab("pricing");
     setItemType("product");
@@ -197,13 +213,19 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
     setMrpValue(item.mrp != null ? String(item.mrp) : "");
     setSalePrice(item.salePrice != null ? String(item.salePrice) : "");
     setPurchasePrice(item.purchasePrice != null ? String(item.purchasePrice) : "");
+    setDiscountType((item as any).discountType ?? "Discount %");
+    setDiscount(item.discount != null ? String(item.discount) : "");
     setOpeningStock(item.openingStock != null ? String(item.openingStock) : "");
     setMinStock(item.minStock != null ? String(item.minStock) : "");
+    setItemLocation((item as any).itemLocation ?? "");
+    setTaxRate((item as any).taxRate != null ? String((item as any).taxRate) : "");
+    setInclusiveOfTax((item as any).inclusiveOfTax ?? "Inclusive");
     setBaseUnit(item.unit ?? "None");
     setSecondaryUnit(item.secondaryUnit ?? "None");
     setConversionRate(item.conversionRate ?? "");
     setTertiaryUnit((item as any).tertiaryUnit ?? "None");
     setTertiaryConversionRate((item as any).tertiaryConversionRate ?? "");
+    setSelectedCategory((item as any).category ?? "");
     setSelectedCompanyTag((item as any).companyTag ?? companies[0]?.name ?? "");
     setFormTab("pricing");
     setItemType("product");
@@ -216,16 +238,22 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
       const updated = await api.updateItem(editingItem.id, {
         name: itemName.trim(),
         sku: itemCode || undefined,
+        category: selectedCategory || undefined,
         unit: baseUnit !== "None" ? baseUnit : undefined,
         secondaryUnit: secondaryUnit !== "None" ? secondaryUnit : undefined,
         conversionRate: conversionRate || undefined,
-        tertiaryUnit: secondaryUnit !== "None" && tertiaryUnit !== "None" ? tertiaryUnit : undefined,
-        tertiaryConversionRate: secondaryUnit !== "None" && tertiaryUnit !== "None" ? (tertiaryConversionRate || undefined) : undefined,
+        tertiaryUnit: baseUnit !== "None" && tertiaryUnit !== "None" ? tertiaryUnit : undefined,
+        tertiaryConversionRate: baseUnit !== "None" && tertiaryUnit !== "None" ? (tertiaryConversionRate || undefined) : undefined,
         mrp: mrpValue ? Number(mrpValue) : undefined,
         salePrice: salePrice ? Number(salePrice) : undefined,
         purchasePrice: purchasePrice ? Number(purchasePrice) : undefined,
+        discountType: discount ? discountType : undefined,
+        discount: discount ? Number(discount) : undefined,
         openingStock: openingStock ? Number(openingStock) : undefined,
         minStock: minStock ? Number(minStock) : undefined,
+        itemLocation: itemLocation || undefined,
+        taxRate: taxRate ? Number(taxRate) : undefined,
+        inclusiveOfTax: taxRate ? inclusiveOfTax : undefined,
         companyTag: selectedCompanyTag || undefined,
       });
       setItems((prev) => prev.map((i) => i.id === updated.id ? updated : i));
@@ -476,6 +504,44 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
                       <input type="text" className="items-form-price-input" placeholder="0.00" value={purchasePrice} onChange={(e) => setPurchasePrice(e.target.value)} />
                     </div>
                   </div>
+
+                  {/* Discount + Tax side by side */}
+                  <div className="items-price-card-row">
+                    <div className="items-price-card">
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span className="items-price-card__label">Discount</span>
+                        <select
+                          value={discountType}
+                          onChange={(e) => setDiscountType(e.target.value)}
+                          style={{ fontSize: 11, border: "none", background: "transparent", cursor: "pointer" }}
+                        >
+                          <option>Discount %</option>
+                          <option>Discount Amount</option>
+                        </select>
+                      </div>
+                      <div className="items-form-price-input-wrap">
+                        <span className="items-form-price-prefix">{discountType === "Discount %" ? "%" : "Rs"}</span>
+                        <input type="text" className="items-form-price-input" placeholder="0" value={discount} onChange={(e) => setDiscount(e.target.value)} />
+                      </div>
+                    </div>
+                    <div className="items-price-card">
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span className="items-price-card__label">Tax Rate</span>
+                        <select
+                          value={inclusiveOfTax}
+                          onChange={(e) => setInclusiveOfTax(e.target.value)}
+                          style={{ fontSize: 11, border: "none", background: "transparent", cursor: "pointer" }}
+                        >
+                          <option>Inclusive</option>
+                          <option>Exclusive</option>
+                        </select>
+                      </div>
+                      <div className="items-form-price-input-wrap">
+                        <span className="items-form-price-prefix">%</span>
+                        <input type="text" className="items-form-price-input" placeholder="0" value={taxRate} onChange={(e) => setTaxRate(e.target.value)} />
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -521,7 +587,7 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
                   <div className="items-price-card">
                     <span className="items-price-card__label">Storage Location</span>
                     <div className="items-form-price-input-wrap">
-                      <input type="text" className="items-form-price-input" placeholder="Location / Rack" style={{ paddingLeft: 12 }} />
+                      <input type="text" className="items-form-price-input" placeholder="Location / Rack" style={{ paddingLeft: 12 }} value={itemLocation} onChange={(e) => setItemLocation(e.target.value)} />
                     </div>
                   </div>
                 </div>
@@ -913,17 +979,73 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
                 </button>
               </div>
 
-              {/* Body */}
+              {/* Body — order: Top Pack Unit (biggest, e.g. Carton) -> Unit (the item's
+                  normal stocking unit, e.g. Box — this is what openingStock/salePrice are
+                  denominated in) -> Pieces (smallest, a finer subdivision of Unit). */}
               <div className="items-unit-modal__body">
-                {/* Primary Unit */}
-                <p className="items-unit-label">Primary Unit</p>
+                {/* Top Pack Unit */}
+                <p className="items-unit-label">
+                  Top Pack Unit <span className="items-unit-label__optional">(optional)</span>
+                </p>
+                <button
+                  type="button"
+                  className={`items-unit-dropdown${showTertiaryPicker ? " items-unit-dropdown--open" : ""}`}
+                  onClick={() => { setShowTertiaryPicker((v) => !v); setShowPrimaryPicker(false); setShowSecondaryPicker(false); }}
+                >
+                  <span className={tertiaryUnit === "None" ? "items-unit-dropdown__placeholder" : "items-unit-dropdown__value"}>
+                    {tertiaryUnit !== "None" ? `${tertiaryUnit}  ·  ${tertiaryShort}` : "Select Top Pack Unit"}
+                  </span>
+                  <span className="items-unit-chevron">{showTertiaryPicker ? "▲" : "▼"}</span>
+                </button>
+                {showTertiaryPicker && (
+                  <div className="items-unit-picker">
+                    <button
+                      type="button"
+                      className={`items-unit-picker__row items-unit-picker__row--none${tertiaryUnit === "None" ? " items-unit-picker__row--active" : ""}`}
+                      onClick={() => { setTertiaryUnit("None"); setTertiaryConversionRate(""); setShowTertiaryPicker(false); }}
+                    >
+                      <span className="items-unit-picker__name" style={{ color: "#94a3b8" }}>None</span>
+                      {tertiaryUnit === "None" && <span className="items-unit-picker__check">✓</span>}
+                    </button>
+                    {UNITS.filter((u) => u.label !== baseUnit && u.label !== secondaryUnit).map((u) => (
+                      <button
+                        key={u.label}
+                        type="button"
+                        className={`items-unit-picker__row${tertiaryUnit === u.label ? " items-unit-picker__row--active" : ""}`}
+                        onClick={() => { setTertiaryUnit(u.label); setShowTertiaryPicker(false); }}
+                      >
+                        <span className="items-unit-picker__name">{u.label}</span>
+                        <span className="items-unit-picker__short">{u.short}</span>
+                        {tertiaryUnit === u.label && <span className="items-unit-picker__check">✓</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {tertiaryUnit !== "None" && baseUnit !== "None" && (
+                  <div className="items-unit-conv-card" style={{ marginTop: 8 }}>
+                    <div className="items-unit-conv-row">
+                      <span className="items-unit-conv-label">1 {tertiaryShort} =</span>
+                      <input
+                        type="number"
+                        className="items-unit-conv-input items-unit-conv-input--active"
+                        value={tertiaryConversionRate}
+                        onChange={(e) => setTertiaryConversionRate(e.target.value)}
+                        placeholder="0"
+                      />
+                      <span className="items-unit-conv-label">{primaryShort}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Unit — the item's normal stocking unit */}
+                <p className="items-unit-label" style={{ marginTop: 20 }}>Unit</p>
                 <button
                   type="button"
                   className={`items-unit-dropdown${showPrimaryPicker ? " items-unit-dropdown--open" : ""}`}
-                  onClick={() => { setShowPrimaryPicker((v) => !v); setShowSecondaryPicker(false); }}
+                  onClick={() => { setShowPrimaryPicker((v) => !v); setShowSecondaryPicker(false); setShowTertiaryPicker(false); }}
                 >
                   <span className={baseUnit === "None" ? "items-unit-dropdown__placeholder" : "items-unit-dropdown__value"}>
-                    {baseUnit !== "None" ? `${baseUnit}  ·  ${primaryShort}` : "Select Primary Unit"}
+                    {baseUnit !== "None" ? `${baseUnit}  ·  ${primaryShort}` : "Select Unit"}
                   </span>
                   <span className="items-unit-chevron">{showPrimaryPicker ? "▲" : "▼"}</span>
                 </button>
@@ -944,17 +1066,17 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
                   </div>
                 )}
 
-                {/* Secondary Unit */}
+                {/* Pieces — a finer subdivision of Unit */}
                 <p className="items-unit-label" style={{ marginTop: 20 }}>
-                  Secondary Unit <span className="items-unit-label__optional">(optional)</span>
+                  Pieces <span className="items-unit-label__optional">(optional)</span>
                 </p>
                 <button
                   type="button"
                   className={`items-unit-dropdown${showSecondaryPicker ? " items-unit-dropdown--open" : ""}`}
-                  onClick={() => { setShowSecondaryPicker((v) => !v); setShowPrimaryPicker(false); }}
+                  onClick={() => { setShowSecondaryPicker((v) => !v); setShowPrimaryPicker(false); setShowTertiaryPicker(false); }}
                 >
                   <span className={secondaryUnit === "None" ? "items-unit-dropdown__placeholder" : "items-unit-dropdown__value"}>
-                    {secondaryUnit !== "None" ? `${secondaryUnit}  ·  ${secondaryShort}` : "Select Secondary Unit"}
+                    {secondaryUnit !== "None" ? `${secondaryUnit}  ·  ${secondaryShort}` : "Select Pieces Unit"}
                   </span>
                   <span className="items-unit-chevron">{showSecondaryPicker ? "▲" : "▼"}</span>
                 </button>
@@ -968,7 +1090,7 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
                       <span className="items-unit-picker__name" style={{ color: "#94a3b8" }}>None</span>
                       {secondaryUnit === "None" && <span className="items-unit-picker__check">✓</span>}
                     </button>
-                    {UNITS.filter((u) => u.label !== baseUnit).map((u) => (
+                    {UNITS.filter((u) => u.label !== baseUnit && u.label !== tertiaryUnit).map((u) => (
                       <button
                         key={u.label}
                         type="button"
@@ -983,15 +1105,13 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
                   </div>
                 )}
 
-                {/* Conversion Rate — only when both chosen. Always "1 Secondary = X Primary"
-                    (e.g. 1 Box = 20 Pcs) — the primary unit is the base/smallest stocking
-                    unit, matching how the tertiary tier and stock reports interpret it. */}
+                {/* Conversion Rate — 1 Unit = N Pieces (e.g. 1 Box = 20 Pcs) */}
                 {baseUnit !== "None" && secondaryUnit !== "None" && (
                   <>
                     <p className="items-unit-label" style={{ marginTop: 20 }}>Conversion Rate</p>
                     <div className="items-unit-conv-card">
                       <div className="items-unit-conv-row">
-                        <span className="items-unit-conv-label">1 {secondaryShort} =</span>
+                        <span className="items-unit-conv-label">1 {primaryShort} =</span>
                         <input
                           type="number"
                           className="items-unit-conv-input items-unit-conv-input--active"
@@ -999,71 +1119,9 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
                           onChange={(e) => setConversionRate(e.target.value)}
                           placeholder="0"
                         />
-                        <span className="items-unit-conv-label">{primaryShort}</span>
+                        <span className="items-unit-conv-label">{secondaryShort}</span>
                       </div>
                     </div>
-                  </>
-                )}
-
-                {/* Top Pack Unit — a unit built on top of Secondary (e.g. Carton = 12 Box) */}
-                {secondaryUnit !== "None" && (
-                  <>
-                    <p className="items-unit-label" style={{ marginTop: 20 }}>
-                      Top Pack Unit <span className="items-unit-label__optional">(optional)</span>
-                    </p>
-                    <button
-                      type="button"
-                      className={`items-unit-dropdown${showTertiaryPicker ? " items-unit-dropdown--open" : ""}`}
-                      onClick={() => { setShowTertiaryPicker((v) => !v); setShowPrimaryPicker(false); setShowSecondaryPicker(false); }}
-                    >
-                      <span className={tertiaryUnit === "None" ? "items-unit-dropdown__placeholder" : "items-unit-dropdown__value"}>
-                        {tertiaryUnit !== "None" ? `${tertiaryUnit}  ·  ${tertiaryShort}` : "Select Top Pack Unit"}
-                      </span>
-                      <span className="items-unit-chevron">{showTertiaryPicker ? "▲" : "▼"}</span>
-                    </button>
-                    {showTertiaryPicker && (
-                      <div className="items-unit-picker">
-                        <button
-                          type="button"
-                          className={`items-unit-picker__row items-unit-picker__row--none${tertiaryUnit === "None" ? " items-unit-picker__row--active" : ""}`}
-                          onClick={() => { setTertiaryUnit("None"); setTertiaryConversionRate(""); setShowTertiaryPicker(false); }}
-                        >
-                          <span className="items-unit-picker__name" style={{ color: "#94a3b8" }}>None</span>
-                          {tertiaryUnit === "None" && <span className="items-unit-picker__check">✓</span>}
-                        </button>
-                        {UNITS.filter((u) => u.label !== baseUnit && u.label !== secondaryUnit).map((u) => (
-                          <button
-                            key={u.label}
-                            type="button"
-                            className={`items-unit-picker__row${tertiaryUnit === u.label ? " items-unit-picker__row--active" : ""}`}
-                            onClick={() => { setTertiaryUnit(u.label); setShowTertiaryPicker(false); }}
-                          >
-                            <span className="items-unit-picker__name">{u.label}</span>
-                            <span className="items-unit-picker__short">{u.short}</span>
-                            {tertiaryUnit === u.label && <span className="items-unit-picker__check">✓</span>}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-
-                    {tertiaryUnit !== "None" && (
-                      <>
-                        <p className="items-unit-label" style={{ marginTop: 20 }}>Top Pack Conversion Rate</p>
-                        <div className="items-unit-conv-card">
-                          <div className="items-unit-conv-row">
-                            <span className="items-unit-conv-label">1 {tertiaryShort} =</span>
-                            <input
-                              type="number"
-                              className="items-unit-conv-input items-unit-conv-input--active"
-                              value={tertiaryConversionRate}
-                              onChange={(e) => setTertiaryConversionRate(e.target.value)}
-                              placeholder="0"
-                            />
-                            <span className="items-unit-conv-label">{secondaryShort}</span>
-                          </div>
-                        </div>
-                      </>
-                    )}
                   </>
                 )}
               </div>

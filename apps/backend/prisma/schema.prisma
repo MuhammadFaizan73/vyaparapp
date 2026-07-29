@@ -103,17 +103,24 @@ model Item {
   tenant                 Tenant   @relation(fields: [tenantId], references: [id])
   name                   String
   sku                    String?
+  category               String?
+  // Unit hierarchy, biggest to smallest: tertiaryUnit (e.g. Carton) > unit (e.g. Box — the
+  // item's normal stocking unit; openingStock/salePrice are denominated in this) >
+  // secondaryUnit (e.g. Pieces). 1 unit = conversionRate secondaryUnit.
+  // 1 tertiaryUnit = tertiaryConversionRate unit.
   unit                   String?
   secondaryUnit          String?
   conversionRate         String?
-  // Third tier — a pack unit built on top of secondaryUnit (e.g. secondaryUnit="Box",
-  // tertiaryUnit="Carton", tertiaryConversionRate="12" means 1 Carton = 12 Box).
   tertiaryUnit           String?
   tertiaryConversionRate String?
   mrp                    Float?
   salePrice              Float?
   purchasePrice          Float?
   discount               Float?
+  discountType           String?
+  taxRate                Float?
+  inclusiveOfTax         String?
+  itemLocation           String?
   openingStock           Float    @default(0)
   minStock               Float    @default(0)
   companyTag             String?

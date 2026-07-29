@@ -704,12 +704,15 @@ export class ReportsService {
 
   // ── Stock Helpers ───────────────────────────────────────────────────────────
 
-  // Converts a line-item quantity into base-unit terms using the item's configured
-  // unit / secondaryUnit / conversionRate / tertiaryUnit / tertiaryConversionRate.
-  // A line item recorded in the item's secondaryUnit or tertiaryUnit (e.g. sold "2 Carton"
-  // when the base unit is "Piece") must be scaled up before it can be summed against
-  // quantities recorded in other units — otherwise a Box sale and a Piece purchase get
-  // subtracted 1-for-1, which is how stock quantities went wrong in the first place.
+  // Converts a line-item quantity into `unit`-equivalent terms using the item's configured
+  // tertiaryUnit / unit / secondaryUnit / conversionRate / tertiaryConversionRate.
+  // Matches this business's real unit hierarchy (biggest to smallest): tertiaryUnit (e.g.
+  // Carton) > unit (e.g. Box — the item's normal stocking unit, what openingStock/salePrice
+  // are denominated in) > secondaryUnit (e.g. Pieces — a finer subdivision of unit). So
+  // 1 tertiaryUnit = tertiaryConversionRate unit, and 1 unit = conversionRate secondaryUnit.
+  // A line item recorded in secondaryUnit or tertiaryUnit must be rescaled into `unit` terms
+  // before it can be summed against other line items — otherwise a Carton sale and a Piece
+  // purchase get added 1-for-1, which is how stock quantities went wrong in the first place.
   private buildUnitConverter(item: {
     unit?: string | null;
     secondaryUnit?: string | null;
@@ -720,20 +723,20 @@ export class ReportsService {
     const norm = (s?: string | null) => (s ?? '').trim().toLowerCase();
     const secondaryUnit = norm(item.secondaryUnit);
     const tertiaryUnit = norm(item.tertiaryUnit);
-    const rateToBase = item.conversionRate ? Number(item.conversionRate) : null; // 1 secondaryUnit = rateToBase base units
-    const rateToSecondary = item.tertiaryConversionRate ? Number(item.tertiaryConversionRate) : null; // 1 tertiaryUnit = rateToSecondary secondaryUnits
+    const conversionRate = item.conversionRate ? Number(item.conversionRate) : null; // 1 unit = conversionRate secondaryUnit
+    const tertiaryConversionRate = item.tertiaryConversionRate ? Number(item.tertiaryConversionRate) : null; // 1 tertiaryUnit = tertiaryConversionRate unit
 
     return (qty: number, lineUnit?: string | null) => {
       const u = norm(lineUnit);
       if (!u) return qty;
-      if (tertiaryUnit && u === tertiaryUnit && rateToSecondary && rateToBase) {
-        return qty * rateToSecondary * rateToBase;
+      if (tertiaryUnit && u === tertiaryUnit && tertiaryConversionRate) {
+        return qty * tertiaryConversionRate; // Carton -> Box: scale up
       }
-      if (secondaryUnit && u === secondaryUnit && rateToBase) {
-        return qty * rateToBase;
+      if (secondaryUnit && u === secondaryUnit && conversionRate) {
+        return qty / conversionRate; // Pieces -> Box: scale down
       }
-      // Base unit, or a unit string that doesn't match any configured tier — treat as
-      // already expressed in base units rather than silently dropping the quantity.
+      // Matches `unit` itself, or an unrecognized unit string — treat as already
+      // expressed in `unit` terms rather than silently dropping the quantity.
       return qty;
     };
   }

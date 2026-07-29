@@ -74,24 +74,24 @@ type LineItem = {
   baseSalePrice?: number;
 };
 
-// Every sellable unit for this row: the base unit (1x) plus any configured pack sizes,
-// each carrying how many base units it's worth (toBase) so qty/rate can convert correctly.
-function unitOptionsFor(item: LineItem): { unit: string; toBase: number }[] {
-  const opts: { unit: string; toBase: number }[] = [];
-  if (item.unit && item.unit !== "NONE") opts.push({ unit: item.unit, toBase: 1 });
-  if (item.secondaryUnit && item.conversionRate) opts.push({ unit: item.secondaryUnit, toBase: item.conversionRate });
-  if (item.tertiaryUnit && item.conversionRate && item.tertiaryConversionRate) {
-    opts.push({ unit: item.tertiaryUnit, toBase: item.conversionRate * item.tertiaryConversionRate });
-  }
+// Every sellable unit for this row, biggest to smallest: tertiaryUnit (Carton) > unit
+// (Box — the item's normal stocking unit, what its sale price is denominated in) >
+// secondaryUnit (Pieces). Each option carries `toUnit`, how many of the item's `unit`
+// it's worth, so qty/rate can convert correctly (e.g. 1 Carton = 12 Box, 1 Piece = 1/20 Box).
+function unitOptionsFor(item: LineItem): { unit: string; toUnit: number }[] {
+  const opts: { unit: string; toUnit: number }[] = [];
+  if (item.tertiaryUnit && item.tertiaryConversionRate) opts.push({ unit: item.tertiaryUnit, toUnit: item.tertiaryConversionRate });
+  if (item.unit && item.unit !== "NONE") opts.push({ unit: item.unit, toUnit: 1 });
+  if (item.secondaryUnit && item.conversionRate) opts.push({ unit: item.secondaryUnit, toUnit: 1 / item.conversionRate });
   return opts;
 }
 
-// Re-prices a row when the user switches which pack size they're selling (e.g. Piece -> Box)
-// — rate is always "price per selected unit", scaled from the item's base sale price.
+// Re-prices a row when the user switches which pack size they're selling (e.g. Box -> Carton)
+// — rate is always "price per selected unit", scaled from the item's per-unit sale price.
 function rateForUnit(item: LineItem, newUnit: string): number {
   if (!item.baseSalePrice) return item.rate;
   const opt = unitOptionsFor(item).find((o) => o.unit === newUnit);
-  return opt ? Number((item.baseSalePrice * opt.toBase).toFixed(2)) : item.rate;
+  return opt ? Number((item.baseSalePrice * opt.toUnit).toFixed(2)) : item.rate;
 }
 type SubTab = "invoices" | "estimate" | "proforma" | "payment_in" | "sale_order" | "delivery" | "return";
 
