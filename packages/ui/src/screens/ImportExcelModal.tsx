@@ -11,6 +11,10 @@ type RowData = {
   address: string;
   openingBalance: string;
   openingDate: string;
+  group: string;
+  cnic: string;
+  ntn: string;
+  strn: string;
 };
 
 type ParsedRow = RowData & { errors: string[] };
@@ -65,6 +69,10 @@ export function ImportExcelModal({ onClose, onImported }: Props) {
           address: String(r["Address"] ?? "").trim(),
           openingBalance: String(r["Opening Balance"] ?? "").trim(),
           openingDate: parseDate(r["Opening Date (dd/MM/yyyy)"] ?? r["Opening Date"] ?? ""),
+          group: String(r["Party Group"] ?? r["Group"] ?? "").trim(),
+          cnic: String(r["CNIC"] ?? "").trim(),
+          ntn: String(r["NTN"] ?? "").trim(),
+          strn: String(r["STRN"] ?? "").trim(),
         };
         return { ...row, errors: validateRow(row) };
       });
@@ -94,15 +102,35 @@ export function ImportExcelModal({ onClose, onImported }: Props) {
     if (!valid.length) return;
     setImporting(true);
     setImportError(null);
+
+    // Resolve each row's "Party Group" name to a groupId, creating any group that doesn't
+    // exist yet — same as Add Party's inline "+ New Group" flow, just driven by the sheet.
+    const existingGroups = await api.listPartyGroups().catch(() => []);
+    const groupIdByName = new Map(existingGroups.map((g) => [g.name.trim().toLowerCase(), g.id]));
+    async function resolveGroupId(groupName: string): Promise<string | undefined> {
+      const key = groupName.trim().toLowerCase();
+      if (!key) return undefined;
+      const existing = groupIdByName.get(key);
+      if (existing) return existing;
+      const created = await api.createPartyGroup(groupName.trim());
+      groupIdByName.set(key, created.id);
+      return created.id;
+    }
+
     let failed = 0;
     for (const r of valid) {
       try {
+        const groupId = await resolveGroupId(r.group);
         await api.createParty({
           name: r.name,
           phone: r.phone || undefined,
           email: r.email || undefined,
           billingAddress: r.address || undefined,
           openingBalance: r.openingBalance ? parseFloat(r.openingBalance) : undefined,
+          groupId,
+          cnic: r.cnic || undefined,
+          ntn: r.ntn || undefined,
+          strn: r.strn || undefined,
         });
       } catch {
         failed++;
@@ -172,7 +200,7 @@ export function ImportExcelModal({ onClose, onImported }: Props) {
                 onClick={() => {
                   const wb = XLSX.utils.book_new();
                   const ws = XLSX.utils.aoa_to_sheet([
-                    ["Name*", "Contact No.", "Email ID", "Address", "Opening Balance", "Opening Date (dd/MM/yyyy)"],
+                    ["Name*", "Contact No.", "Email ID", "Address", "Opening Balance", "Opening Date (dd/MM/yyyy)", "Party Group", "CNIC", "NTN", "STRN"],
                   ]);
                   XLSX.utils.book_append_sheet(wb, ws, "Parties");
                   XLSX.writeFile(wb, "parties_template.xlsx");
@@ -273,6 +301,10 @@ export function ImportExcelModal({ onClose, onImported }: Props) {
                   <th>Address</th>
                   <th>Opening Balance</th>
                   <th>Opening Date (dd/MM/yyyy)</th>
+                  <th>Party Group</th>
+                  <th>CNIC</th>
+                  <th>NTN</th>
+                  <th>STRN</th>
                 </tr>
               </thead>
               <tbody>
@@ -297,11 +329,15 @@ export function ImportExcelModal({ onClose, onImported }: Props) {
                     <td>{row.address}</td>
                     <td className={row.errors.some(e => e.includes("Balance")) ? "import-table__cell--invalid" : ""}>{row.openingBalance}</td>
                     <td className={row.errors.some(e => e.includes("Date")) ? "import-table__cell--invalid" : ""}>{row.openingDate}</td>
+                    <td>{row.group}</td>
+                    <td>{row.cnic}</td>
+                    <td>{row.ntn}</td>
+                    <td>{row.strn}</td>
                   </tr>
                 ))}
                 {displayRows.length === 0 && (
                   <tr>
-                    <td colSpan={7} style={{ textAlign: "center", padding: "32px", color: "#94a3b8" }}>
+                    <td colSpan={11} style={{ textAlign: "center", padding: "32px", color: "#94a3b8" }}>
                       No {activeTab === "valid" ? "valid" : "error"} rows
                     </td>
                   </tr>
