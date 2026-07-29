@@ -704,14 +704,58 @@ export class ReportsService {
 
   // ── Stock Helpers ───────────────────────────────────────────────────────────
 
+  // Converts a line-item quantity into base-unit terms using the item's configured
+  // unit / secondaryUnit / conversionRate / tertiaryUnit / tertiaryConversionRate.
+  // A line item recorded in the item's secondaryUnit or tertiaryUnit (e.g. sold "2 Carton"
+  // when the base unit is "Piece") must be scaled up before it can be summed against
+  // quantities recorded in other units — otherwise a Box sale and a Piece purchase get
+  // subtracted 1-for-1, which is how stock quantities went wrong in the first place.
+  private buildUnitConverter(item: {
+    unit?: string | null;
+    secondaryUnit?: string | null;
+    conversionRate?: string | null;
+    tertiaryUnit?: string | null;
+    tertiaryConversionRate?: string | null;
+  }): (qty: number, lineUnit?: string | null) => number {
+    const norm = (s?: string | null) => (s ?? '').trim().toLowerCase();
+    const secondaryUnit = norm(item.secondaryUnit);
+    const tertiaryUnit = norm(item.tertiaryUnit);
+    const rateToBase = item.conversionRate ? Number(item.conversionRate) : null; // 1 secondaryUnit = rateToBase base units
+    const rateToSecondary = item.tertiaryConversionRate ? Number(item.tertiaryConversionRate) : null; // 1 tertiaryUnit = rateToSecondary secondaryUnits
+
+    return (qty: number, lineUnit?: string | null) => {
+      const u = norm(lineUnit);
+      if (!u) return qty;
+      if (tertiaryUnit && u === tertiaryUnit && rateToSecondary && rateToBase) {
+        return qty * rateToSecondary * rateToBase;
+      }
+      if (secondaryUnit && u === secondaryUnit && rateToBase) {
+        return qty * rateToBase;
+      }
+      // Base unit, or a unit string that doesn't match any configured tier — treat as
+      // already expressed in base units rather than silently dropping the quantity.
+      return qty;
+    };
+  }
+
   private async computeStockMap(
     tenantId: string,
-    items: Array<{ name: string; openingStock: number }>,
+    items: Array<{
+      name: string;
+      openingStock: number;
+      unit?: string | null;
+      secondaryUnit?: string | null;
+      conversionRate?: string | null;
+      tertiaryUnit?: string | null;
+      tertiaryConversionRate?: string | null;
+    }>,
     upTo?: Date,
   ): Promise<Map<string, number>> {
     const stockMap = new Map<string, number>();
+    const converters = new Map<string, (qty: number, lineUnit?: string | null) => number>();
     for (const item of items) {
       stockMap.set(item.name, item.openingStock);
+      converters.set(item.name, this.buildUnitConverter(item));
     }
 
     const txns = await this.prisma.transaction.findMany({
@@ -726,10 +770,12 @@ export class ReportsService {
       const lineItems = parseItems(t.notes);
       for (const li of lineItems) {
         const current = stockMap.get(li.name) ?? 0;
+        const convert = converters.get(li.name);
+        const qtyInBaseUnits = convert ? convert(li.qty ?? 0, li.unit) : (li.qty ?? 0);
         if (t.type === 'purchase' || t.type === 'credit_note') {
-          stockMap.set(li.name, current + (li.qty ?? 0));
+          stockMap.set(li.name, current + qtyInBaseUnits);
         } else if (t.type === 'sale' || t.type === 'debit_note') {
-          stockMap.set(li.name, current - (li.qty ?? 0));
+          stockMap.set(li.name, current - qtyInBaseUnits);
         }
       }
     }
@@ -763,6 +809,8 @@ export class ReportsService {
         unit: item.unit ?? '',
         secondaryUnit: item.secondaryUnit ?? null,
         conversionRate: item.conversionRate ? Number(item.conversionRate) : null,
+        tertiaryUnit: item.tertiaryUnit ?? null,
+        tertiaryConversionRate: item.tertiaryConversionRate ? Number(item.tertiaryConversionRate) : null,
         stockValue,
       };
     });

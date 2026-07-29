@@ -98,23 +98,27 @@ model PartyGroup {
 }
 
 model Item {
-  id             String   @id @default(uuid())
-  tenantId       String
-  tenant         Tenant   @relation(fields: [tenantId], references: [id])
-  name           String
-  sku            String?
-  unit           String?
-  secondaryUnit  String?
-  conversionRate String?
-  mrp            Float?
-  salePrice      Float?
-  purchasePrice  Float?
-  discount       Float?
-  openingStock   Float    @default(0)
-  minStock       Float    @default(0)
-  companyTag     String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id                     String   @id @default(uuid())
+  tenantId               String
+  tenant                 Tenant   @relation(fields: [tenantId], references: [id])
+  name                   String
+  sku                    String?
+  unit                   String?
+  secondaryUnit          String?
+  conversionRate         String?
+  // Third tier — a pack unit built on top of secondaryUnit (e.g. secondaryUnit="Box",
+  // tertiaryUnit="Carton", tertiaryConversionRate="12" means 1 Carton = 12 Box).
+  tertiaryUnit           String?
+  tertiaryConversionRate String?
+  mrp                    Float?
+  salePrice              Float?
+  purchasePrice          Float?
+  discount               Float?
+  openingStock           Float    @default(0)
+  minStock               Float    @default(0)
+  companyTag             String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 }
 
 model Transaction {

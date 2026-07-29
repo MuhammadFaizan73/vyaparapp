@@ -7,6 +7,8 @@ export class CreateItemDto {
   @IsOptional() @IsString() unit?: string;
   @IsOptional() @IsString() secondaryUnit?: string;
   @IsOptional() @IsString() conversionRate?: string;
+  @IsOptional() @IsString() tertiaryUnit?: string;
+  @IsOptional() @IsString() tertiaryConversionRate?: string;
   @IsOptional() @Type(() => Number) @IsNumber() mrp?: number;
   @IsOptional() @Type(() => Number) @IsNumber() salePrice?: number;
   @IsOptional() @Type(() => Number) @IsNumber() purchasePrice?: number;
@@ -22,6 +24,8 @@ export class UpdateItemDto {
   @IsOptional() @IsString() unit?: string;
   @IsOptional() @IsString() secondaryUnit?: string;
   @IsOptional() @IsString() conversionRate?: string;
+  @IsOptional() @IsString() tertiaryUnit?: string;
+  @IsOptional() @IsString() tertiaryConversionRate?: string;
   @IsOptional() @Type(() => Number) @IsNumber() mrp?: number;
   @IsOptional() @Type(() => Number) @IsNumber() salePrice?: number;
   @IsOptional() @Type(() => Number) @IsNumber() purchasePrice?: number;

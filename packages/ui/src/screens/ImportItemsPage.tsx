@@ -4,22 +4,25 @@ import { api } from "../lib/api";
 
 type TargetKey =
   | "name" | "sku" | "unit" | "secondaryUnit" | "conversionRate"
+  | "tertiaryUnit" | "tertiaryConversionRate"
   | "mrp" | "salePrice" | "purchasePrice" | "discount" | "openingStock" | "minStock";
 
 type FieldDef = { key: TargetKey; label: string; required?: boolean; kind: "text" | "number" };
 
 const TARGET_FIELDS: FieldDef[] = [
-  { key: "name",           label: "Item Name*",       required: true, kind: "text" },
-  { key: "sku",            label: "Item Code",        kind: "text" },
-  { key: "unit",           label: "Unit",              kind: "text" },
-  { key: "secondaryUnit",  label: "Secondary Unit",    kind: "text" },
-  { key: "conversionRate", label: "Conversion Rate",   kind: "text" },
-  { key: "mrp",            label: "MRP",               kind: "number" },
-  { key: "salePrice",      label: "Sale Price",        kind: "number" },
-  { key: "purchasePrice",  label: "Purchase Price",    kind: "number" },
-  { key: "discount",       label: "Discount (%)",      kind: "number" },
-  { key: "openingStock",   label: "Opening Stock",     kind: "number" },
-  { key: "minStock",       label: "Minimum Stock",     kind: "number" },
+  { key: "name",                   label: "Item Name*",              required: true, kind: "text" },
+  { key: "sku",                    label: "Item Code",               kind: "text" },
+  { key: "unit",                   label: "Unit",                     kind: "text" },
+  { key: "secondaryUnit",          label: "Secondary Unit",           kind: "text" },
+  { key: "conversionRate",         label: "Conversion Rate",          kind: "text" },
+  { key: "tertiaryUnit",           label: "Top Pack Unit",            kind: "text" },
+  { key: "tertiaryConversionRate", label: "Top Pack Conversion Rate", kind: "text" },
+  { key: "mrp",                    label: "MRP",                      kind: "number" },
+  { key: "salePrice",              label: "Sale Price",               kind: "number" },
+  { key: "purchasePrice",          label: "Purchase Price",           kind: "number" },
+  { key: "discount",               label: "Discount (%)",             kind: "number" },
+  { key: "openingStock",           label: "Opening Stock",            kind: "number" },
+  { key: "minStock",               label: "Minimum Stock",            kind: "number" },
 ];
 
 // Smart column-to-field auto-mapping (docs/FEATURES.md #6): match on normalized header text.
@@ -29,6 +32,8 @@ const FIELD_SYNONYMS: Record<TargetKey, string[]> = {
   unit:            ["unit", "baseunit", "primaryunit", "uom"],
   secondaryUnit:   ["secondaryunit", "secunit"],
   conversionRate:  ["conversionrate", "conversion", "convrate"],
+  tertiaryUnit:    ["tertiaryunit", "toppackunit", "topunit", "cartonunit"],
+  tertiaryConversionRate: ["tertiaryconversionrate", "toppackconversionrate", "topconversion", "cartonconversion"],
   mrp:             ["mrp", "defaultmrp", "maxretailprice"],
   salePrice:       ["saleprice", "sellingprice", "price", "retailprice"],
   purchasePrice:   ["purchaseprice", "costprice", "buyprice", "purchaserate"],
@@ -60,6 +65,7 @@ function autoMapHeaders(headers: string[]): Record<TargetKey, string> {
 
 type ParsedRow = {
   name: string; sku: string; unit: string; secondaryUnit: string; conversionRate: string;
+  tertiaryUnit: string; tertiaryConversionRate: string;
   mrp?: number; salePrice?: number; purchasePrice?: number; discount?: number;
   openingStock?: number; minStock?: number; errors: string[];
 };
@@ -67,8 +73,10 @@ type ParsedRow = {
 function downloadSample() {
   const headers = TARGET_FIELDS.map((f) => f.label);
   const sample = [
-    ["Sample Item A", "ITM-A1B2C3", "PIECES", "", "", "120", "150", "100", "0", "50", "5"],
-    ["Sample Item B", "ITM-D4E5F6", "BOX", "PIECES", "12", "", "800", "650", "5", "20", "2"],
+    // unit is the base/smallest stocking unit; secondaryUnit/conversionRate = 1 secondaryUnit
+    // in base units; tertiaryUnit/tertiaryConversionRate = 1 tertiaryUnit in secondaryUnits.
+    ["Sample Item A", "ITM-A1B2C3", "PIECES", "", "", "", "", "120", "150", "100", "0", "50", "5"],
+    ["Sample Item B", "ITM-D4E5F6", "PIECES", "BOX", "20", "CARTON", "12", "", "800", "650", "5", "20", "2"],
   ];
   const ws = XLSX.utils.aoa_to_sheet([headers, ...sample]);
   ws["!cols"] = headers.map((h) => ({ wch: Math.max(h.length + 4, 16) }));
@@ -156,6 +164,8 @@ export function ImportItemsPage({ onGoToItems }: Props) {
         unit: String(get("unit") ?? "").trim(),
         secondaryUnit: String(get("secondaryUnit") ?? "").trim(),
         conversionRate: String(get("conversionRate") ?? "").trim(),
+        tertiaryUnit: String(get("tertiaryUnit") ?? "").trim(),
+        tertiaryConversionRate: String(get("tertiaryConversionRate") ?? "").trim(),
         mrp: num(get("mrp")),
         salePrice: num(get("salePrice")),
         purchasePrice: num(get("purchasePrice")),
@@ -188,6 +198,8 @@ export function ImportItemsPage({ onGoToItems }: Props) {
           unit: r.unit || undefined,
           secondaryUnit: r.secondaryUnit || undefined,
           conversionRate: r.conversionRate || undefined,
+          tertiaryUnit: r.tertiaryUnit || undefined,
+          tertiaryConversionRate: r.tertiaryConversionRate || undefined,
           mrp: r.mrp,
           salePrice: r.salePrice,
           purchasePrice: r.purchasePrice,
@@ -353,6 +365,8 @@ export function ImportItemsPage({ onGoToItems }: Props) {
                     <td>{row.unit}</td>
                     <td>{row.secondaryUnit}</td>
                     <td>{row.conversionRate}</td>
+                    <td>{row.tertiaryUnit}</td>
+                    <td>{row.tertiaryConversionRate}</td>
                     <td>{row.mrp ?? ""}</td>
                     <td>{row.salePrice ?? ""}</td>
                     <td>{row.purchasePrice ?? ""}</td>

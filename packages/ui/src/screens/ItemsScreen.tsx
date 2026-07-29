@@ -6,7 +6,6 @@ import type { Item } from "@vyapar/api-client";
 type TabKey = "products" | "services" | "category" | "units";
 type FormTab = "pricing" | "stock";
 type ItemType = "product" | "service";
-type ConvDir = "p2s" | "s2p";
 
 const UNITS = [
   { label: "BAGS", short: "Bags" },
@@ -68,9 +67,11 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
   const [baseUnit, setBaseUnit] = useState("None");
   const [secondaryUnit, setSecondaryUnit] = useState("None");
   const [conversionRate, setConversionRate] = useState("");
-  const [convDir, setConvDir] = useState<ConvDir>("p2s");
+  const [tertiaryUnit, setTertiaryUnit] = useState("None");
+  const [tertiaryConversionRate, setTertiaryConversionRate] = useState("");
   const [showPrimaryPicker, setShowPrimaryPicker] = useState(false);
   const [showSecondaryPicker, setShowSecondaryPicker] = useState(false);
+  const [showTertiaryPicker, setShowTertiaryPicker] = useState(false);
   const [txnSearch, setTxnSearch] = useState("");
   const [dotsMenuId, setDotsMenuId] = useState<string | null>(null);
   const [dotsMenuPos, setDotsMenuPos] = useState({ top: 0, left: 0 });
@@ -139,6 +140,8 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
         unit: baseUnit !== "None" ? baseUnit : undefined,
         secondaryUnit: secondaryUnit !== "None" ? secondaryUnit : undefined,
         conversionRate: conversionRate || undefined,
+        tertiaryUnit: secondaryUnit !== "None" && tertiaryUnit !== "None" ? tertiaryUnit : undefined,
+        tertiaryConversionRate: secondaryUnit !== "None" && tertiaryUnit !== "None" ? (tertiaryConversionRate || undefined) : undefined,
         mrp: mrpValue ? Number(mrpValue) : undefined,
         salePrice: salePrice ? Number(salePrice) : undefined,
         purchasePrice: purchasePrice ? Number(purchasePrice) : undefined,
@@ -179,9 +182,11 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
     setBaseUnit("None");
     setSecondaryUnit("None");
     setConversionRate("");
-    setConvDir("p2s");
+    setTertiaryUnit("None");
+    setTertiaryConversionRate("");
     setShowPrimaryPicker(false);
     setShowSecondaryPicker(false);
+    setShowTertiaryPicker(false);
     setSelectedCompanyTag(companies[0]?.name ?? "");
   }
 
@@ -197,6 +202,8 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
     setBaseUnit(item.unit ?? "None");
     setSecondaryUnit(item.secondaryUnit ?? "None");
     setConversionRate(item.conversionRate ?? "");
+    setTertiaryUnit((item as any).tertiaryUnit ?? "None");
+    setTertiaryConversionRate((item as any).tertiaryConversionRate ?? "");
     setSelectedCompanyTag((item as any).companyTag ?? companies[0]?.name ?? "");
     setFormTab("pricing");
     setItemType("product");
@@ -212,6 +219,8 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
         unit: baseUnit !== "None" ? baseUnit : undefined,
         secondaryUnit: secondaryUnit !== "None" ? secondaryUnit : undefined,
         conversionRate: conversionRate || undefined,
+        tertiaryUnit: secondaryUnit !== "None" && tertiaryUnit !== "None" ? tertiaryUnit : undefined,
+        tertiaryConversionRate: secondaryUnit !== "None" && tertiaryUnit !== "None" ? (tertiaryConversionRate || undefined) : undefined,
         mrp: mrpValue ? Number(mrpValue) : undefined,
         salePrice: salePrice ? Number(salePrice) : undefined,
         purchasePrice: purchasePrice ? Number(purchasePrice) : undefined,
@@ -892,6 +901,7 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
       {showUnitModal && (() => {
         const primaryShort = UNITS.find((u) => u.label === baseUnit)?.short ?? baseUnit;
         const secondaryShort = UNITS.find((u) => u.label === secondaryUnit)?.short ?? secondaryUnit;
+        const tertiaryShort = UNITS.find((u) => u.label === tertiaryUnit)?.short ?? tertiaryUnit;
         return (
           <div className="items-modal-backdrop" onClick={() => { setShowUnitModal(false); setShowPrimaryPicker(false); setShowSecondaryPicker(false); }}>
             <div className="items-unit-modal" onClick={(e) => e.stopPropagation()}>
@@ -973,53 +983,87 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
                   </div>
                 )}
 
-                {/* Conversion Rate — only when both chosen */}
+                {/* Conversion Rate — only when both chosen. Always "1 Secondary = X Primary"
+                    (e.g. 1 Box = 20 Pcs) — the primary unit is the base/smallest stocking
+                    unit, matching how the tertiary tier and stock reports interpret it. */}
                 {baseUnit !== "None" && secondaryUnit !== "None" && (
                   <>
                     <p className="items-unit-label" style={{ marginTop: 20 }}>Conversion Rate</p>
                     <div className="items-unit-conv-card">
-                      {/* 1 Primary = X Secondary */}
-                      <button
-                        type="button"
-                        className="items-unit-conv-row"
-                        onClick={() => setConvDir("p2s")}
-                      >
-                        <span className={`items-unit-radio${convDir === "p2s" ? " items-unit-radio--active" : ""}`}>
-                          {convDir === "p2s" && <span className="items-unit-radio__dot" />}
-                        </span>
-                        <span className="items-unit-conv-label">1 {primaryShort} =</span>
-                        <input
-                          type="number"
-                          className={`items-unit-conv-input${convDir === "p2s" ? " items-unit-conv-input--active" : ""}`}
-                          value={convDir === "p2s" ? conversionRate : ""}
-                          onChange={(e) => setConversionRate(e.target.value)}
-                          onFocus={() => setConvDir("p2s")}
-                          placeholder="0"
-                        />
-                        <span className="items-unit-conv-label">{secondaryShort}</span>
-                      </button>
-                      <div className="items-unit-conv-divider" />
-                      {/* 1 Secondary = X Primary */}
-                      <button
-                        type="button"
-                        className="items-unit-conv-row"
-                        onClick={() => setConvDir("s2p")}
-                      >
-                        <span className={`items-unit-radio${convDir === "s2p" ? " items-unit-radio--active" : ""}`}>
-                          {convDir === "s2p" && <span className="items-unit-radio__dot" />}
-                        </span>
+                      <div className="items-unit-conv-row">
                         <span className="items-unit-conv-label">1 {secondaryShort} =</span>
                         <input
                           type="number"
-                          className={`items-unit-conv-input${convDir === "s2p" ? " items-unit-conv-input--active" : ""}`}
-                          value={convDir === "s2p" ? conversionRate : ""}
+                          className="items-unit-conv-input items-unit-conv-input--active"
+                          value={conversionRate}
                           onChange={(e) => setConversionRate(e.target.value)}
-                          onFocus={() => setConvDir("s2p")}
                           placeholder="0"
                         />
                         <span className="items-unit-conv-label">{primaryShort}</span>
-                      </button>
+                      </div>
                     </div>
+                  </>
+                )}
+
+                {/* Top Pack Unit — a unit built on top of Secondary (e.g. Carton = 12 Box) */}
+                {secondaryUnit !== "None" && (
+                  <>
+                    <p className="items-unit-label" style={{ marginTop: 20 }}>
+                      Top Pack Unit <span className="items-unit-label__optional">(optional)</span>
+                    </p>
+                    <button
+                      type="button"
+                      className={`items-unit-dropdown${showTertiaryPicker ? " items-unit-dropdown--open" : ""}`}
+                      onClick={() => { setShowTertiaryPicker((v) => !v); setShowPrimaryPicker(false); setShowSecondaryPicker(false); }}
+                    >
+                      <span className={tertiaryUnit === "None" ? "items-unit-dropdown__placeholder" : "items-unit-dropdown__value"}>
+                        {tertiaryUnit !== "None" ? `${tertiaryUnit}  ·  ${tertiaryShort}` : "Select Top Pack Unit"}
+                      </span>
+                      <span className="items-unit-chevron">{showTertiaryPicker ? "▲" : "▼"}</span>
+                    </button>
+                    {showTertiaryPicker && (
+                      <div className="items-unit-picker">
+                        <button
+                          type="button"
+                          className={`items-unit-picker__row items-unit-picker__row--none${tertiaryUnit === "None" ? " items-unit-picker__row--active" : ""}`}
+                          onClick={() => { setTertiaryUnit("None"); setTertiaryConversionRate(""); setShowTertiaryPicker(false); }}
+                        >
+                          <span className="items-unit-picker__name" style={{ color: "#94a3b8" }}>None</span>
+                          {tertiaryUnit === "None" && <span className="items-unit-picker__check">✓</span>}
+                        </button>
+                        {UNITS.filter((u) => u.label !== baseUnit && u.label !== secondaryUnit).map((u) => (
+                          <button
+                            key={u.label}
+                            type="button"
+                            className={`items-unit-picker__row${tertiaryUnit === u.label ? " items-unit-picker__row--active" : ""}`}
+                            onClick={() => { setTertiaryUnit(u.label); setShowTertiaryPicker(false); }}
+                          >
+                            <span className="items-unit-picker__name">{u.label}</span>
+                            <span className="items-unit-picker__short">{u.short}</span>
+                            {tertiaryUnit === u.label && <span className="items-unit-picker__check">✓</span>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {tertiaryUnit !== "None" && (
+                      <>
+                        <p className="items-unit-label" style={{ marginTop: 20 }}>Top Pack Conversion Rate</p>
+                        <div className="items-unit-conv-card">
+                          <div className="items-unit-conv-row">
+                            <span className="items-unit-conv-label">1 {tertiaryShort} =</span>
+                            <input
+                              type="number"
+                              className="items-unit-conv-input items-unit-conv-input--active"
+                              value={tertiaryConversionRate}
+                              onChange={(e) => setTertiaryConversionRate(e.target.value)}
+                              placeholder="0"
+                            />
+                            <span className="items-unit-conv-label">{secondaryShort}</span>
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </>
                 )}
               </div>

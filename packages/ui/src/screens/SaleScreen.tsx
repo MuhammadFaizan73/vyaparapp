@@ -65,7 +65,34 @@ function today() {
 
 /* ── types ── */
 type SaleRow = Transaction & { partyName: string };
-type LineItem = { id: string; name: string; mrp: number; qty: number; unit: string; rate: number; stock?: number };
+type LineItem = {
+  id: string; name: string; mrp: number; qty: number; unit: string; rate: number; stock?: number;
+  // Carried over from the selected catalog Item so the row's own unit dropdown can offer
+  // only that item's configured units (Piece/Box/Carton) instead of a generic fixed list.
+  secondaryUnit?: string; conversionRate?: number;
+  tertiaryUnit?: string; tertiaryConversionRate?: number;
+  baseSalePrice?: number;
+};
+
+// Every sellable unit for this row: the base unit (1x) plus any configured pack sizes,
+// each carrying how many base units it's worth (toBase) so qty/rate can convert correctly.
+function unitOptionsFor(item: LineItem): { unit: string; toBase: number }[] {
+  const opts: { unit: string; toBase: number }[] = [];
+  if (item.unit && item.unit !== "NONE") opts.push({ unit: item.unit, toBase: 1 });
+  if (item.secondaryUnit && item.conversionRate) opts.push({ unit: item.secondaryUnit, toBase: item.conversionRate });
+  if (item.tertiaryUnit && item.conversionRate && item.tertiaryConversionRate) {
+    opts.push({ unit: item.tertiaryUnit, toBase: item.conversionRate * item.tertiaryConversionRate });
+  }
+  return opts;
+}
+
+// Re-prices a row when the user switches which pack size they're selling (e.g. Piece -> Box)
+// — rate is always "price per selected unit", scaled from the item's base sale price.
+function rateForUnit(item: LineItem, newUnit: string): number {
+  if (!item.baseSalePrice) return item.rate;
+  const opt = unitOptionsFor(item).find((o) => o.unit === newUnit);
+  return opt ? Number((item.baseSalePrice * opt.toBase).toFixed(2)) : item.rate;
+}
 type SubTab = "invoices" | "estimate" | "proforma" | "payment_in" | "sale_order" | "delivery" | "return";
 
 const ACTIVE_KEY_TO_SUBTAB: Record<string, SubTab> = {
@@ -1411,8 +1438,14 @@ function NewSaleForm({
                       </td>
                       <td className="lsf-td">
                         <select className="lsf-cell-select"
-                          value={item.unit} onChange={(e) => updateItem(item.id, "unit", e.target.value)}>
-                          {["NONE","PCS","KG","G","L","ML","MTR","CM","BOX","PKT","DOZ","SET"].map(u=><option key={u}>{u}</option>)}
+                          value={item.unit}
+                          onChange={(e) => {
+                            updateItem(item.id, "unit", e.target.value);
+                            updateItem(item.id, "rate", rateForUnit(item, e.target.value));
+                          }}>
+                          {unitOptionsFor(item).length > 0
+                            ? unitOptionsFor(item).map((o) => <option key={o.unit} value={o.unit}>{o.unit}</option>)
+                            : ["NONE","PCS","KG","G","L","ML","MTR","CM","BOX","PKT","DOZ","SET"].map(u=><option key={u}>{u}</option>)}
                         </select>
                       </td>
                       <td className="lsf-td lsf-td--num">
@@ -1472,6 +1505,11 @@ function NewSaleForm({
                         updateItem(activeItemRow, "rate", c.salePrice ?? 0);
                         updateItem(activeItemRow, "unit", c.unit || "NONE");
                         updateItem(activeItemRow, "qty", 1);
+                        updateItem(activeItemRow, "baseSalePrice", c.salePrice ?? 0);
+                        updateItem(activeItemRow, "secondaryUnit", c.secondaryUnit ?? "");
+                        updateItem(activeItemRow, "conversionRate", c.conversionRate ? Number(c.conversionRate) : 0);
+                        updateItem(activeItemRow, "tertiaryUnit", (c as any).tertiaryUnit ?? "");
+                        updateItem(activeItemRow, "tertiaryConversionRate", (c as any).tertiaryConversionRate ? Number((c as any).tertiaryConversionRate) : 0);
                         setActiveItemRow(null);
                         setDropPos(null);
                       }}
@@ -1868,9 +1906,14 @@ function NewSaleForm({
                     <select
                       className="nsf-cell-select"
                       value={item.unit}
-                      onChange={(e) => updateItem(item.id, "unit", e.target.value)}
+                      onChange={(e) => {
+                        updateItem(item.id, "unit", e.target.value);
+                        updateItem(item.id, "rate", rateForUnit(item, e.target.value));
+                      }}
                     >
-                      {UNITS.map((u) => <option key={u}>{u}</option>)}
+                      {unitOptionsFor(item).length > 0
+                        ? unitOptionsFor(item).map((o) => <option key={o.unit} value={o.unit}>{o.unit}</option>)
+                        : UNITS.map((u) => <option key={u}>{u}</option>)}
                     </select>
                   </td>
                   <td className="nsf-td">
@@ -1949,6 +1992,11 @@ function NewSaleForm({
                     updateItem(activeItemRow, "unit", c.unit || "NONE");
                     updateItem(activeItemRow, "qty", 1);
                     updateItem(activeItemRow, "stock", c.openingStock ?? 0);
+                    updateItem(activeItemRow, "baseSalePrice", c.salePrice ?? 0);
+                    updateItem(activeItemRow, "secondaryUnit", c.secondaryUnit ?? "");
+                    updateItem(activeItemRow, "conversionRate", c.conversionRate ? Number(c.conversionRate) : 0);
+                    updateItem(activeItemRow, "tertiaryUnit", (c as any).tertiaryUnit ?? "");
+                    updateItem(activeItemRow, "tertiaryConversionRate", (c as any).tertiaryConversionRate ? Number((c as any).tertiaryConversionRate) : 0);
                     setActiveItemRow(null);
                     setDropPos(null);
                   }}

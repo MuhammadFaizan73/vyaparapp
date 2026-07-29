@@ -10,7 +10,7 @@ type Props = {
 
 type ItemTab = "pricing" | "stock";
 
-const UNITS = ["NONE", "PCS", "KG", "G", "L", "ML", "MTR", "CM", "BOX", "PKT", "DOZ", "SET", "BAG", "ROLL", "BUNDLE", "PAIR"];
+const UNITS = ["NONE", "PCS", "KG", "G", "L", "ML", "MTR", "CM", "BOX", "CARTON", "PKT", "DOZ", "SET", "BAG", "ROLL", "BUNDLE", "PAIR"];
 
 function genCode() {
   return "ITM-" + Math.random().toString(36).slice(2, 7).toUpperCase();
@@ -27,6 +27,8 @@ export function AddItemModal({ onClose, onSaved }: Props) {
   const [unit,           setUnit]           = useState("NONE");
   const [secondaryUnit,  setSecondaryUnit]  = useState("NONE");
   const [conversionRate, setConversionRate] = useState("");
+  const [tertiaryUnit,           setTertiaryUnit]           = useState("NONE");
+  const [tertiaryConversionRate, setTertiaryConversionRate] = useState("");
   const [mrp,            setMrp]            = useState("");
   const [salePrice,      setSalePrice]      = useState("");
   const [purchasePrice,  setPurchasePrice]  = useState("");
@@ -36,16 +38,29 @@ export function AddItemModal({ onClose, onSaved }: Props) {
 
   const hasUnit = unit !== "NONE";
   const hasSecondary = hasUnit && secondaryUnit !== "NONE";
+  const hasTertiary = hasSecondary && tertiaryUnit !== "NONE";
 
   function handleUnitChange(val: string) {
     setUnit(val);
-    if (val === "NONE") { setSecondaryUnit("NONE"); setConversionRate(""); }
+    if (val === "NONE") {
+      setSecondaryUnit("NONE"); setConversionRate("");
+      setTertiaryUnit("NONE"); setTertiaryConversionRate("");
+    }
+  }
+
+  function handleSecondaryUnitChange(val: string) {
+    setSecondaryUnit(val);
+    if (val === "NONE") { setTertiaryUnit("NONE"); setTertiaryConversionRate(""); }
   }
 
   async function save(andNew = false) {
     if (!name.trim()) { setError("Item name is required"); return; }
     if (hasSecondary && (!conversionRate || parseFloat(conversionRate) <= 0)) {
       setError("Conversion rate must be > 0");
+      return;
+    }
+    if (hasTertiary && (!tertiaryConversionRate || parseFloat(tertiaryConversionRate) <= 0)) {
+      setError("Top pack conversion rate must be > 0");
       return;
     }
     setError(null);
@@ -57,6 +72,8 @@ export function AddItemModal({ onClose, onSaved }: Props) {
         unit:           unit === "NONE" ? undefined : unit,
         secondaryUnit:  hasSecondary ? secondaryUnit : undefined,
         conversionRate: hasSecondary ? conversionRate : undefined,
+        tertiaryUnit:           hasTertiary ? tertiaryUnit : undefined,
+        tertiaryConversionRate: hasTertiary ? tertiaryConversionRate : undefined,
         mrp:            mrp           ? parseFloat(mrp)           : undefined,
         salePrice:      salePrice     ? parseFloat(salePrice)     : undefined,
         purchasePrice:  purchasePrice ? parseFloat(purchasePrice) : undefined,
@@ -66,7 +83,8 @@ export function AddItemModal({ onClose, onSaved }: Props) {
       });
       if (andNew) {
         setName(""); setSku(""); setUnit("NONE"); setSecondaryUnit("NONE");
-        setConversionRate(""); setMrp(""); setSalePrice(""); setPurchasePrice("");
+        setConversionRate(""); setTertiaryUnit("NONE"); setTertiaryConversionRate("");
+        setMrp(""); setSalePrice(""); setPurchasePrice("");
         setDiscount(""); setOpeningStock(""); setMinStock("");
         setTab("pricing"); setError(null);
       } else {
@@ -288,16 +306,27 @@ export function AddItemModal({ onClose, onSaved }: Props) {
                 </div>
               </div>
 
-              {/* Secondary unit */}
+              {/* Pack unit — unit is the base/smallest stocking unit; secondaryUnit is a
+                  bigger pack built from it (e.g. 1 Box = 20 Pcs). */}
               {hasUnit && (
                 <div className="ai-price-card ai-price-card--full">
                   <div className="ai-price-card__top">
                     <span className="ai-price-card__label">UNIT CONVERSION</span>
-                    <span className="ai-price-card__hint-inline">e.g. 1 BOX = 12 PCS</span>
+                    <span className="ai-price-card__hint-inline">e.g. 1 BOX = 20 PCS</span>
                   </div>
                   <div className="item-conversion__row" style={{ marginTop: 8 }}>
                     <span className="item-conversion__fixed">1</span>
-                    <span className="item-conversion__unit-badge">{unit}</span>
+                    <select
+                      className="party-modal__input item-conversion__sec-unit"
+                      value={secondaryUnit}
+                      onChange={(e) => handleSecondaryUnitChange(e.target.value)}
+                      style={{ cursor: "pointer" }}
+                    >
+                      <option value="NONE">— Pack Unit —</option>
+                      {UNITS.filter(u => u !== "NONE" && u !== unit).map((u) => (
+                        <option key={u} value={u}>{u}</option>
+                      ))}
+                    </select>
                     <span className="item-conversion__eq">=</span>
                     <input
                       className="party-modal__input item-conversion__qty"
@@ -306,23 +335,51 @@ export function AddItemModal({ onClose, onSaved }: Props) {
                       onChange={(e) => setConversionRate(e.target.value)}
                       disabled={secondaryUnit === "NONE"}
                     />
-                    <select
-                      className="party-modal__input item-conversion__sec-unit"
-                      value={secondaryUnit}
-                      onChange={(e) => setSecondaryUnit(e.target.value)}
-                      style={{ cursor: "pointer" }}
-                    >
-                      <option value="NONE">— Secondary Unit —</option>
-                      {UNITS.filter(u => u !== "NONE" && u !== unit).map((u) => (
-                        <option key={u} value={u}>{u}</option>
-                      ))}
-                    </select>
+                    <span className="item-conversion__unit-badge">{unit}</span>
                   </div>
                   {hasSecondary && conversionRate && (
                     <div className="item-conversion__preview">
-                      1 {unit} = {conversionRate} {secondaryUnit}
+                      1 {secondaryUnit} = {conversionRate} {unit}
                       &nbsp;·&nbsp;
-                      1 {secondaryUnit} = {(1 / parseFloat(conversionRate)).toFixed(4)} {unit}
+                      1 {unit} = {(1 / parseFloat(conversionRate)).toFixed(4)} {secondaryUnit}
+                    </div>
+                  )}
+
+                  {/* Top pack unit — built on top of secondaryUnit (e.g. 1 Carton = 12 Box) */}
+                  {hasSecondary && (
+                    <div style={{ marginTop: 16 }}>
+                      <div className="ai-price-card__top">
+                        <span className="ai-price-card__label">TOP PACK UNIT</span>
+                        <span className="ai-price-card__hint-inline">e.g. 1 CARTON = 12 BOX</span>
+                      </div>
+                      <div className="item-conversion__row" style={{ marginTop: 8 }}>
+                        <span className="item-conversion__fixed">1</span>
+                        <select
+                          className="party-modal__input item-conversion__sec-unit"
+                          value={tertiaryUnit}
+                          onChange={(e) => setTertiaryUnit(e.target.value)}
+                          style={{ cursor: "pointer" }}
+                        >
+                          <option value="NONE">— Top Pack Unit —</option>
+                          {UNITS.filter(u => u !== "NONE" && u !== unit && u !== secondaryUnit).map((u) => (
+                            <option key={u} value={u}>{u}</option>
+                          ))}
+                        </select>
+                        <span className="item-conversion__eq">=</span>
+                        <input
+                          className="party-modal__input item-conversion__qty"
+                          type="number" min="0.001" step="any" placeholder="Qty"
+                          value={tertiaryConversionRate}
+                          onChange={(e) => setTertiaryConversionRate(e.target.value)}
+                          disabled={tertiaryUnit === "NONE"}
+                        />
+                        <span className="item-conversion__unit-badge">{secondaryUnit}</span>
+                      </div>
+                      {hasTertiary && tertiaryConversionRate && (
+                        <div className="item-conversion__preview">
+                          1 {tertiaryUnit} = {tertiaryConversionRate} {secondaryUnit}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

@@ -930,14 +930,32 @@ function SalePurchaseByPartyGroupReport() {
 
 // ─── STOCK SUMMARY ────────────────────────────────────────────────────────────
 
-// Splits a raw stock quantity into "X <primary unit> Y <secondary unit>" when the item
-// has a conversion rate set (e.g. 1 Box = 12 Pcs) — otherwise falls back to a plain qty + unit.
-function formatStockQty(qty: number, unit: string, secondaryUnit: string | null, conversionRate: number | null): string {
+// Splits a raw (base-unit) stock quantity into "X Carton Y Box Z Pcs" when the item has
+// conversion rates set — falls back one tier at a time down to a plain qty + unit when
+// the tertiary/secondary data isn't configured.
+function formatStockQty(
+  qty: number,
+  unit: string,
+  secondaryUnit: string | null,
+  conversionRate: number | null,
+  tertiaryUnit?: string | null,
+  tertiaryConversionRate?: number | null,
+): string {
   if (!conversionRate || conversionRate <= 0 || !secondaryUnit) {
     return unit ? `${qty} ${unit}` : String(qty);
   }
   const sign = qty < 0 ? "-" : "";
   const abs = Math.abs(qty);
+
+  if (tertiaryUnit && tertiaryConversionRate && tertiaryConversionRate > 0) {
+    const perTertiary = conversionRate * tertiaryConversionRate;
+    const tertiaryCount = Math.floor(abs / perTertiary);
+    const afterTertiary = abs % perTertiary;
+    const secondaryCount = Math.floor(afterTertiary / conversionRate);
+    const baseRemainder = afterTertiary % conversionRate;
+    return `${sign}${tertiaryCount} ${tertiaryUnit} ${secondaryCount} ${secondaryUnit} ${baseRemainder} ${unit}`;
+  }
+
   const whole = Math.floor(abs / conversionRate);
   const remainder = abs % conversionRate;
   return `${sign}${whole} ${unit} ${remainder} ${secondaryUnit}`;
@@ -974,7 +992,7 @@ function StockSummaryReport() {
                       <td className="rpt-num">{rs(r.salePrice ?? 0)}</td>
                       <td className="rpt-num">{rs(r.purchasePrice ?? 0)}</td>
                       <td className={`rpt-num ${r.stockQty < 0 ? "rpt-red" : "rpt-green"}`}>
-                        {formatStockQty(r.stockQty, r.unit, r.secondaryUnit, r.conversionRate)}
+                        {formatStockQty(r.stockQty, r.unit, r.secondaryUnit, r.conversionRate, r.tertiaryUnit, r.tertiaryConversionRate)}
                       </td>
                       <td className="rpt-num">{rs(r.stockValue ?? 0)}</td>
                     </tr>
