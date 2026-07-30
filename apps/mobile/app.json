@@ -15,7 +15,7 @@
       "package": "pk.vyapar.mobile",
       "config": {
         "googleMaps": {
-          "apiKey": ""
+          "apiKey": "AIzaSyBUrHwBrB6K25A5joFqz9zM0zbi1T61nzU"
         }
       },
       "permissions": [
