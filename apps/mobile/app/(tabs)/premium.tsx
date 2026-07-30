@@ -11,7 +11,7 @@ import { colors } from "../../src/theme";
 import { api } from "../../src/auth";
 import type { LicenseStatus } from "@vyapar/api-client";
 
-const DEMO_KEYS = ["MOBI-VYPR-2026-0001", "MOBI-VYPR-2026-0002", "MOBI-VYPR-2026-0003"];
+const DEMO_KEYS = ["VYPR-MOBI-2026-G7H8", "VYPR-MOBI-2026-J9K0", "VYPR-MOBI-2026-L1M2"];
 
 const PLANS = [
   {

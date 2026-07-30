@@ -110,7 +110,7 @@ export default function LicenseGateScreen() {
       {/* Demo keys hint */}
       <View style={styles.demoBox}>
         <Text style={styles.demoTitle}>Demo Keys (for testing)</Text>
-        {["MOBI-VYPR-2026-0001", "MOBI-VYPR-2026-0002", "MOBI-VYPR-2026-0003"].map((k) => (
+        {["VYPR-MOBI-2026-G7H8", "VYPR-MOBI-2026-J9K0", "VYPR-MOBI-2026-L1M2"].map((k) => (
           <TouchableOpacity key={k} onPress={() => setKey(k)}>
             <Text style={styles.demoKey}>{k}</Text>
           </TouchableOpacity>
