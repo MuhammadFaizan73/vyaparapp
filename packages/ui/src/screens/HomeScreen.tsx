@@ -12,10 +12,6 @@ function fmtShort(n: number): string {
   if (n >= 1_000) return (n / 1_000).toFixed(0) + "K";
   return String(Math.round(n));
 }
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-PK", { day: "2-digit", month: "short" });
-}
-
 const MONTH_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 function getRange(period: Period): { start: Date; end: Date } {
@@ -114,13 +110,22 @@ function SalesChart({ values, labels }: { values: number[]; labels: string[] }) 
   );
 }
 
+type Props = {
+  // Lets Home deep-link into another screen — e.g. "Most Used Reports" opens Reports
+  // already showing that specific report, not just a bare navigation to the section.
+  onNavigate?: (screen: string, reportKey?: string) => void;
+};
+
 // ── Home Screen ───────────────────────────────────────────────────────────────
-export function HomeScreen() {
+export function HomeScreen({ onNavigate }: Props) {
   const [period, setPeriod] = useState<Period>("This Month");
   const [showPeriod, setShowPeriod] = useState(false);
   const [parties, setParties] = useState<Party[]>([]);
   const [sales, setSales] = useState<Transaction[]>([]);
   const [purchases, setPurchases] = useState<Transaction[]>([]);
+  const [expenses, setExpenses] = useState<Transaction[]>([]);
+  const [stockValue, setStockValue] = useState<number | null>(null);
+  const [cashInHand, setCashInHand] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
 
   const range = useMemo(() => getRange(period), [period]);
@@ -153,10 +158,16 @@ export function HomeScreen() {
       api.getParties(),
       api.getTransactionsByType("sale", { from: fetchFrom, to: fetchTo }),
       api.getTransactionsByType("purchase", { from: fetchFrom, to: fetchTo }),
-    ]).then(([ps, ss, pur]) => {
+      api.getTransactionsByType("expense", { from: fetchFrom, to: fetchTo }),
+      api.getReport("stock-summary", {}),
+      api.getCashInHand(),
+    ]).then(([ps, ss, pur, exp, stock, cash]) => {
       setParties(ps);
       setSales(ss);
       setPurchases(pur);
+      setExpenses(exp);
+      setStockValue(stock?.total?.stockValue ?? 0);
+      setCashInHand(cash?.balance ?? 0);
     }).catch(() => {}).finally(() => setLoading(false));
   }, [fetchFrom, fetchTo]);
 
@@ -170,11 +181,6 @@ export function HomeScreen() {
     return { total: neg.reduce((s, p) => s + Math.abs(p.balance), 0), count: neg.length };
   }, [parties]);
 
-  const outstanding = useMemo(() => {
-    const involved = parties.filter(p => p.balance !== 0);
-    return { total: receivable.total + payable.total, count: involved.length };
-  }, [parties, receivable.total, payable.total]);
-
   const periodSales = useMemo(
     () => sales.filter(t => inRange(t.date, range)),
     [sales, range]
@@ -183,9 +189,14 @@ export function HomeScreen() {
     () => purchases.filter(t => inRange(t.date, range)),
     [purchases, range]
   );
+  const periodExpenses = useMemo(
+    () => expenses.filter(t => inRange(t.date, range)),
+    [expenses, range]
+  );
 
   const totalSale = useMemo(() => periodSales.reduce((s, t) => s + t.total, 0), [periodSales]);
   const totalPurchase = useMemo(() => periodPurchases.reduce((s, t) => s + t.total, 0), [periodPurchases]);
+  const totalExpense = useMemo(() => periodExpenses.reduce((s, t) => s + t.total, 0), [periodExpenses]);
 
   const prevSaleTotal = useMemo(
     () => sales.filter(t => inRange(t.date, prevRange)).reduce((s, t) => s + t.total, 0),
@@ -204,19 +215,8 @@ export function HomeScreen() {
     [periodSales, period]
   );
 
-  const recentSales = useMemo(() => {
-    const partyMap: Record<string, string> = {};
-    parties.forEach(p => { partyMap[p.id] = p.name; });
-    return [...sales]
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      .slice(0, 6)
-      .map(t => ({ ...t, partyName: partyMap[t.partyId] ?? "Unknown" }));
-  }, [sales, parties]);
-
-  const AVATAR_COLORS = ["#dbeafe:#1d4ed8","#dcfce7:#15803d","#fef3c7:#b45309","#ede9fe:#6d28d9","#fce7f3:#be185d","#fff1e6:#c2410c"];
-  function avatarStyle(name: string) {
-    const [bg, fg] = (AVATAR_COLORS[name.charCodeAt(0) % AVATAR_COLORS.length] ?? AVATAR_COLORS[0]!).split(":");
-    return { background: bg, color: fg };
+  function goToReport(reportKey: string) {
+    onNavigate?.("reports", reportKey);
   }
 
   return (
@@ -258,7 +258,7 @@ export function HomeScreen() {
               }
             </div>
 
-            <div className="hs-kpi-card hs-kpi-card--border-r">
+            <div className="hs-kpi-card">
               <div className="hs-kpi-top">
                 <span className="hs-kpi-label">Total Payable</span>
                 <div className="hs-kpi-circle hs-kpi-circle--red">
@@ -273,27 +273,6 @@ export function HomeScreen() {
                     <span className="hs-kpi-amt">Rs {fmt(payable.total)}</span>
                     <span className="hs-kpi-sub">
                       {payable.count === 0 ? "No outstanding payables" : `From ${payable.count} ${payable.count === 1 ? "Party" : "Parties"}`}
-                    </span>
-                  </>
-              }
-            </div>
-
-            <div className="hs-kpi-card">
-              <div className="hs-kpi-top">
-                <span className="hs-kpi-label">Total Outstanding</span>
-                <div className="hs-kpi-circle hs-kpi-circle--green">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="20" height="20">
-                    <circle cx="12" cy="12" r="9" />
-                    <path d="M12 7v5l3 3" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </div>
-              </div>
-              {loading
-                ? <span className="hs-kpi-loading">…</span>
-                : <>
-                    <span className="hs-kpi-amt">Rs {fmt(outstanding.total)}</span>
-                    <span className="hs-kpi-sub">
-                      {outstanding.count === 0 ? "No outstanding balances" : `Across ${outstanding.count} ${outstanding.count === 1 ? "Party" : "Parties"}`}
                     </span>
                   </>
               }
@@ -369,11 +348,16 @@ export function HomeScreen() {
           <div className="hs-reports-card">
             <div className="hs-reports-header">
               <span className="hs-reports-title">Most Used Reports</span>
-              <button type="button" className="hs-reports-all">View All</button>
+              <button type="button" className="hs-reports-all" onClick={() => onNavigate?.("reports")}>View All</button>
             </div>
             <div className="hs-reports-grid">
-              {["Sale Report", "All Transactions", "Daybook Report", "Party Statement"].map(label => (
-                <button key={label} type="button" className="hs-report-item">
+              {[
+                { label: "Sale Report", key: "sale" },
+                { label: "All Transactions", key: "all-transactions" },
+                { label: "Daybook Report", key: "day-book" },
+                { label: "Party Statement", key: "party-statement" },
+              ].map(({ label, key }) => (
+                <button key={key} type="button" className="hs-report-item" onClick={() => goToReport(key)}>
                   <span>{label}</span>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="16" height="16">
                     <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
@@ -387,42 +371,39 @@ export function HomeScreen() {
         {/* ── Right sidebar ── */}
         <div className="hs-right">
 
-          {/* Recent Transactions */}
-          <div className="hs-widget">
-            <div className="hs-widget-head">
-              <span className="hs-widget-title">Recent Sales</span>
-              {!loading && <span className="hs-widget-count">{sales.length} total</span>}
+          <button type="button" className="hs-stat-widget" onClick={() => goToReport("stock-summary")}>
+            <div className="hs-stat-widget__head">
+              <span className="hs-stat-widget__label">Stock Value</span>
+              <span className="hs-stat-widget__as-of">As of Now</span>
             </div>
-            {loading ? (
-              <p className="hs-widget-empty">Loading…</p>
-            ) : recentSales.length === 0 ? (
-              <p className="hs-widget-empty">No sales yet. Add your first sale.</p>
-            ) : (
-              <div className="hs-txn-list">
-                {recentSales.map(t => {
-                  const style = avatarStyle(t.partyName);
-                  const isPaid = t.balance === 0;
-                  return (
-                    <div key={t.id} className="hs-txn-row">
-                      <div className="hs-txn-avatar" style={style}>
-                        {t.partyName[0]?.toUpperCase()}
-                      </div>
-                      <div className="hs-txn-info">
-                        <span className="hs-txn-name">{t.partyName}</span>
-                        <span className="hs-txn-date">{fmtDate(t.date)}</span>
-                      </div>
-                      <div className="hs-txn-right">
-                        <span className="hs-txn-amt">Rs {fmt(t.total)}</span>
-                        <span className={`hs-txn-badge${isPaid ? " hs-txn-badge--paid" : " hs-txn-badge--unpaid"}`}>
-                          {isPaid ? "Paid" : "Unpaid"}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+            <span className="hs-stat-widget__val">{loading || stockValue == null ? "…" : `Rs ${fmt(stockValue)}`}</span>
+          </button>
+
+          <button type="button" className="hs-stat-widget" onClick={() => onNavigate?.("cash-in-hand")}>
+            <div className="hs-stat-widget__head">
+              <span className="hs-stat-widget__label">Cash In Hand</span>
+              <span className="hs-stat-widget__as-of">As of Now</span>
+            </div>
+            <span className={`hs-stat-widget__val${(cashInHand ?? 0) < 0 ? " hs-stat-widget__val--neg" : ""}`}>
+              {loading || cashInHand == null ? "…" : `Rs ${fmt(cashInHand)}`}
+            </span>
+          </button>
+
+          <button type="button" className="hs-stat-widget" onClick={() => onNavigate?.("purchase")}>
+            <div className="hs-stat-widget__head">
+              <span className="hs-stat-widget__label">Purchases</span>
+              <span className="hs-stat-widget__as-of">{period}</span>
+            </div>
+            <span className="hs-stat-widget__val">{loading ? "…" : `Rs ${fmt(totalPurchase)}`}</span>
+          </button>
+
+          <button type="button" className="hs-stat-widget" onClick={() => onNavigate?.("purchase")}>
+            <div className="hs-stat-widget__head">
+              <span className="hs-stat-widget__label">Expenses</span>
+              <span className="hs-stat-widget__as-of">{period}</span>
+            </div>
+            <span className="hs-stat-widget__val">{loading ? "…" : `Rs ${fmt(totalExpense)}`}</span>
+          </button>
 
           {/* Add Widget placeholder */}
           <button type="button" className="hs-add-widget">

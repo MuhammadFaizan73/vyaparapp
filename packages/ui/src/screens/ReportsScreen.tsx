@@ -118,8 +118,14 @@ function StatusBadge({ status }: { status: string }) {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export function ReportsScreen() {
-  const [activeKey, setActiveKey] = useState<string | null>(null);
+type Props = {
+  // Lets another screen (e.g. Home's "Most Used Reports") deep-link straight into a
+  // specific report instead of landing on the bare "Select a Report" placeholder.
+  initialReportKey?: string | null;
+};
+
+export function ReportsScreen({ initialReportKey }: Props = {}) {
+  const [activeKey, setActiveKey] = useState<string | null>(initialReportKey ?? null);
   const [panelSearch, setPanelSearch] = useState("");
 
   const filteredGroups = useMemo(() => {

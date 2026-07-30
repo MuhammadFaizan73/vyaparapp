@@ -213,6 +213,7 @@ type Props = {
 
 export function Shell({ status, onLogout, onLicenseActivated }: Props) {
   const [active, setActive]     = useState("home");
+  const [pendingReportKey, setPendingReportKey] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [showReviewOrder, setShowReviewOrder] = useState(false);
   const [showActivate,    setShowActivate]    = useState(false);
@@ -534,7 +535,14 @@ export function Shell({ status, onLogout, onLicenseActivated }: Props) {
 
         {/* ── Screen content ── */}
         <div className="main__scroll-area">
-        {screenKey === "home"        && <HomeScreen />}
+        {screenKey === "home"        && (
+          <HomeScreen
+            onNavigate={(screen, reportKey) => {
+              setPendingReportKey(reportKey ?? null);
+              setActive(screen);
+            }}
+          />
+        )}
         {screenKey === "parties"     && <PartiesScreen  isLocked={isLocked} onLockedAction={handleLockedAction} />}
         {screenKey === "items"       && <ItemsScreen    isLocked={isLocked} onLockedAction={handleLockedAction} onOpenImportItems={() => setActive("utilities-import-items")} />}
         {screenKey === "import-items" && <ImportItemsPage onGoToItems={() => setActive("items")} />}
@@ -547,7 +555,7 @@ export function Shell({ status, onLogout, onLicenseActivated }: Props) {
         {screenKey === "sale-txn"    && <SaleTxnScreen  isLocked={isLocked} onLockedAction={handleLockedAction} activeKey={active} />}
         {screenKey === "purchase"    && <PurchaseScreen isLocked={isLocked} onLockedAction={handleLockedAction} activeKey={active} />}
         {screenKey === "sync-share"  && <SyncShareScreen />}
-        {screenKey === "reports"     && <ReportsScreen />}
+        {screenKey === "reports"     && <ReportsScreen initialReportKey={pendingReportKey} />}
         {screenKey === "bank-accounts" && <BankAccountsScreen />}
         {screenKey === "cash-in-hand"  && <CashInHandScreen />}
         {screenKey === "loan-accounts" && <LoanAccountsScreen />}
