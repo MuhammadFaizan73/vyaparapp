@@ -56,7 +56,7 @@ export const listLicenses = (params?: Record<string, string | number>) =>
 export const expiringSoon = (days = 30) =>
   http.get("/admin/licenses/expiring", { params: { days } }).then((r) => r.data);
 
-export const generateLicenses = (data: { count: number; platform: string; plan: string; daysValid: number }) =>
+export const generateLicenses = (data: { count: number; platform: string; plan: string; daysValid: number; phone?: string }) =>
   http.post("/admin/licenses/generate", data).then((r) => r.data);
 
 export const extendLicense = (id: string, days: number) =>

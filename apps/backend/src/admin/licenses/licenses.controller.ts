@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Patch, Post, Query, Request, UseGuards } from "@nestjs/common";
-import { IsIn, IsInt, IsNotEmpty, IsString, Min } from "class-validator";
+import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Min } from "class-validator";
 import { AdminLicensesService } from "./licenses.service";
 import { AdminGuard, AdminRequest, SuperAdminGuard } from "../admin-auth/admin.guard";
 
@@ -8,6 +8,7 @@ class GenerateDto {
   @IsString() @IsIn(["desktop", "mobile", "both"]) platform!: string;
   @IsString() plan!: string;
   @IsInt() @Min(1) daysValid!: number;
+  @IsOptional() @IsString() phone?: string;
 }
 
 class ExtendDto {

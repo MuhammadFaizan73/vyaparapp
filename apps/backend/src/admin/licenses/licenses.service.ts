@@ -49,8 +49,8 @@ export class AdminLicensesService {
     return { data: enriched, total, page, limit };
   }
 
-  async generate(adminId: string, opts: { count: number; platform: string; plan: string; daysValid: number }) {
-    const { count, platform, plan, daysValid } = opts;
+  async generate(adminId: string, opts: { count: number; platform: string; plan: string; daysValid: number; phone?: string }) {
+    const { count, platform, plan, daysValid, phone } = opts;
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + daysValid);
 
@@ -61,14 +61,14 @@ export class AdminLicensesService {
       while (await this.prisma.license.findUnique({ where: { key } })) {
         key = generateKey(platform);
       }
-      await this.prisma.license.create({ data: { key, plan, platform, expiresAt } });
+      await this.prisma.license.create({ data: { key, plan, platform, expiresAt, phone: phone || null } });
       keys.push(key);
     }
 
     await this.audit.log({
       adminId,
       action: "generate_license",
-      meta: { count, platform, plan, daysValid },
+      meta: { count, platform, plan, daysValid, phone },
     });
 
     return { keys };

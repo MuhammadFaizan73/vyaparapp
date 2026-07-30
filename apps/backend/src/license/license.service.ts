@@ -74,6 +74,13 @@ export class LicenseService {
       throw new BadRequestException("License has expired");
     }
 
+    if (license.phone) {
+      const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+      if (tenant?.phone !== license.phone) {
+        throw new BadRequestException("This license key is assigned to a different mobile number");
+      }
+    }
+
     const conflictField = platform === "desktop" ? "desktopLicenseId" : "mobileLicenseId";
     const existing = await this.prisma.tenant.findFirst({
       where: { [conflictField]: license.id, NOT: { id: tenantId } },

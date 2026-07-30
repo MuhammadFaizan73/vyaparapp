@@ -6,6 +6,7 @@ interface License {
   key: string;
   plan: string;
   platform: string;
+  phone: string | null;
   expiresAt: string;
   computedStatus: string;
   tenant: { id: string; phone: string; companyName: string | null } | null;
@@ -18,7 +19,7 @@ export default function LicenseList() {
   const [page, setPage] = useState(1);
   const [tab, setTab] = useState<"all" | "expiring">("all");
   const [showGenerate, setShowGenerate] = useState(false);
-  const [genForm, setGenForm] = useState({ count: 1, platform: "desktop", plan: "pro", daysValid: 365 });
+  const [genForm, setGenForm] = useState({ count: 1, platform: "desktop", plan: "pro", daysValid: 365, phone: "" });
   const [genResult, setGenResult] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -38,7 +39,7 @@ export default function LicenseList() {
 
   async function handleGenerate() {
     try {
-      const res = await generateLicenses(genForm);
+      const res = await generateLicenses({ ...genForm, phone: genForm.phone.trim() || undefined });
       setGenResult(res.keys);
       load();
     } catch (e: any) {
@@ -131,7 +132,11 @@ export default function LicenseList() {
                 <td className="px-4 py-3 text-gray-500 capitalize">{l.platform}</td>
                 <td className="px-4 py-3 text-gray-500 capitalize">{l.plan}</td>
                 <td className="px-4 py-3 text-gray-700 text-xs">
-                  {l.tenant ? (l.tenant.companyName ?? l.tenant.phone) : <span className="text-gray-400">Unassigned</span>}
+                  {l.tenant
+                    ? (l.tenant.companyName ?? l.tenant.phone)
+                    : l.phone
+                      ? <span className="text-gray-500">Reserved: {l.phone}</span>
+                      : <span className="text-gray-400">Unassigned</span>}
                 </td>
                 <td className="px-4 py-3 text-gray-500 text-xs">{l.expiresAt?.slice(0, 10)}</td>
                 <td className="px-4 py-3">
@@ -211,6 +216,12 @@ export default function LicenseList() {
                     <label className="block text-xs font-medium text-gray-600 mb-1">Valid (days)</label>
                     <input type="number" min={1} className="input" value={genForm.daysValid}
                       onChange={(e) => setGenForm({ ...genForm, daysValid: +e.target.value })} />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Reserve for phone (optional)</label>
+                    <input type="text" placeholder="+923328286016" className="input" value={genForm.phone}
+                      onChange={(e) => setGenForm({ ...genForm, phone: e.target.value })} />
+                    <p className="text-xs text-gray-400 mt-1">If set, only this number can activate the key(s). Leave blank for a generic/demo key.</p>
                   </div>
                 </div>
                 <div className="flex gap-2 pt-2">

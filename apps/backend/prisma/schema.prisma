@@ -45,6 +45,7 @@ model License {
   key           String    @unique
   plan          String    @default("pro")
   platform      String    @default("desktop")
+  phone         String?
   activatedAt   DateTime?
   expiresAt     DateTime
   desktopTenant Tenant?   @relation("DesktopLicense")
