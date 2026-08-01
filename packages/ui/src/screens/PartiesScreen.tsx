@@ -106,6 +106,7 @@ export function PartiesScreen({ isLocked = false, onLockedAction }: PartiesScree
   );
 
   function handleSaved(party: Party) {
+    let isNew = false;
     setParties((prev) => {
       const idx = prev.findIndex((p) => p.id === party.id);
       if (idx >= 0) {
@@ -113,8 +114,13 @@ export function PartiesScreen({ isLocked = false, onLockedAction }: PartiesScree
         next[idx] = party;
         return next;
       }
+      isNew = true;
       return [...prev, party];
     });
+    if (isNew) {
+      setSearch("");
+      setTypeFilter("all");
+    }
     setSelected(party);
     setShowAdd(false);
     setEditParty(null);
