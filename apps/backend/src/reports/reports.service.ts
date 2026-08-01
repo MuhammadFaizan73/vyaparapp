@@ -534,10 +534,11 @@ export class ReportsService {
   // ── All Parties ─────────────────────────────────────────────────────────────
 
   async getAllParties(tenantId: string, companyId?: string) {
-    const parties = await this.prisma.party.findMany({
+    const allParties = await this.prisma.party.findMany({
       where: { tenantId, isSystem: false },
       include: { transactions: { where: companyId ? { companyId } : undefined } },
     });
+    const parties = companyId ? allParties.filter((p) => p.transactions.length > 0) : allParties;
 
     let totalReceivable = 0;
     let totalPayable = 0;

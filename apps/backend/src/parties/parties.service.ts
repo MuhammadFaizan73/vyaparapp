@@ -70,9 +70,10 @@ function toRow(p: any): PartyRow {
 export class PartiesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // companyId, when provided, scopes the receivable/payable balance to that company's
-  // transactions only — the party list itself is never narrowed (parties are shared
-  // across companies), only which transactions count toward each party's balance.
+  // companyId, when provided, scopes both which parties show up (only ones with at
+  // least one transaction tied to that company) and their receivable/payable balance
+  // (computed only from that company's transactions). System parties (e.g. "Cash Sale")
+  // are always kept regardless of the filter.
   async list(tenantId: string, companyId?: string): Promise<PartyRow[]> {
     const parties = await this.prisma.party.findMany({
       where: { tenantId },
@@ -85,7 +86,10 @@ export class PartiesService {
         group: true,
       },
     });
-    return parties.map((p) => {
+    const scoped = companyId
+      ? parties.filter((p) => p.isSystem || (p.transactions?.length ?? 0) > 0)
+      : parties;
+    return scoped.map((p) => {
       let receivable = 0;
       let purchaseTotal = 0;
       let paymentOutTotal = 0;
