@@ -6679,6 +6679,12 @@ body,
 }
 .nsf-add-payment-btn:hover { color: #2563eb; text-decoration: underline; }
 
+.nsf-booker-empty-hint {
+  font-size: 12px;
+  color: #94a3b8;
+  font-style: italic;
+}
+
 .nsf-add-btns { display: flex; flex-direction: column; gap: 5px; margin-top: 6px; }
 .nsf-add-btn {
   display: flex; align-items: center; gap: 8px; background: none;

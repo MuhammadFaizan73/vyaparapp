@@ -2053,9 +2053,9 @@ function NewSaleForm({
             </div>
             <button type="button" className="nsf-add-payment-btn">+ Add Payment type</button>
 
-            {teamMembers.length > 0 && (
-              <div className="nsf-payment-field">
-                <span className="nsf-payment-lbl">Booker</span>
+            <div className="nsf-payment-field">
+              <span className="nsf-payment-lbl">Booker</span>
+              {teamMembers.length > 0 ? (
                 <select
                   className="nsf-payment-select"
                   value={bookerId}
@@ -2066,8 +2066,10 @@ function NewSaleForm({
                     <option key={m.id} value={m.id}>{m.name}</option>
                   ))}
                 </select>
-              </div>
-            )}
+              ) : (
+                <span className="nsf-booker-empty-hint">No team members yet — add one from Team → Add User</span>
+              )}
+            </div>
 
             <div className="nsf-add-btns">
               <button type="button" className="nsf-add-btn">
