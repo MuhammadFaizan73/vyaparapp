@@ -8,12 +8,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { colors } from "../../src/theme";
 import { addItem, consumePendingUnit, pendingUnit } from "../../src/itemsStore";
-import { api } from "../../src/auth";
+import { useSelectedCompany } from "../../src/useSelectedCompany";
 
 type TabId = "pricing" | "stock";
 type MCIName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
-
-type CompanyOption = { id: string; name: string };
 
 export default function NewItemScreen() {
   const router = useRouter();
@@ -34,9 +32,10 @@ export default function NewItemScreen() {
   const [minStock, setMinStock] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // Company selection
-  const [companies, setCompanies] = useState<CompanyOption[]>([]);
-  const [selectedCompany, setSelectedCompany] = useState<CompanyOption | null>(null);
+  // Company selection — defaults to whichever company is globally selected
+  // (the switcher banner shown above the tabs), still changeable per item.
+  const { companies, selectedCompanyId } = useSelectedCompany();
+  const [formCompanyId, setFormCompanyId] = useState(selectedCompanyId ?? "");
   const [showCompanyPicker, setShowCompanyPicker] = useState(false);
 
   useFocusEffect(useCallback(() => {
@@ -47,22 +46,6 @@ export default function NewItemScreen() {
       setSecondaryUnit(u.secondary);
       setConversionRate(u.rate);
     }
-
-    // Load company list
-    async function loadCompanies() {
-      try {
-        const tenant = await api.getTenant();
-        const mainName = tenant.companyName || tenant.phone || "My Company";
-        const main: CompanyOption = { id: "__main__", name: mainName };
-        const extras = Array.isArray(tenant.extraCompanies) ? tenant.extraCompanies : [];
-        const all = [main, ...extras.map((e: { id: string; name: string }) => ({ id: e.id, name: e.name }))];
-        setCompanies(all);
-        if (!selectedCompany) setSelectedCompany(main);
-      } catch {
-        // Offline — keep current selection
-      }
-    }
-    loadCompanies();
   }, []));
 
   async function handleSave() {
@@ -83,7 +66,7 @@ export default function NewItemScreen() {
         purchasePrice,
         openingStock,
         minStock,
-        companyTag: selectedCompany?.name,
+        companyId: formCompanyId || undefined,
       });
       router.back();
     } catch {
@@ -148,7 +131,7 @@ export default function NewItemScreen() {
           <View style={s.companyMid}>
             <Text style={s.companyLabel}>Company</Text>
             <Text style={s.companyValue} numberOfLines={1}>
-              {selectedCompany?.name ?? "Select Company"}
+              {companies.find((c) => c.id === formCompanyId)?.name ?? "No specific company"}
             </Text>
           </View>
           <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
@@ -339,13 +322,24 @@ export default function NewItemScreen() {
             <View style={s.pickerHandle} />
             <Text style={s.pickerTitle}>Select Company</Text>
 
+            <TouchableOpacity
+              style={[s.pickerRow, !formCompanyId && s.pickerRowSelected]}
+              onPress={() => { setFormCompanyId(""); setShowCompanyPicker(false); }}
+              activeOpacity={0.75}
+            >
+              <View style={[s.pickerAvatar, !formCompanyId && s.pickerAvatarSelected]}>
+                <Text style={[s.pickerAvatarTxt, !formCompanyId && { color: "#fff" }]}>—</Text>
+              </View>
+              <Text style={[s.pickerName, !formCompanyId && s.pickerNameSelected]}>No specific company</Text>
+              {!formCompanyId && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
+            </TouchableOpacity>
             {companies.map((c) => {
-              const isSelected = selectedCompany?.id === c.id;
+              const isSelected = formCompanyId === c.id;
               return (
                 <TouchableOpacity
                   key={c.id}
                   style={[s.pickerRow, isSelected && s.pickerRowSelected]}
-                  onPress={() => { setSelectedCompany(c); setShowCompanyPicker(false); }}
+                  onPress={() => { setFormCompanyId(c.id); setShowCompanyPicker(false); }}
                   activeOpacity={0.75}
                 >
                   <View style={[s.pickerAvatar, isSelected && s.pickerAvatarSelected]}>

@@ -5,6 +5,7 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { colors } from "../../src/theme";
 import { getItems, loadItems, subscribeItems, type Item } from "../../src/itemsStore";
+import { useSelectedCompany } from "../../src/useSelectedCompany";
 
 type MCIName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
 
@@ -28,6 +29,7 @@ export default function ItemsScreen() {
   const [search, setSearch] = useState("");
   const [showSearch, setShowSearch] = useState(false);
   const [items, setItems] = useState<Item[]>(getItems());
+  const { selectedCompanyId } = useSelectedCompany();
 
   // Load from disk once on first mount
   useEffect(() => {
@@ -46,13 +48,17 @@ export default function ItemsScreen() {
     return subscribeItems(() => setItems(getItems()));
   }, []);
 
-  const lowItems = items.filter((i) => {
+  const companyItems = selectedCompanyId
+    ? items.filter((i) => (i as any).companyId === selectedCompanyId)
+    : items;
+
+  const lowItems = companyItems.filter((i) => {
     const qty = i.openingStock ?? 0;
     const min = i.minStock ?? 0;
     return min > 0 && qty < min;
   });
 
-  const filtered = items.filter((it) => {
+  const filtered = companyItems.filter((it) => {
     if (tab === "low") {
       const qty = it.openingStock ?? 0;
       const min = it.minStock ?? 0;
@@ -65,7 +71,7 @@ export default function ItemsScreen() {
     return true;
   });
 
-  const stockValue = items.reduce((acc, it) => acc + (it.openingStock ?? 0) * (it.salePrice ?? 0), 0);
+  const stockValue = companyItems.reduce((acc, it) => acc + (it.openingStock ?? 0) * (it.salePrice ?? 0), 0);
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>

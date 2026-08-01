@@ -66,7 +66,7 @@ export async function addItem(body: {
   name: string; sku: string; unit: string; secondaryUnit: string;
   conversionRate: string; mrp: string; salePrice: string;
   purchasePrice: string; openingStock: string; minStock: string;
-  companyTag?: string;
+  companyId?: string;
 }): Promise<Item> {
   const item = await api.createItem({
     name: body.name,
@@ -79,7 +79,7 @@ export async function addItem(body: {
     purchasePrice: body.purchasePrice ? Number(body.purchasePrice) : undefined,
     openingStock: body.openingStock ? Number(body.openingStock) : 0,
     minStock: body.minStock ? Number(body.minStock) : 0,
-    companyTag: body.companyTag || undefined,
+    companyId: body.companyId || undefined,
   });
   items.unshift(item);
   notify();

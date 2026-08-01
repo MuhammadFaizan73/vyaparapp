@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../src/theme";
 import { api } from "../src/auth";
-import type { ExtraCompany } from "./create-company";
+import type { Company } from "@vyapar/api-client";
 
 type ActiveCompany = {
   id: string;
@@ -33,7 +33,7 @@ export default function ManageCompaniesScreen() {
   const insets = useSafeAreaInsets();
 
   const [active, setActive] = useState<ActiveCompany | null>(null);
-  const [extras, setExtras] = useState<ExtraCompany[]>([]);
+  const [extras, setExtras] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Edit-active bottom sheet
@@ -44,7 +44,7 @@ export default function ManageCompaniesScreen() {
   const [saving, setSaving] = useState(false);
 
   // Edit-extra bottom sheet
-  const [editExtra, setEditExtra] = useState<ExtraCompany | null>(null);
+  const [editExtra, setEditExtra] = useState<Company | null>(null);
   const [exName, setExName] = useState("");
   const [exType, setExType] = useState("");
   const [exPhone, setExPhone] = useState("");
@@ -57,10 +57,10 @@ export default function ManageCompaniesScreen() {
     async function load() {
       setLoading(true);
       try {
-        const tenant = await api.getTenant();
+        const [tenant, companies] = await Promise.all([api.getTenant(), api.getCompanies()]);
         if (!cancelled) {
           setActive(tenant);
-          setExtras(Array.isArray(tenant.extraCompanies) ? tenant.extraCompanies : []);
+          setExtras(companies);
         }
       } catch {
         // silently fail — show empty
@@ -97,13 +97,13 @@ export default function ManageCompaniesScreen() {
     }
   }
 
-  function openEditExtra(c: ExtraCompany) {
+  function openEditExtra(c: Company) {
     setEditExtra(c);
     setExName(c.name);
-    setExType(c.businessType);
-    setExPhone(c.phone);
-    setExEmail(c.email);
-    setExGstin(c.gstin);
+    setExType(c.businessType ?? "");
+    setExPhone(c.phone ?? "");
+    setExEmail(c.email ?? "");
+    setExGstin(c.gstin ?? "");
   }
 
   async function saveExtra() {
@@ -111,17 +111,14 @@ export default function ManageCompaniesScreen() {
     if (!exName.trim()) { Alert.alert("Required", "Business name is required."); return; }
     setSavingExtra(true);
     try {
-      const updated: ExtraCompany = {
-        ...editExtra,
+      const updated = await api.updateCompany(editExtra.id, {
         name: exName.trim(),
-        businessType: exType.trim(),
-        phone: exPhone.trim(),
-        email: exEmail.trim(),
-        gstin: exGstin.trim(),
-      };
-      const newList = extras.map(e => e.id === editExtra.id ? updated : e);
-      await api.updateTenant({ extraCompanies: JSON.stringify(newList) });
-      setExtras(newList);
+        businessType: exType.trim() || undefined,
+        phone: exPhone.trim() || undefined,
+        email: exEmail.trim() || undefined,
+        gstin: exGstin.trim() || undefined,
+      });
+      setExtras((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
       setEditExtra(null);
     } catch {
       Alert.alert("Error", "Could not save. Please try again.");
@@ -130,7 +127,7 @@ export default function ManageCompaniesScreen() {
     }
   }
 
-  function confirmDelete(c: ExtraCompany) {
+  function confirmDelete(c: Company) {
     Alert.alert(
       "Delete Company",
       `Remove "${c.name}" from your list?`,
@@ -139,9 +136,8 @@ export default function ManageCompaniesScreen() {
         {
           text: "Delete", style: "destructive",
           onPress: async () => {
-            const newList = extras.filter(e => e.id !== c.id);
-            await api.updateTenant({ extraCompanies: JSON.stringify(newList) });
-            setExtras(newList);
+            await api.deleteCompany(c.id);
+            setExtras((prev) => prev.filter((e) => e.id !== c.id));
           },
         },
       ]

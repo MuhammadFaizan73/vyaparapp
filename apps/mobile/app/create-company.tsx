@@ -5,9 +5,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../src/theme";
 import { api } from "../src/auth";
-import type { ExtraCompany } from "@vyapar/api-client";
-
-export type { ExtraCompany };
 
 export default function CreateCompanyScreen() {
   const router = useRouter();
@@ -26,18 +23,12 @@ export default function CreateCompanyScreen() {
     }
     setSaving(true);
     try {
-      const tenant = await api.getTenant();
-      const existing: ExtraCompany[] = Array.isArray(tenant.extraCompanies) ? tenant.extraCompanies : [];
-      const newCompany: ExtraCompany = {
-        id: Date.now().toString(),
+      await api.createCompany({
         name: name.trim(),
-        businessType: type.trim(),
-        phone: phone.trim(),
-        email: email.trim(),
-        gstin: gstin.trim(),
-      };
-      await api.updateTenant({
-        extraCompanies: JSON.stringify([...existing, newCompany]),
+        businessType: type.trim() || undefined,
+        phone: phone.trim() || undefined,
+        email: email.trim() || undefined,
+        gstin: gstin.trim() || undefined,
       });
       router.back();
     } catch {

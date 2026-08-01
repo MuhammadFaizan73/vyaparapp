@@ -12,6 +12,8 @@ import { colors } from "../../src/theme";
 import { useParties } from "../../src/useParties";
 import { api } from "../../src/auth";
 import { getItems, loadItems, subscribeItems, type Item } from "../../src/itemsStore";
+import { useSelectedCompany } from "../../src/useSelectedCompany";
+import type { TeamMember } from "@vyapar/api-client";
 
 type LineItem = {
   id: string;
@@ -21,8 +23,6 @@ type LineItem = {
   unit: string;
   rate: number;
 };
-
-type CompanyOption = { id: string; name: string };
 
 const UNITS = ["NONE", "PCS", "KG", "LTR", "MTR", "BOX", "BAG", "DOZ"];
 
@@ -48,16 +48,18 @@ export default function NewSaleScreen() {
   }>();
 
   const [catalog, setCatalog] = useState<Item[]>(getItems());
-  const [companies, setCompanies] = useState<CompanyOption[]>([]);
-  const [selectedCompanyFilters, setSelectedCompanyFilters] = useState<string[]>([]);
+  const { companies, selectedCompanyId } = useSelectedCompany();
+  const [selectedCompanyFilters, setSelectedCompanyFilters] = useState<string[]>(
+    () => (selectedCompanyId ? [selectedCompanyId] : []),
+  );
+
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [bookerId, setBookerId] = useState("");
+  const [showBookerPicker, setShowBookerPicker] = useState(false);
 
   useEffect(() => {
     loadItems();
-    api.getTenant().then((tenant) => {
-      const mainName = tenant.companyName || tenant.phone || "My Company";
-      const extras = Array.isArray(tenant.extraCompanies) ? tenant.extraCompanies : [];
-      setCompanies([{ id: "__main__", name: mainName }, ...extras.map((e) => ({ id: e.id, name: e.name }))]);
-    }).catch(() => {});
+    api.listTeamMembers().then(setTeamMembers).catch(() => {});
     return subscribeItems(() => setCatalog(getItems()));
   }, []);
 
@@ -147,7 +149,7 @@ export default function NewSaleScreen() {
       (c.sku ?? "").toLowerCase().includes(itemSearch.toLowerCase());
     const matchesCompany =
       selectedCompanyFilters.length === 0 ||
-      selectedCompanyFilters.some((name) => c.companyTag === name);
+      selectedCompanyFilters.some((id) => (c as any).companyId === id);
     return matchesSearch && matchesCompany;
   });
 
@@ -223,6 +225,8 @@ export default function NewSaleScreen() {
           roundOff: roundOffAmt,
           notes,
         }),
+        companyId: selectedCompanyId ?? undefined,
+        bookerId: bookerId || undefined,
       });
 
       if (params.fromDeliveryNoteId) {
@@ -237,7 +241,7 @@ export default function NewSaleScreen() {
 
       if (andNew) {
         setCustomer(""); setItems([]); setDiscountPct(""); setDiscountRs("");
-        setRoundOff(true); setReceived(false); setReceivedAmt(""); setNotes("");
+        setRoundOff(true); setReceived(false); setReceivedAmt(""); setNotes(""); setBookerId("");
       } else {
         router.replace((params.fromDeliveryNoteId ? "/delivery-note" : "/sale") as never);
       }
@@ -552,6 +556,23 @@ export default function NewSaleScreen() {
             </TouchableOpacity>
           </View>
 
+          {/* ── Booker ── */}
+          <View style={styles.card}>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Booker</Text>
+              <TouchableOpacity style={styles.payTypeBtn} onPress={() => setShowBookerPicker(true)}>
+                <Ionicons name="person-outline" size={16} color={colors.primary} />
+                <Text style={styles.payTypeTxt} numberOfLines={1}>
+                  {teamMembers.find((m) => m.id === bookerId)?.name ?? "No booker"}
+                </Text>
+                <Ionicons name="chevron-down" size={13} color={colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+            {teamMembers.length === 0 && (
+              <Text style={styles.docNote}>No team members yet — add one from Menu → Team</Text>
+            )}
+          </View>
+
           {/* ── Description ── */}
           <View style={styles.card}>
             <View style={styles.notesRow}>
@@ -704,6 +725,33 @@ export default function NewSaleScreen() {
         </View>
       </Modal>
 
+      {/* ── Booker Picker Modal ── */}
+      <Modal visible={showBookerPicker} transparent animationType="slide" onRequestClose={() => setShowBookerPicker(false)}>
+        <TouchableOpacity style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)" }} activeOpacity={1} onPress={() => setShowBookerPicker(false)} />
+        <View style={{ backgroundColor: "#fff", borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, gap: 4, maxHeight: "60%" }}>
+          <Text style={{ fontSize: 16, fontWeight: "700", color: colors.text, marginBottom: 8 }}>Select Booker</Text>
+          <ScrollView>
+            <TouchableOpacity
+              style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: "#f1f5f9" }}
+              onPress={() => { setBookerId(""); setShowBookerPicker(false); }}
+            >
+              <Text style={{ fontSize: 14, color: colors.text }}>No booker</Text>
+              {!bookerId && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
+            </TouchableOpacity>
+            {teamMembers.map((m) => (
+              <TouchableOpacity
+                key={m.id}
+                style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: "#f1f5f9" }}
+                onPress={() => { setBookerId(m.id); setShowBookerPicker(false); }}
+              >
+                <Text style={{ fontSize: 14, color: colors.text }}>{m.name}</Text>
+                {bookerId === m.id && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      </Modal>
+
       {/* ── Add Items to Sale Modal ── */}
       <Modal
         visible={showAddItem}
@@ -741,13 +789,13 @@ export default function NewSaleScreen() {
                     <Text style={[styles.companyChipTxt, selectedCompanyFilters.length === 0 && styles.companyChipTxtActive]}>All</Text>
                   </TouchableOpacity>
                   {companies.map((c) => {
-                    const isActive = selectedCompanyFilters.includes(c.name);
+                    const isActive = selectedCompanyFilters.includes(c.id);
                     return (
                       <TouchableOpacity
                         key={c.id}
                         style={[styles.companyChip, isActive && styles.companyChipActive]}
                         onPress={() => setSelectedCompanyFilters((prev) =>
-                          isActive ? prev.filter((n) => n !== c.name) : [...prev, c.name]
+                          isActive ? prev.filter((id) => id !== c.id) : [...prev, c.id]
                         )}
                       >
                         <Text style={[styles.companyChipTxt, isActive && styles.companyChipTxtActive]}>{c.name}</Text>
