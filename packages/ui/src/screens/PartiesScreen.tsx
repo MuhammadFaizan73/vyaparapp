@@ -155,7 +155,7 @@ export function PartiesScreen({ isLocked = false, onLockedAction }: PartiesScree
   }
 
   function handleExportParties() {
-    const headers = ["Name*", "Contact No.", "Email ID", "Address", "Opening Balance", "Opening Date (dd/MM/yyyy)"];
+    const headers = ["Name*", "Contact No.", "Email ID", "Address", "Opening Balance", "Opening Date (dd/MM/yyyy)", "Party Type"];
     const rows = parties.map((p) => [
       p.name,
       p.phone ?? "",
@@ -163,6 +163,7 @@ export function PartiesScreen({ isLocked = false, onLockedAction }: PartiesScree
       p.billingAddress ?? "",
       p.balance ?? "",
       "",
+      p.partyType ? p.partyType.charAt(0).toUpperCase() + p.partyType.slice(1) : "",
     ]);
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
     ws["!cols"] = headers.map((h) => ({ wch: Math.max(h.length + 4, 18) }));

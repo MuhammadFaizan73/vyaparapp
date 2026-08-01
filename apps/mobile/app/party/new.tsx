@@ -26,7 +26,7 @@ export default function NewPartyScreen() {
   const [ntn, setNtn] = useState("");
   const [cnic, setCnic] = useState("");
   const [strn, setStrn] = useState("");
-  const [partyType, setPartyType] = useState<"customer" | "supplier" | "both">("both");
+  const [partyType, setPartyType] = useState<"customer" | "supplier" | "both" | "other">("both");
   const [saving, setSaving] = useState(false);
 
   // Party Group
@@ -112,9 +112,9 @@ export default function NewPartyScreen() {
 
         {/* Party Type selector */}
         <View style={s.typeRow}>
-          {(["customer", "supplier", "both"] as const).map((t) => {
+          {(["customer", "supplier", "both", "other"] as const).map((t) => {
             const active = partyType === t;
-            const bg = t === "customer" ? "#3b82f6" : t === "supplier" ? "#f59e0b" : "#6d28d9";
+            const bg = t === "customer" ? "#3b82f6" : t === "supplier" ? "#f59e0b" : t === "both" ? "#6d28d9" : "#64748b";
             return (
               <TouchableOpacity
                 key={t}
@@ -123,7 +123,7 @@ export default function NewPartyScreen() {
                 activeOpacity={0.8}
               >
                 <Text style={[s.typeTxt, active && { color: "#fff" }]}>
-                  {t === "customer" ? "Customer" : t === "supplier" ? "Supplier" : "Both"}
+                  {t === "customer" ? "Customer" : t === "supplier" ? "Supplier" : t === "both" ? "Both" : "Other"}
                 </Text>
               </TouchableOpacity>
             );

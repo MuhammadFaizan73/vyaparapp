@@ -201,6 +201,8 @@ export default function PartyListScreen() {
                           ? "#dbeafe"
                           : p.partyType === "supplier"
                           ? "#fef3c7"
+                          : p.partyType === "other"
+                          ? "#f1f5f9"
                           : "#ede9fe",
                     },
                   ]}
@@ -214,6 +216,8 @@ export default function PartyListScreen() {
                             ? "#1d4ed8"
                             : p.partyType === "supplier"
                             ? "#b45309"
+                            : p.partyType === "other"
+                            ? "#475569"
                             : "#6d28d9",
                       },
                     ]}
@@ -222,6 +226,8 @@ export default function PartyListScreen() {
                       ? "C"
                       : p.partyType === "supplier"
                       ? "S"
+                      : p.partyType === "other"
+                      ? "O"
                       : "B"}
                   </Text>
                 </View>

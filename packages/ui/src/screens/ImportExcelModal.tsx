@@ -15,7 +15,15 @@ type RowData = {
   cnic: string;
   ntn: string;
   strn: string;
+  partyType: string;
 };
+
+const PARTY_TYPES = ["customer", "supplier", "both", "other"] as const;
+
+function normalizePartyType(raw: unknown): string {
+  const v = String(raw ?? "").trim().toLowerCase();
+  return PARTY_TYPES.includes(v as any) ? v : "";
+}
 
 type ParsedRow = RowData & { errors: string[] };
 
@@ -34,13 +42,15 @@ function parseDate(raw: unknown): string {
   return String(raw).trim();
 }
 
-function validateRow(r: RowData): string[] {
+function validateRow(r: RowData, rawPartyType: string): string[] {
   const errs: string[] = [];
   if (!r.name.trim()) errs.push("Name is required");
   if (r.openingBalance && isNaN(parseFloat(r.openingBalance)))
     errs.push("Opening Balance must be a number");
   if (r.openingDate && !/^\d{2}\/\d{2}\/\d{4}$/.test(r.openingDate))
     errs.push("Opening Date must be dd/MM/yyyy");
+  if (rawPartyType.trim() && !r.partyType)
+    errs.push("Party Type must be Customer, Supplier, Both, or Other");
   return errs;
 }
 
@@ -62,6 +72,7 @@ export function ImportExcelModal({ onClose, onImported }: Props) {
       const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: "" });
 
       const parsed: ParsedRow[] = raw.map((r) => {
+        const rawPartyType = String(r["Party Type (Customer/Supplier/Both/Other)"] ?? r["Party Type"] ?? "");
         const row: RowData = {
           name: String(r["Name*"] ?? r["Name"] ?? "").trim(),
           phone: String(r["Contact No."] ?? r["Contact No"] ?? r["Phone"] ?? "").trim(),
@@ -73,8 +84,9 @@ export function ImportExcelModal({ onClose, onImported }: Props) {
           cnic: String(r["CNIC"] ?? "").trim(),
           ntn: String(r["NTN"] ?? "").trim(),
           strn: String(r["STRN"] ?? "").trim(),
+          partyType: normalizePartyType(rawPartyType),
         };
-        return { ...row, errors: validateRow(row) };
+        return { ...row, errors: validateRow(row, rawPartyType) };
       });
 
       setRows(parsed);
@@ -131,6 +143,7 @@ export function ImportExcelModal({ onClose, onImported }: Props) {
           cnic: r.cnic || undefined,
           ntn: r.ntn || undefined,
           strn: r.strn || undefined,
+          partyType: (r.partyType || undefined) as any,
         });
       } catch {
         failed++;
@@ -200,7 +213,7 @@ export function ImportExcelModal({ onClose, onImported }: Props) {
                 onClick={() => {
                   const wb = XLSX.utils.book_new();
                   const ws = XLSX.utils.aoa_to_sheet([
-                    ["Name*", "Contact No.", "Email ID", "Address", "Opening Balance", "Opening Date (dd/MM/yyyy)", "Party Group", "CNIC", "NTN", "STRN"],
+                    ["Name*", "Contact No.", "Email ID", "Address", "Opening Balance", "Opening Date (dd/MM/yyyy)", "Party Group", "CNIC", "NTN", "STRN", "Party Type (Customer/Supplier/Both/Other)"],
                   ]);
                   XLSX.utils.book_append_sheet(wb, ws, "Parties");
                   XLSX.writeFile(wb, "parties_template.xlsx");
@@ -305,6 +318,7 @@ export function ImportExcelModal({ onClose, onImported }: Props) {
                   <th>CNIC</th>
                   <th>NTN</th>
                   <th>STRN</th>
+                  <th>Party Type</th>
                 </tr>
               </thead>
               <tbody>
@@ -333,11 +347,14 @@ export function ImportExcelModal({ onClose, onImported }: Props) {
                     <td>{row.cnic}</td>
                     <td>{row.ntn}</td>
                     <td>{row.strn}</td>
+                    <td className={row.errors.some(e => e.includes("Party Type")) ? "import-table__cell--invalid" : ""}>
+                      {row.partyType ? row.partyType.charAt(0).toUpperCase() + row.partyType.slice(1) : ""}
+                    </td>
                   </tr>
                 ))}
                 {displayRows.length === 0 && (
                   <tr>
-                    <td colSpan={11} style={{ textAlign: "center", padding: "32px", color: "#94a3b8" }}>
+                    <td colSpan={12} style={{ textAlign: "center", padding: "32px", color: "#94a3b8" }}>
                       No {activeTab === "valid" ? "valid" : "error"} rows
                     </td>
                   </tr>
