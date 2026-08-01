@@ -10,6 +10,7 @@ import { ReminderModal } from "./ReminderModal";
 import { PrintOptionsModal, type PrintOptions } from "./PrintOptionsModal";
 import { PartyStatementPreview } from "./PartyStatementPreview";
 import { ExcelColumnsModal, downloadPartyExcel } from "./ExcelColumnsModal";
+import { useCompany } from "../lib/CompanyContext";
 
 function fmt(n: number): string {
   return n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -39,8 +40,9 @@ export function PartiesScreen({ isLocked = false, onLockedAction }: PartiesScree
   const [printOptions, setPrintOptions] = useState<PrintOptions | null>(null);
   const [showExcelColumns, setShowExcelColumns] = useState(false);
   const moreMenuRef = useRef<HTMLDivElement>(null);
+  const { selectedCompanyId, setSelectedCompanyId } = useCompany();
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { void load(); }, [selectedCompanyId]);
 
   useEffect(() => {
     if (selected?.id) {
@@ -63,7 +65,7 @@ export function PartiesScreen({ isLocked = false, onLockedAction }: PartiesScree
   async function load() {
     setLoading(true);
     try {
-      const data = await api.getParties();
+      const data = await api.getParties({ companyId: selectedCompanyId ?? undefined });
       setParties(data);
       setSelected((prev) => {
         if (!prev) return data[0] ?? null;
@@ -120,6 +122,10 @@ export function PartiesScreen({ isLocked = false, onLockedAction }: PartiesScree
     if (isNew) {
       setSearch("");
       setTypeFilter("all");
+      // A brand-new party has no transactions yet, so a company filter would make it
+      // vanish again the next time this list refetches — switch to "All Companies" so
+      // it stays visible until it has a transaction tied to a specific company.
+      if (selectedCompanyId) setSelectedCompanyId(null);
     }
     setSelected(party);
     setShowAdd(false);
