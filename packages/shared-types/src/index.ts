@@ -299,6 +299,7 @@ export type BulkSaleImportInvoice = z.infer<typeof BulkSaleImportInvoiceSchema>;
 
 export const BulkSaleImportRequestSchema = z.object({
   companyTag: z.string().optional(),
+  companyId: z.string().uuid().nullable().optional(),
   items: z.array(BulkSaleImportItemSchema),
   parties: z.array(BulkSaleImportPartySchema),
   invoices: z.array(BulkSaleImportInvoiceSchema),
@@ -340,6 +341,7 @@ export type BulkCashFlowEntry = z.infer<typeof BulkCashFlowEntrySchema>;
 
 export const BulkCashFlowImportRequestSchema = z.object({
   companyTag: z.string().optional(),
+  companyId: z.string().uuid().nullable().optional(),
   parties: z.array(BulkCashFlowPartySchema),
   entries: z.array(BulkCashFlowEntrySchema),
 });
@@ -358,6 +360,7 @@ export type BulkExpenseEntry = z.infer<typeof BulkExpenseEntrySchema>;
 
 export const BulkExpenseImportRequestSchema = z.object({
   companyTag: z.string().optional(),
+  companyId: z.string().uuid().nullable().optional(),
   partyName: z.string().optional(),
   entries: z.array(BulkExpenseEntrySchema),
 });

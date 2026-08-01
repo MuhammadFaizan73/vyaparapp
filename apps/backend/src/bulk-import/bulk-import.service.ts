@@ -135,7 +135,7 @@ export class BulkImportService {
     const existingItems = await this.prisma.item.findMany({ where: { tenantId }, select: { name: true } });
     const existingItemNames = new Set(existingItems.map((i) => i.name.trim().toLowerCase()));
     const seenNewItemNames = new Set<string>();
-    const newItems: Array<{ tenantId: string; name: string; unit: string | null; sku: string | null; salePrice: number | null; purchasePrice: number | null; companyTag: string | null }> = [];
+    const newItems: Array<{ tenantId: string; name: string; unit: string | null; sku: string | null; salePrice: number | null; purchasePrice: number | null; companyTag: string | null; companyId: string | null }> = [];
     for (const it of dto.items ?? []) {
       const key = it.name?.trim().toLowerCase();
       if (!key || existingItemNames.has(key) || seenNewItemNames.has(key)) continue;
@@ -148,6 +148,7 @@ export class BulkImportService {
         salePrice: it.salePrice ?? null,
         purchasePrice: it.purchasePrice ?? null,
         companyTag: dto.companyTag || null,
+        companyId: dto.companyId || null,
       });
     }
     if (newItems.length) {
@@ -189,7 +190,7 @@ export class BulkImportService {
 
     // 4. Build + batch-insert transactions, chunked so progress is visible while polling.
     const invoices = dto.invoices ?? [];
-    let buffer: Array<{ tenantId: string; partyId: string; type: string; number: string; date: Date; total: number; balance: number; notes: string }> = [];
+    let buffer: Array<{ tenantId: string; partyId: string; type: string; number: string; date: Date; total: number; balance: number; notes: string; companyId: string | null }> = [];
 
     const flush = async () => {
       if (!buffer.length) return;
@@ -223,6 +224,7 @@ export class BulkImportService {
         // line items as a bare JSON array in `notes`, not wrapped in an object — match that
         // convention exactly or the invoice-edit/view screen won't recognize the items.
         notes: JSON.stringify((inv.lineItems ?? []).map((li) => ({ name: li.name, qty: li.qty, unit: li.unit, rate: li.rate }))),
+        companyId: dto.companyId || null,
       });
 
       if (buffer.length >= CHUNK_SIZE) await flush();
@@ -265,7 +267,7 @@ export class BulkImportService {
 
     // 3. Build + batch-insert payment_in / payment_out transactions.
     const entries = dto.entries ?? [];
-    let buffer: Array<{ tenantId: string; partyId: string; type: string; number: string; date: Date; total: number; balance: number; notes: string }> = [];
+    let buffer: Array<{ tenantId: string; partyId: string; type: string; number: string; date: Date; total: number; balance: number; notes: string; companyId: string | null }> = [];
 
     const flush = async () => {
       if (!buffer.length) return;
@@ -298,6 +300,7 @@ export class BulkImportService {
         // since this import has no invoice-linking data to consume any of it.
         balance: e.amount,
         notes: JSON.stringify({ paymentType: "Cash", receiptNo: e.number, description: e.description }),
+        companyId: dto.companyId || null,
       });
 
       if (buffer.length >= CHUNK_SIZE) await flush();
@@ -331,7 +334,7 @@ export class BulkImportService {
 
     // 3. Build + batch-insert expense transactions.
     const entries = dto.entries ?? [];
-    let buffer: Array<{ tenantId: string; partyId: string; type: string; number: string; date: Date; total: number; balance: number; notes: string }> = [];
+    let buffer: Array<{ tenantId: string; partyId: string; type: string; number: string; date: Date; total: number; balance: number; notes: string; companyId: string | null }> = [];
 
     const flush = async () => {
       if (!buffer.length) return;
@@ -363,6 +366,7 @@ export class BulkImportService {
         // and already settled (all rows show 0), unlike the manual form's always-unpaid default.
         balance: e.balance ?? e.amount,
         notes: JSON.stringify({ category: e.category, paymentType: e.paymentType, items: [], description: e.description }),
+        companyId: dto.companyId || null,
       });
 
       if (buffer.length >= CHUNK_SIZE) await flush();

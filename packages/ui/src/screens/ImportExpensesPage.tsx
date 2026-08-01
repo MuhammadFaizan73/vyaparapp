@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import { api } from "../lib/api";
+import { useCompany } from "../lib/CompanyContext";
 
 const REQUIRED_HEADERS = ["Date", "Category Name", "Payment Type", "Total Amount"];
 const DEFAULT_PARTY_NAME = "Business Expenses";
@@ -116,6 +117,7 @@ export function ImportExpensesPage({ onGoToExpenses }: Props) {
   const [parseError, setParseError] = useState<string | null>(null);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [progress, setProgress] = useState<JobProgress | null>(null);
+  const { selectedCompanyId } = useCompany();
 
   function parseFile(file: File) {
     setParseError(null);
@@ -155,6 +157,7 @@ export function ImportExpensesPage({ onGoToExpenses }: Props) {
     try {
       const { jobId } = await api.startExpenseImport({
         partyName: DEFAULT_PARTY_NAME,
+        companyId: selectedCompanyId ?? undefined,
         entries: summary.entries.map((e) => ({
           category: e.category, paymentType: e.paymentType, date: e.date,
           amount: e.amount, balance: e.balance, number: e.number, description: e.description,

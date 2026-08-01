@@ -177,6 +177,9 @@ export function ImportPurchaseHistoryPage({ onGoToPurchases }: Props) {
 
   const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
   const [companyTag, setCompanyTag] = useState("");
+  // `companies` entries (other than the synthetic "__main__" row) carry real Company UUIDs —
+  // resolve the selected name back to its id so imported invoices get a real companyId too.
+  const selectedCompanyId = companies.find((c) => c.name === companyTag && c.id !== "__main__")?.id;
 
   useMemo(() => {
     api.getTenant().then((t) => {
@@ -232,6 +235,7 @@ export function ImportPurchaseHistoryPage({ onGoToPurchases }: Props) {
     try {
       const { jobId } = await api.startPurchaseHistoryImport({
         companyTag: companyTag || undefined,
+        companyId: selectedCompanyId ?? undefined,
         items: summary.items.map((i) => ({ name: i.name, unit: i.unit, sku: i.sku, purchasePrice: i.purchasePrice })),
         parties: summary.parties.map((p) => ({ name: p.name, phone: p.phone })),
         invoices: summary.invoices.map((inv) => ({

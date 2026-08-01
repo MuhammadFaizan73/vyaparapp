@@ -32,6 +32,7 @@ export class BulkSaleImportInvoiceDto {
 
 export class BulkSaleImportRequestDto {
   @IsOptional() @IsString() companyTag?: string;
+  @IsOptional() @IsString() companyId?: string;
   @IsArray() items!: BulkSaleImportItemDto[];
   @IsArray() parties!: BulkSaleImportPartyDto[];
   @IsArray() invoices!: BulkSaleImportInvoiceDto[];
@@ -52,6 +53,7 @@ export class BulkCashFlowEntryDto {
 
 export class BulkCashFlowImportRequestDto {
   @IsOptional() @IsString() companyTag?: string;
+  @IsOptional() @IsString() companyId?: string;
   @IsArray() parties!: BulkCashFlowPartyDto[];
   @IsArray() entries!: BulkCashFlowEntryDto[];
 }
@@ -68,6 +70,7 @@ export class BulkExpenseEntryDto {
 
 export class BulkExpenseImportRequestDto {
   @IsOptional() @IsString() companyTag?: string;
+  @IsOptional() @IsString() companyId?: string;
   @IsOptional() @IsString() partyName?: string;
   @IsArray() entries!: BulkExpenseEntryDto[];
 }

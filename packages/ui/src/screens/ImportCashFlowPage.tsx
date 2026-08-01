@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import { api } from "../lib/api";
+import { useCompany } from "../lib/CompanyContext";
 
 const REQUIRED_HEADERS = ["Date", "Name", "Type", "Cash In Amount", "Cash Out Amount"];
 
@@ -134,6 +135,7 @@ export function ImportCashFlowPage({ onGoToParties }: Props) {
   const [parseError, setParseError] = useState<string | null>(null);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [progress, setProgress] = useState<JobProgress | null>(null);
+  const { selectedCompanyId } = useCompany();
 
   function parseFile(file: File) {
     setParseError(null);
@@ -172,6 +174,7 @@ export function ImportCashFlowPage({ onGoToParties }: Props) {
     });
     try {
       const { jobId } = await api.startCashFlowImport({
+        companyId: selectedCompanyId ?? undefined,
         parties: summary.parties.map((p) => ({ name: p.name })),
         entries: summary.entries.map((e) => ({
           partyName: e.partyName, type: e.type, date: e.date,

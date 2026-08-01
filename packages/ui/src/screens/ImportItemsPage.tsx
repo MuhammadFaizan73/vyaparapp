@@ -133,6 +133,10 @@ export function ImportItemsPage({ onGoToItems }: Props) {
 
   const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
   const [companyTag, setCompanyTag] = useState("");
+  // `companies` entries (other than the synthetic "__main__" row) now carry real Company
+  // UUIDs — resolve the selected name back to its id so imported items get a real companyId,
+  // not just the legacy free-text companyTag.
+  const selectedCompanyId = companies.find((c) => c.name === companyTag && c.id !== "__main__")?.id;
 
   useMemo(() => {
     api.getTenant().then((t) => {
@@ -244,6 +248,9 @@ export function ImportItemsPage({ onGoToItems }: Props) {
           taxRate: r.taxRate,
           inclusiveOfTax: r.inclusiveOfTax || undefined,
           companyTag: r.companyTag || companyTag || undefined,
+          companyId: (r.companyTag
+            ? companies.find((c) => c.name.toLowerCase() === r.companyTag.trim().toLowerCase() && c.id !== "__main__")?.id
+            : selectedCompanyId) || undefined,
         });
         ok++;
       } catch {
