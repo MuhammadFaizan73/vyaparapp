@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { api } from "../lib/api";
 import type { Transaction, Party } from "@vyapar/api-client";
+import { useCompany } from "../lib/CompanyContext";
 
 /* ── helpers ── */
 function fmt(n: number) {
@@ -74,13 +75,15 @@ export function PaymentInScreen({ isLocked = false, onLockedAction }: Props) {
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
   const [deleteConfirmRow, setDeleteConfirmRow] = useState<PiRow | null>(null);
   const [viewHistoryRow, setViewHistoryRow] = useState<PiRow | null>(null);
+  const { selectedCompanyId } = useCompany();
 
   async function loadData() {
     try {
+      const companyId = selectedCompanyId ?? undefined;
       const [txns, ps, sum] = await Promise.all([
-        api.getTransactionsByType("payment_in", { take: RECENT_ROWS_LIMIT }),
+        api.getTransactionsByType("payment_in", { take: RECENT_ROWS_LIMIT, companyId }),
         api.getParties(),
-        api.getTransactionsSummary("payment_in"),
+        api.getTransactionsSummary("payment_in", { companyId }),
       ]);
       const map = Object.fromEntries(ps.map((p: Party) => [p.id, p]));
       const oldest = txns[txns.length - 1];
@@ -95,7 +98,7 @@ export function PaymentInScreen({ isLocked = false, onLockedAction }: Props) {
   useEffect(() => {
     setLoading(true);
     loadData().finally(() => setLoading(false));
-  }, []);
+  }, [selectedCompanyId]);
 
   useEffect(() => {
     if (!menuId) return;
@@ -124,6 +127,7 @@ export function PaymentInScreen({ isLocked = false, onLockedAction }: Props) {
         total: row.total,
         balance: row.total,
         notes: row.notes ?? undefined,
+        companyId: selectedCompanyId ?? undefined,
       });
       setLoading(true);
       await loadData();
@@ -386,6 +390,7 @@ export function PaymentInForm({
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const { selectedCompanyId } = useCompany();
 
   /* Link Payment state */
   const [partyInvoices, setPartyInvoices] = useState<Transaction[]>([]);
@@ -435,6 +440,7 @@ export function PaymentInForm({
           total: receivedAmt,
           balance: unusedAmt,
           notes: notesJson,
+          companyId: selectedCompanyId ?? null,
         });
       } else {
         await api.createTransaction({
@@ -445,6 +451,7 @@ export function PaymentInForm({
           total: receivedAmt,
           balance: unusedAmt,
           notes: notesJson,
+          companyId: selectedCompanyId ?? undefined,
         });
       }
 

@@ -60,8 +60,9 @@ export class ReportsController {
     @Req() req: AuthedRequest,
     @Query('from') from?: string,
     @Query('to') to?: string,
+    @Query('companyId') companyId?: string,
   ) {
-    return this.reports.getProfitAndLoss(req.tenantId, from, to);
+    return this.reports.getProfitAndLoss(req.tenantId, from, to, companyId);
   }
 
   @Get('cash-flow')
@@ -69,8 +70,9 @@ export class ReportsController {
     @Req() req: AuthedRequest,
     @Query('from') from?: string,
     @Query('to') to?: string,
+    @Query('companyId') companyId?: string,
   ) {
-    return this.reports.getCashFlow(req.tenantId, from, to);
+    return this.reports.getCashFlow(req.tenantId, from, to, companyId);
   }
 
   @Get('party-statement')
@@ -85,8 +87,8 @@ export class ReportsController {
   }
 
   @Get('all-parties')
-  getAllParties(@Req() req: AuthedRequest) {
-    return this.reports.getAllParties(req.tenantId);
+  getAllParties(@Req() req: AuthedRequest, @Query('companyId') companyId?: string) {
+    return this.reports.getAllParties(req.tenantId, companyId);
   }
 
   @Get('party-report-by-item')
@@ -94,8 +96,9 @@ export class ReportsController {
     @Req() req: AuthedRequest,
     @Query('from') from?: string,
     @Query('to') to?: string,
+    @Query('companyId') companyId?: string,
   ) {
-    return this.reports.getPartyReportByItem(req.tenantId, from, to);
+    return this.reports.getPartyReportByItem(req.tenantId, from, to, companyId);
   }
 
   @Get('sale-purchase-by-party')
@@ -103,8 +106,9 @@ export class ReportsController {
     @Req() req: AuthedRequest,
     @Query('from') from?: string,
     @Query('to') to?: string,
+    @Query('companyId') companyId?: string,
   ) {
-    return this.reports.getSalePurchaseByParty(req.tenantId, from, to);
+    return this.reports.getSalePurchaseByParty(req.tenantId, from, to, companyId);
   }
 
   @Get('sale-purchase-by-party-group')
@@ -112,8 +116,9 @@ export class ReportsController {
     @Req() req: AuthedRequest,
     @Query('from') from?: string,
     @Query('to') to?: string,
+    @Query('companyId') companyId?: string,
   ) {
-    return this.reports.getSalePurchaseByPartyGroup(req.tenantId, from, to);
+    return this.reports.getSalePurchaseByPartyGroup(req.tenantId, from, to, companyId);
   }
 
   @Get('stock-summary')
@@ -126,8 +131,8 @@ export class ReportsController {
   }
 
   @Get('low-stock')
-  getLowStock(@Req() req: AuthedRequest) {
-    return this.reports.getLowStock(req.tenantId);
+  getLowStock(@Req() req: AuthedRequest, @Query('companyId') companyId?: string) {
+    return this.reports.getLowStock(req.tenantId, companyId);
   }
 
   @Get('stock-detail')
@@ -135,8 +140,9 @@ export class ReportsController {
     @Req() req: AuthedRequest,
     @Query('from') from?: string,
     @Query('to') to?: string,
+    @Query('companyId') companyId?: string,
   ) {
-    return this.reports.getStockDetail(req.tenantId, from, to);
+    return this.reports.getStockDetail(req.tenantId, from, to, companyId);
   }
 
   @Get('item-detail')
@@ -145,8 +151,9 @@ export class ReportsController {
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('itemName') itemName?: string,
+    @Query('companyId') companyId?: string,
   ) {
-    return this.reports.getItemDetail(req.tenantId, from, to, itemName);
+    return this.reports.getItemDetail(req.tenantId, from, to, itemName, companyId);
   }
 
   @Get('item-wise-pnl')
@@ -154,8 +161,9 @@ export class ReportsController {
     @Req() req: AuthedRequest,
     @Query('from') from?: string,
     @Query('to') to?: string,
+    @Query('companyId') companyId?: string,
   ) {
-    return this.reports.getItemWisePnl(req.tenantId, from, to);
+    return this.reports.getItemWisePnl(req.tenantId, from, to, companyId);
   }
 
   @Get('item-category-pnl')
@@ -163,8 +171,9 @@ export class ReportsController {
     @Req() req: AuthedRequest,
     @Query('from') from?: string,
     @Query('to') to?: string,
+    @Query('companyId') companyId?: string,
   ) {
-    return this.reports.getItemCategoryPnl(req.tenantId, from, to);
+    return this.reports.getItemCategoryPnl(req.tenantId, from, to, companyId);
   }
 
   @Get('sale-purchase-by-item-category')
@@ -172,13 +181,14 @@ export class ReportsController {
     @Req() req: AuthedRequest,
     @Query('from') from?: string,
     @Query('to') to?: string,
+    @Query('companyId') companyId?: string,
   ) {
-    return this.reports.getSalePurchaseByItemCategory(req.tenantId, from, to);
+    return this.reports.getSalePurchaseByItemCategory(req.tenantId, from, to, companyId);
   }
 
   @Get('stock-summary-by-category')
-  getStockSummaryByCategory(@Req() req: AuthedRequest) {
-    return this.reports.getStockSummaryByCategory(req.tenantId);
+  getStockSummaryByCategory(@Req() req: AuthedRequest, @Query('companyId') companyId?: string) {
+    return this.reports.getStockSummaryByCategory(req.tenantId, companyId);
   }
 
   @Get('item-wise-discount')
@@ -231,8 +241,9 @@ export class ReportsController {
     @Req() req: AuthedRequest,
     @Query('from') from?: string,
     @Query('to') to?: string,
+    @Query('companyId') companyId?: string,
   ) {
-    return this.reports.getExpense(req.tenantId, from, to);
+    return this.reports.getExpense(req.tenantId, from, to, companyId);
   }
 
   @Get('expense-category')
@@ -240,8 +251,9 @@ export class ReportsController {
     @Req() req: AuthedRequest,
     @Query('from') from?: string,
     @Query('to') to?: string,
+    @Query('companyId') companyId?: string,
   ) {
-    return this.reports.getExpenseCategory(req.tenantId, from, to);
+    return this.reports.getExpenseCategory(req.tenantId, from, to, companyId);
   }
 
   @Get('expense-item')
@@ -249,8 +261,9 @@ export class ReportsController {
     @Req() req: AuthedRequest,
     @Query('from') from?: string,
     @Query('to') to?: string,
+    @Query('companyId') companyId?: string,
   ) {
-    return this.reports.getExpenseItem(req.tenantId, from, to);
+    return this.reports.getExpenseItem(req.tenantId, from, to, companyId);
   }
 
   @Get('sale-purchase-orders')
@@ -260,8 +273,9 @@ export class ReportsController {
     @Query('to') to?: string,
     @Query('orderType') orderType?: string,
     @Query('status') status?: string,
+    @Query('companyId') companyId?: string,
   ) {
-    return this.reports.getSalePurchaseOrders(req.tenantId, from, to, orderType, status);
+    return this.reports.getSalePurchaseOrders(req.tenantId, from, to, orderType, status, companyId);
   }
 
   @Get('sale-purchase-order-items')
@@ -271,8 +285,9 @@ export class ReportsController {
     @Query('to') to?: string,
     @Query('orderType') orderType?: string,
     @Query('status') status?: string,
+    @Query('companyId') companyId?: string,
   ) {
-    return this.reports.getSalePurchaseOrderItems(req.tenantId, from, to, orderType, status);
+    return this.reports.getSalePurchaseOrderItems(req.tenantId, from, to, orderType, status, companyId);
   }
 
   @Get('loan-statement')

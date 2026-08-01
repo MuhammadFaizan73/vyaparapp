@@ -5,7 +5,7 @@ import { api } from "../lib/api";
 import type { PartySettings } from "./PartySettingsDrawer";
 import { DEFAULT_PARTY_SETTINGS } from "./PartySettingsDrawer";
 
-type PartyType = "customer" | "supplier" | "both";
+type PartyType = "customer" | "supplier" | "both" | "other";
 
 type Props = {
   onClose: () => void;
@@ -190,20 +190,20 @@ export function AddPartyModal({ onClose, onSaved, party, settings = DEFAULT_PART
 
           {/* Party Type selector */}
           <div className="party-modal__type-row">
-            {(["customer", "supplier", "both"] as PartyType[]).map((t) => (
+            {(["customer", "supplier", "both", "other"] as PartyType[]).map((t) => (
               <button
                 key={t}
                 type="button"
                 className={`party-modal__type-btn${partyType === t ? " party-modal__type-btn--active" : ""}`}
                 style={{
                   background: partyType === t
-                    ? t === "customer" ? "#3b82f6" : t === "supplier" ? "#f59e0b" : "#6d28d9"
+                    ? t === "customer" ? "#3b82f6" : t === "supplier" ? "#f59e0b" : t === "both" ? "#6d28d9" : "#64748b"
                     : "#f3f4f6",
                   color: partyType === t ? "#fff" : "#374151",
                 }}
                 onClick={() => setPartyType(t)}
               >
-                {t === "customer" ? "Customer" : t === "supplier" ? "Supplier" : "Both"}
+                {t === "customer" ? "Customer" : t === "supplier" ? "Supplier" : t === "both" ? "Both" : "Other"}
               </button>
             ))}
           </div>

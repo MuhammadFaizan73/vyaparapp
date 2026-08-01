@@ -20,7 +20,7 @@ export class CreatePartyDto {
   @IsOptional() @IsString() ntn?: string;
   @IsOptional() @IsString() cnic?: string;
   @IsOptional() @IsString() strn?: string;
-  @IsOptional() @IsString() @IsIn(["customer", "supplier", "both"]) partyType?: string;
+  @IsOptional() @IsString() @IsIn(["customer", "supplier", "both", "other"]) partyType?: string;
   @IsOptional() @IsString() groupId?: string;
   @IsOptional() @IsNumber() latitude?: number;
   @IsOptional() @IsNumber() longitude?: number;
@@ -46,7 +46,7 @@ export class UpdatePartyDto {
   @IsOptional() @IsString() ntn?: string;
   @IsOptional() @IsString() cnic?: string;
   @IsOptional() @IsString() strn?: string;
-  @IsOptional() @IsString() @IsIn(["customer", "supplier", "both"]) partyType?: string;
+  @IsOptional() @IsString() @IsIn(["customer", "supplier", "both", "other"]) partyType?: string;
   @IsOptional() @IsString() groupId?: string;
   @IsOptional() @IsNumber() latitude?: number;
   @IsOptional() @IsNumber() longitude?: number;

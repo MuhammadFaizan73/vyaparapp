@@ -38,8 +38,9 @@ export class TransactionsController {
     @Query("type") type: string,
     @Query("from") from?: string,
     @Query("to") to?: string,
+    @Query("companyId") companyId?: string,
   ) {
-    return this.transactionsService.summaryByType(req.tenantId, type, { from, to });
+    return this.transactionsService.summaryByType(req.tenantId, type, { from, to, companyId });
   }
 
   @Get("opening-balance")

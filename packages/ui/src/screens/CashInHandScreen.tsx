@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "../lib/api";
+import { useCompany } from "../lib/CompanyContext";
 
 type CashTxn = {
   id: string;
@@ -44,6 +45,7 @@ function AdjustCashModal({
   const [desc, setDesc]       = useState("");
   const [saving, setSaving]   = useState(false);
   const [error, setError]     = useState("");
+  const { selectedCompanyId } = useCompany();
 
   const parsedAmount = parseFloat(amount) || 0;
   const updatedBalance =
@@ -59,7 +61,7 @@ function AdjustCashModal({
     setSaving(true);
     setError("");
     try {
-      await api.adjustCash({ mode, amount: parsedAmount, date, description: desc });
+      await api.adjustCash({ mode, amount: parsedAmount, date, description: desc, companyId: selectedCompanyId ?? undefined });
       onSaved();
     } catch (e: any) {
       setError(e?.response?.data?.message ?? "Something went wrong.");
@@ -153,19 +155,20 @@ export function CashInHandScreen() {
   const [showAdjust, setShowAdjust]   = useState(false);
   const [search, setSearch]           = useState("");
   const [typeFilter, setTypeFilter]   = useState("all");
+  const { selectedCompanyId } = useCompany();
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.getCashInHand();
+      const res = await api.getCashInHand({ companyId: selectedCompanyId ?? undefined });
       setData(res);
     } catch (e: any) {
       setError(e?.response?.data?.message ?? "Failed to load Cash In Hand data.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedCompanyId]);
 
   useEffect(() => { load(); }, [load]);
 

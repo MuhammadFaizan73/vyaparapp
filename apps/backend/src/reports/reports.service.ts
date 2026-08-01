@@ -283,7 +283,7 @@ export class ReportsService {
 
   // ── Profit & Loss ───────────────────────────────────────────────────────────
 
-  async getProfitAndLoss(tenantId: string, from?: string, to?: string) {
+  async getProfitAndLoss(tenantId: string, from?: string, to?: string, companyId?: string) {
     const dateFilter = buildDateFilter(from, to);
     const fromDate = parseDate(from);
     const toDate = parseDate(to);
@@ -292,6 +292,7 @@ export class ReportsService {
       where: {
         tenantId,
         ...(dateFilter ? { date: dateFilter } : {}),
+        ...(companyId && { companyId }),
       },
     });
 
@@ -312,7 +313,7 @@ export class ReportsService {
     }
 
     // All items for stock valuation
-    const items = await this.prisma.item.findMany({ where: { tenantId } });
+    const items = await this.prisma.item.findMany({ where: { tenantId, ...(companyId && { companyId }) } });
 
     // Opening stock = items that existed before `from` valued at purchasePrice
     // We approximate by using all items' openingStock field
@@ -329,6 +330,7 @@ export class ReportsService {
         tenantId,
         type: { in: ['purchase', 'sale', 'credit_note', 'debit_note'] },
         ...(toDate ? { date: { lte: endOfDay(toDate) } } : {}),
+        ...(companyId && { companyId }),
       },
     });
 
@@ -378,7 +380,7 @@ export class ReportsService {
 
   // ── Cash Flow ───────────────────────────────────────────────────────────────
 
-  async getCashFlow(tenantId: string, from?: string, to?: string) {
+  async getCashFlow(tenantId: string, from?: string, to?: string, companyId?: string) {
     const fromDate = parseDate(from);
     const toDate = parseDate(to);
     const dateFilter = buildDateFilter(from, to);
@@ -392,6 +394,7 @@ export class ReportsService {
           tenantId,
           type: { in: ['payment_in', 'payment_out', 'opening_balance'] },
           date: { lt: beforeFrom },
+          ...(companyId && { companyId }),
         },
       });
       for (const t of preTxns) {
@@ -408,6 +411,7 @@ export class ReportsService {
         tenantId,
         type: { in: ['sale', 'purchase', 'payment_in', 'payment_out', 'expense', 'opening_balance'] },
         ...(dateFilter ? { date: dateFilter } : {}),
+        ...(companyId && { companyId }),
       },
       include: { party: true },
       orderBy: { date: 'asc' },
@@ -529,10 +533,10 @@ export class ReportsService {
 
   // ── All Parties ─────────────────────────────────────────────────────────────
 
-  async getAllParties(tenantId: string) {
+  async getAllParties(tenantId: string, companyId?: string) {
     const parties = await this.prisma.party.findMany({
       where: { tenantId, isSystem: false },
-      include: { transactions: true },
+      include: { transactions: { where: companyId ? { companyId } : undefined } },
     });
 
     let totalReceivable = 0;
@@ -588,7 +592,7 @@ export class ReportsService {
 
   // ── Party Report By Item ────────────────────────────────────────────────────
 
-  async getPartyReportByItem(tenantId: string, from?: string, to?: string) {
+  async getPartyReportByItem(tenantId: string, from?: string, to?: string, companyId?: string) {
     const dateFilter = buildDateFilter(from, to);
 
     const txns = await this.prisma.transaction.findMany({
@@ -596,6 +600,7 @@ export class ReportsService {
         tenantId,
         type: { in: ['sale', 'purchase', 'credit_note', 'debit_note'] },
         ...(dateFilter ? { date: dateFilter } : {}),
+        ...(companyId && { companyId }),
       },
       include: { party: true },
     });
@@ -645,7 +650,7 @@ export class ReportsService {
 
   // ── Sale/Purchase By Party ──────────────────────────────────────────────────
 
-  async getSalePurchaseByParty(tenantId: string, from?: string, to?: string) {
+  async getSalePurchaseByParty(tenantId: string, from?: string, to?: string, companyId?: string) {
     const dateFilter = buildDateFilter(from, to);
 
     const txns = await this.prisma.transaction.findMany({
@@ -653,6 +658,7 @@ export class ReportsService {
         tenantId,
         type: { in: ['sale', 'purchase'] },
         ...(dateFilter ? { date: dateFilter } : {}),
+        ...(companyId && { companyId }),
       },
       include: { party: true },
     });
@@ -678,8 +684,8 @@ export class ReportsService {
 
   // ── Sale/Purchase By Party Group ────────────────────────────────────────────
 
-  async getSalePurchaseByPartyGroup(tenantId: string, from?: string, to?: string) {
-    const { totalSaleAmount, totalPurchaseAmount } = await this.getSalePurchaseByParty(tenantId, from, to);
+  async getSalePurchaseByPartyGroup(tenantId: string, from?: string, to?: string, companyId?: string) {
+    const { totalSaleAmount, totalPurchaseAmount } = await this.getSalePurchaseByParty(tenantId, from, to, companyId);
     return {
       groups: [
         {
@@ -817,9 +823,9 @@ export class ReportsService {
 
   // ── Low Stock ───────────────────────────────────────────────────────────────
 
-  async getLowStock(tenantId: string) {
-    const items = await this.prisma.item.findMany({ where: { tenantId } });
-    const stockMap = await this.computeStockMap(tenantId, items);
+  async getLowStock(tenantId: string, companyId?: string) {
+    const items = await this.prisma.item.findMany({ where: { tenantId, ...(companyId && { companyId }) } });
+    const stockMap = await this.computeStockMap(tenantId, items, undefined, companyId);
 
     let totalStockQty = 0;
     let totalStockValue = 0;
@@ -852,16 +858,16 @@ export class ReportsService {
 
   // ── Stock Detail ────────────────────────────────────────────────────────────
 
-  async getStockDetail(tenantId: string, from?: string, to?: string) {
+  async getStockDetail(tenantId: string, from?: string, to?: string, companyId?: string) {
     const fromDate = parseDate(from);
     const toDate = parseDate(to);
     const dateFilter = buildDateFilter(from, to);
 
-    const items = await this.prisma.item.findMany({ where: { tenantId } });
+    const items = await this.prisma.item.findMany({ where: { tenantId, ...(companyId && { companyId }) } });
 
     // Beginning qty: stock before `from`
     const beginMap = fromDate
-      ? await this.computeStockMap(tenantId, items, new Date(startOfDay(fromDate).getTime() - 1))
+      ? await this.computeStockMap(tenantId, items, new Date(startOfDay(fromDate).getTime() - 1), companyId)
       : new Map(items.map((i) => [i.name, i.openingStock]));
 
     // Movements in range
@@ -870,6 +876,7 @@ export class ReportsService {
         tenantId,
         type: { in: ['purchase', 'sale', 'credit_note', 'debit_note'] },
         ...(dateFilter ? { date: dateFilter } : {}),
+        ...(companyId && { companyId }),
       },
     });
 
@@ -927,7 +934,7 @@ export class ReportsService {
 
   // ── Item Detail ─────────────────────────────────────────────────────────────
 
-  async getItemDetail(tenantId: string, from?: string, to?: string, itemName?: string) {
+  async getItemDetail(tenantId: string, from?: string, to?: string, itemName?: string, companyId?: string) {
     const dateFilter = buildDateFilter(from, to);
 
     const txns = await this.prisma.transaction.findMany({
@@ -935,6 +942,7 @@ export class ReportsService {
         tenantId,
         type: { in: ['sale', 'purchase', 'credit_note', 'debit_note'] },
         ...(dateFilter ? { date: dateFilter } : {}),
+        ...(companyId && { companyId }),
       },
       orderBy: { date: 'asc' },
     });
@@ -985,16 +993,17 @@ export class ReportsService {
 
   // ── Item Wise P&L ───────────────────────────────────────────────────────────
 
-  async getItemWisePnl(tenantId: string, from?: string, to?: string) {
+  async getItemWisePnl(tenantId: string, from?: string, to?: string, companyId?: string) {
     const dateFilter = buildDateFilter(from, to);
     const toDate = parseDate(to);
 
-    const allItems = await this.prisma.item.findMany({ where: { tenantId } });
+    const allItems = await this.prisma.item.findMany({ where: { tenantId, ...(companyId && { companyId }) } });
     const txns = await this.prisma.transaction.findMany({
       where: {
         tenantId,
         type: { in: ['sale', 'purchase', 'credit_note', 'debit_note'] },
         ...(dateFilter ? { date: dateFilter } : {}),
+        ...(companyId && { companyId }),
       },
     });
 
@@ -1018,7 +1027,7 @@ export class ReportsService {
       }
     }
 
-    const stockMap = await this.computeStockMap(tenantId, allItems, toDate ? endOfDay(toDate) : undefined);
+    const stockMap = await this.computeStockMap(tenantId, allItems, toDate ? endOfDay(toDate) : undefined, companyId);
 
     let totalAmount = 0;
     const items = allItems.map((item) => {
@@ -1053,8 +1062,8 @@ export class ReportsService {
 
   // ── Item Category P&L ───────────────────────────────────────────────────────
 
-  async getItemCategoryPnl(tenantId: string, from?: string, to?: string) {
-    const { items } = await this.getItemWisePnl(tenantId, from, to);
+  async getItemCategoryPnl(tenantId: string, from?: string, to?: string, companyId?: string) {
+    const { items } = await this.getItemWisePnl(tenantId, from, to, companyId);
     const totals = items.reduce(
       (acc, item) => ({
         sale: acc.sale + item.sale,
@@ -1075,7 +1084,7 @@ export class ReportsService {
 
   // ── Sale/Purchase By Item Category ─────────────────────────────────────────
 
-  async getSalePurchaseByItemCategory(tenantId: string, from?: string, to?: string) {
+  async getSalePurchaseByItemCategory(tenantId: string, from?: string, to?: string, companyId?: string) {
     const dateFilter = buildDateFilter(from, to);
 
     const txns = await this.prisma.transaction.findMany({
@@ -1083,6 +1092,7 @@ export class ReportsService {
         tenantId,
         type: { in: ['sale', 'purchase'] },
         ...(dateFilter ? { date: dateFilter } : {}),
+        ...(companyId && { companyId }),
       },
     });
 
@@ -1110,8 +1120,8 @@ export class ReportsService {
 
   // ── Stock Summary By Category ───────────────────────────────────────────────
 
-  async getStockSummaryByCategory(tenantId: string) {
-    const { total } = await this.getStockSummary(tenantId);
+  async getStockSummaryByCategory(tenantId: string, companyId?: string) {
+    const { total } = await this.getStockSummary(tenantId, undefined, companyId);
     return {
       categories: [{ category: 'General', stockQty: total.stockQty, stockValue: total.stockValue }],
     };
@@ -1159,7 +1169,7 @@ export class ReportsService {
 
   // ── Expense Report ──────────────────────────────────────────────────────────
 
-  async getExpense(tenantId: string, from?: string, to?: string) {
+  async getExpense(tenantId: string, from?: string, to?: string, companyId?: string) {
     const dateFilter = buildDateFilter(from, to);
 
     const txns = await this.prisma.transaction.findMany({
@@ -1167,6 +1177,7 @@ export class ReportsService {
         tenantId,
         type: 'expense',
         ...(dateFilter ? { date: dateFilter } : {}),
+        ...(companyId && { companyId }),
       },
       include: { party: true },
       orderBy: { date: 'desc' },
@@ -1195,7 +1206,7 @@ export class ReportsService {
 
   // ── Expense Category ────────────────────────────────────────────────────────
 
-  async getExpenseCategory(tenantId: string, from?: string, to?: string) {
+  async getExpenseCategory(tenantId: string, from?: string, to?: string, companyId?: string) {
     const dateFilter = buildDateFilter(from, to);
 
     const txns = await this.prisma.transaction.findMany({
@@ -1203,6 +1214,7 @@ export class ReportsService {
         tenantId,
         type: 'expense',
         ...(dateFilter ? { date: dateFilter } : {}),
+        ...(companyId && { companyId }),
       },
     });
 
@@ -1227,7 +1239,7 @@ export class ReportsService {
 
   // ── Expense Item ────────────────────────────────────────────────────────────
 
-  async getExpenseItem(tenantId: string, from?: string, to?: string) {
+  async getExpenseItem(tenantId: string, from?: string, to?: string, companyId?: string) {
     const dateFilter = buildDateFilter(from, to);
 
     const txns = await this.prisma.transaction.findMany({
@@ -1235,6 +1247,7 @@ export class ReportsService {
         tenantId,
         type: 'expense',
         ...(dateFilter ? { date: dateFilter } : {}),
+        ...(companyId && { companyId }),
       },
     });
 
@@ -1270,6 +1283,7 @@ export class ReportsService {
     to?: string,
     orderType?: string,
     _status?: string,
+    companyId?: string,
   ) {
     const dateFilter = buildDateFilter(from, to);
     const orderTypes = orderType
@@ -1281,6 +1295,7 @@ export class ReportsService {
         tenantId,
         type: { in: orderTypes },
         ...(dateFilter ? { date: dateFilter } : {}),
+        ...(companyId && { companyId }),
       },
       include: { party: true },
       orderBy: { date: 'desc' },
@@ -1313,6 +1328,7 @@ export class ReportsService {
     to?: string,
     orderType?: string,
     _status?: string,
+    companyId?: string,
   ) {
     const dateFilter = buildDateFilter(from, to);
     const orderTypes = orderType
@@ -1324,6 +1340,7 @@ export class ReportsService {
         tenantId,
         type: { in: orderTypes },
         ...(dateFilter ? { date: dateFilter } : {}),
+        ...(companyId && { companyId }),
       },
     });
 

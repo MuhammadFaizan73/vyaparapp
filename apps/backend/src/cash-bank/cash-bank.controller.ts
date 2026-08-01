@@ -19,7 +19,7 @@ export class CashBankController {
   @Post("cash-in-hand/adjust")
   adjustCash(
     @Req() req: AuthedRequest,
-    @Body() body: { mode: "add" | "reduce"; amount: number; date: string; description?: string },
+    @Body() body: { mode: "add" | "reduce"; amount: number; date: string; description?: string; companyId?: string },
   ) {
     return this.svc.adjustCash(req.tenantId, body);
   }

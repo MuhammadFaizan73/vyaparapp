@@ -207,11 +207,12 @@ export class VyaparApiClient {
 
   async getTransactionsSummary(
     type: string,
-    opts?: { from?: string; to?: string },
+    opts?: { from?: string; to?: string; companyId?: string },
   ): Promise<{ count: number; total: number; balance: number }> {
     const params = new URLSearchParams({ type });
     if (opts?.from) params.set("from", opts.from);
     if (opts?.to) params.set("to", opts.to);
+    if (opts?.companyId) params.set("companyId", opts.companyId);
     const { data } = await this.http.get<{ count: number; total: number; balance: number }>(
       `/transactions/summary?${params.toString()}`,
     );
@@ -384,7 +385,7 @@ export class VyaparApiClient {
     return data;
   }
 
-  async adjustCash(body: { mode: "add" | "reduce"; amount: number; date: string; description?: string }): Promise<any> {
+  async adjustCash(body: { mode: "add" | "reduce"; amount: number; date: string; description?: string; companyId?: string }): Promise<any> {
     const { data } = await this.http.post("/cash-bank/cash-in-hand/adjust", body);
     return data;
   }

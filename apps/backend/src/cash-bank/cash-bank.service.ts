@@ -94,6 +94,7 @@ export class CashBankService {
     amount: number;
     date: string;
     description?: string;
+    companyId?: string;
   }) {
     const partyId = await this.getSystemParty(tenantId);
     const type = body.mode === "add" ? "cash_in" : "cash_out";
@@ -106,6 +107,7 @@ export class CashBankService {
         balance: 0,
         date:    new Date(body.date),
         notes:   JSON.stringify({ description: body.description ?? "", paymentType: "Cash" }),
+        companyId: body.companyId ?? null,
       },
     });
   }

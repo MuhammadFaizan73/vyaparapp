@@ -281,12 +281,14 @@ export function PartiesScreen({ isLocked = false, onLockedAction }: PartiesScree
                     <span className="party-row__type-badge" style={{
                       background: p.partyType === "customer" ? "#dbeafe"
                         : p.partyType === "supplier" ? "#fef3c7"
+                        : p.partyType === "other" ? "#f1f5f9"
                         : "#ede9fe",
                       color: p.partyType === "customer" ? "#1d4ed8"
                         : p.partyType === "supplier" ? "#b45309"
+                        : p.partyType === "other" ? "#475569"
                         : "#6d28d9",
                     }}>
-                      {p.partyType === "customer" ? "C" : p.partyType === "supplier" ? "S" : "B"}
+                      {p.partyType === "customer" ? "C" : p.partyType === "supplier" ? "S" : p.partyType === "other" ? "O" : "B"}
                     </span>
                   )}
                 </span>

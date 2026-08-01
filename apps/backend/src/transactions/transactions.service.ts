@@ -96,10 +96,10 @@ export class TransactionsService {
   async summaryByType(
     tenantId: string,
     type: string,
-    opts?: { from?: string; to?: string },
+    opts?: { from?: string; to?: string; companyId?: string },
   ): Promise<{ count: number; total: number; balance: number }> {
     const dateFilter = this.dateFilter(opts?.from, opts?.to);
-    const where = { tenantId, type, ...(dateFilter && { date: dateFilter }) };
+    const where = { tenantId, type, ...(dateFilter && { date: dateFilter }), ...(opts?.companyId && { companyId: opts.companyId }) };
     const [agg, count] = await Promise.all([
       this.prisma.transaction.aggregate({ where, _sum: { total: true, balance: true } }),
       this.prisma.transaction.count({ where }),

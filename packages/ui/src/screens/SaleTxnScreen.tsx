@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { api } from "../lib/api";
 import type { Transaction, Party, Item } from "@vyapar/api-client";
+import { useCompany } from "../lib/CompanyContext";
 import { InvoicePreviewModal } from "./InvoicePreviewModal";
 
 /* ─────────────────────────────────────────────
@@ -186,11 +187,12 @@ export function SaleTxnScreen({ activeKey, isLocked = false, onLockedAction }: P
   const [showDatePanel, setShowDatePanel] = useState(false);
   const [datePanelPos, setDatePanelPos] = useState({ top: 0, left: 0 });
   const datePanelRef = useRef<HTMLDivElement>(null);
+  const { selectedCompanyId } = useCompany();
 
   async function load() {
     try {
       const [txns, ps, items] = await Promise.all([
-        api.getTransactionsByType(cfg.txnType, { from: filterFrom, to: filterTo }),
+        api.getTransactionsByType(cfg.txnType, { from: filterFrom, to: filterTo, companyId: selectedCompanyId ?? undefined }),
         api.getParties(),
         api.getItems(),
       ]);
@@ -205,7 +207,7 @@ export function SaleTxnScreen({ activeKey, isLocked = false, onLockedAction }: P
     setLoading(true);
     load().finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cfg.txnType, filterFrom, filterTo]);
+  }, [cfg.txnType, filterFrom, filterTo, selectedCompanyId]);
 
   useEffect(() => {
     if (!menuId) return;
@@ -253,6 +255,7 @@ export function SaleTxnScreen({ activeKey, isLocked = false, onLockedAction }: P
         total: row.total,
         balance: row.total,
         notes: row.notes ?? undefined,
+        companyId: selectedCompanyId ?? undefined,
       });
       setLoading(true);
       await load();
@@ -298,6 +301,7 @@ export function SaleTxnScreen({ activeKey, isLocked = false, onLockedAction }: P
         total,
         balance: total,
         notes: notesJson,
+        companyId: (convertRow as any).companyId ?? selectedCompanyId ?? undefined,
       });
       const updatedNotes = JSON.stringify({ ...parsed, linkedSaleNumber: txnNumber });
       await api.updateTransaction(convertRow.id, { balance: 0, notes: updatedNotes });
@@ -978,6 +982,7 @@ function TxnForm({ cfg, parties, catalog, initialRow, existingCount, onClose, on
   const [partyInvoices, setPartyInvoices] = useState<Transaction[]>([]);
   const [linkedInvoiceIds, setLinkedInvoiceIds] = useState<Set<string>>(new Set());
   const [showLinkModal, setShowLinkModal] = useState(false);
+  const { selectedCompanyId } = useCompany();
 
   const [lineItems, setLineItems] = useState<LineItem[]>(() => {
     if (parsed.items && Array.isArray(parsed.items) && parsed.items.length > 0) {
@@ -1092,6 +1097,7 @@ function TxnForm({ cfg, parties, catalog, initialRow, existingCount, onClose, on
           total,
           balance,
           notes: notesJson,
+          companyId: selectedCompanyId ?? null,
         });
       } else {
         savedTxnData = await api.createTransaction({
@@ -1102,6 +1108,7 @@ function TxnForm({ cfg, parties, catalog, initialRow, existingCount, onClose, on
           total,
           balance,
           notes: notesJson,
+          companyId: selectedCompanyId ?? undefined,
         });
       }
 
