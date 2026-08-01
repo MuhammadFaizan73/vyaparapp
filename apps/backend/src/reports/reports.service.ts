@@ -63,18 +63,8 @@ export class ReportsService {
 
   // ── Sale Report ─────────────────────────────────────────────────────────────
 
-  async getSaleReport(tenantId: string, from?: string, to?: string, status?: string, partyId?: string, companyTag?: string) {
+  async getSaleReport(tenantId: string, from?: string, to?: string, status?: string, partyId?: string, companyId?: string) {
     const dateFilter = buildDateFilter(from, to);
-
-    // Build set of item names tagged to the requested company (for client-side filtering)
-    let companyItemNames: Set<string> | null = null;
-    if (companyTag) {
-      const taggedItems = await this.prisma.item.findMany({
-        where: { tenantId, companyTag },
-        select: { name: true },
-      });
-      companyItemNames = new Set(taggedItems.map((i) => i.name.toLowerCase()));
-    }
 
     const txns = await this.prisma.transaction.findMany({
       where: {
@@ -82,8 +72,9 @@ export class ReportsService {
         type: { in: ['sale', 'credit_note'] },
         ...(dateFilter ? { date: dateFilter } : {}),
         ...(partyId ? { partyId } : {}),
+        ...(companyId ? { companyId } : {}),
       },
-      include: { party: true },
+      include: { party: true, booker: { select: { name: true } } },
       orderBy: { date: 'desc' },
     });
 
@@ -92,14 +83,7 @@ export class ReportsService {
     let balanceSum = 0;
     let creditNoteTotal = 0;
 
-    const transactions = txns
-      .filter((t) => {
-        if (!companyItemNames) return true;
-        const noteObj = parseNoteObj(t.notes);
-        const items: Array<{ name?: string }> = Array.isArray(noteObj.items) ? noteObj.items : (Array.isArray(noteObj) ? noteObj : []);
-        return items.some((i) => i.name && companyItemNames!.has(i.name.toLowerCase()));
-      })
-      .map((t) => {
+    const transactions = txns.map((t) => {
       const noteObj = parseNoteObj(t.notes);
       const paymentType: string = noteObj.paymentType ?? 'Cash';
 
@@ -119,6 +103,7 @@ export class ReportsService {
         paymentType,
         amount: t.total,
         balance: t.balance,
+        bookerName: t.booker?.name ?? '',
         status: txnStatus(t.total, t.balance),
       };
     });
@@ -139,7 +124,7 @@ export class ReportsService {
 
   // ── Purchase Report ─────────────────────────────────────────────────────────
 
-  async getPurchaseReport(tenantId: string, from?: string, to?: string, status?: string, partyId?: string) {
+  async getPurchaseReport(tenantId: string, from?: string, to?: string, status?: string, partyId?: string, companyId?: string) {
     const dateFilter = buildDateFilter(from, to);
 
     const txns = await this.prisma.transaction.findMany({
@@ -148,6 +133,7 @@ export class ReportsService {
         type: { in: ['purchase', 'debit_note'] },
         ...(dateFilter ? { date: dateFilter } : {}),
         ...(partyId ? { partyId } : {}),
+        ...(companyId ? { companyId } : {}),
       },
       include: { party: true },
       orderBy: { date: 'desc' },
@@ -192,13 +178,13 @@ export class ReportsService {
 
   // ── Day Book ────────────────────────────────────────────────────────────────
 
-  async getDayBook(tenantId: string, date?: string) {
+  async getDayBook(tenantId: string, date?: string, companyId?: string) {
     const target = date ? (parseDate(date) ?? new Date()) : new Date();
     const dayStart = startOfDay(target);
     const dayEnd = endOfDay(target);
 
     const txns = await this.prisma.transaction.findMany({
-      where: { tenantId, date: { gte: dayStart, lte: dayEnd } },
+      where: { tenantId, date: { gte: dayStart, lte: dayEnd }, ...(companyId ? { companyId } : {}) },
       include: { party: true },
       orderBy: { date: 'asc' },
     });
@@ -248,6 +234,7 @@ export class ReportsService {
     paymentType?: string,
     status?: string,
     partyId?: string,
+    companyId?: string,
   ) {
     const dateFilter = buildDateFilter(from, to);
 
@@ -257,6 +244,7 @@ export class ReportsService {
         ...(txnType ? { type: txnType } : {}),
         ...(dateFilter ? { date: dateFilter } : {}),
         ...(partyId ? { partyId } : {}),
+        ...(companyId ? { companyId } : {}),
       },
       include: { party: true },
       orderBy: { date: 'desc' },
@@ -463,7 +451,7 @@ export class ReportsService {
 
   // ── Party Statement ─────────────────────────────────────────────────────────
 
-  async getPartyStatement(tenantId: string, from?: string, to?: string, partyId?: string) {
+  async getPartyStatement(tenantId: string, from?: string, to?: string, partyId?: string, companyId?: string) {
     const dateFilter = buildDateFilter(from, to);
 
     const txns = await this.prisma.transaction.findMany({
@@ -471,6 +459,7 @@ export class ReportsService {
         tenantId,
         ...(partyId ? { partyId } : {}),
         ...(dateFilter ? { date: dateFilter } : {}),
+        ...(companyId ? { companyId } : {}),
       },
       include: { party: true },
       orderBy: { date: 'asc' },
@@ -753,6 +742,7 @@ export class ReportsService {
       tertiaryConversionRate?: string | null;
     }>,
     upTo?: Date,
+    companyId?: string,
   ): Promise<Map<string, number>> {
     const stockMap = new Map<string, number>();
     const converters = new Map<string, (qty: number, lineUnit?: string | null) => number>();
@@ -766,6 +756,7 @@ export class ReportsService {
         tenantId,
         type: { in: ['purchase', 'sale', 'credit_note', 'debit_note'] },
         ...(upTo ? { date: { lte: upTo } } : {}),
+        ...(companyId ? { companyId } : {}),
       },
     });
 
@@ -788,10 +779,10 @@ export class ReportsService {
 
   // ── Stock Summary ───────────────────────────────────────────────────────────
 
-  async getStockSummary(tenantId: string, asOf?: string) {
+  async getStockSummary(tenantId: string, asOf?: string, companyId?: string) {
     const upTo = asOf ? (parseDate(asOf) ? endOfDay(parseDate(asOf)!) : undefined) : undefined;
-    const items = await this.prisma.item.findMany({ where: { tenantId } });
-    const stockMap = await this.computeStockMap(tenantId, items, upTo);
+    const items = await this.prisma.item.findMany({ where: { tenantId, ...(companyId ? { companyId } : {}) } });
+    const stockMap = await this.computeStockMap(tenantId, items, upTo, companyId);
 
     let totalStockQty = 0;
     let totalStockValue = 0;

@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import * as XLSX from "xlsx";
 import { api } from "../lib/api";
 import type { Item } from "@vyapar/api-client";
+import { useCompany } from "../lib/CompanyContext";
 import { TARGET_FIELDS as ITEM_IMPORT_FIELDS } from "./ImportItemsPage";
 
 type TabKey = "products" | "services" | "category" | "units";
@@ -86,9 +87,11 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
   const [dotsMenuId, setDotsMenuId] = useState<string | null>(null);
   const [dotsMenuPos, setDotsMenuPos] = useState({ top: 0, left: 0 });
 
-  // Company
-  const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
-  const [selectedCompanyTag, setSelectedCompanyTag] = useState("");
+  // Company — the currently selected filter comes from the shared app-wide context
+  // (same dropdown shown in the topbar on every screen); `formCompanyId` is the
+  // Add/Edit Item form's own selector, defaulting to whichever company is filtered.
+  const { companies, selectedCompanyId } = useCompany();
+  const [formCompanyId, setFormCompanyId] = useState<string>("");
 
   // Settings state
   const [mrpLabel, setMrpLabel] = useState("MRP");
@@ -124,15 +127,12 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
 
   useEffect(() => {
     api.getItems().then(setItems).catch(() => {});
-    // Load companies: active tenant + extras from backend
-    api.getTenant().then((t) => {
-      const mainName = t.companyName || t.phone || "My Company";
-      const extras: Array<{ id: string; name: string }> = Array.isArray(t.extraCompanies) ? t.extraCompanies : [];
-      const all = [{ id: "__main__", name: mainName }, ...extras];
-      setCompanies(all);
-      setSelectedCompanyTag(mainName);
-    }).catch(() => {});
   }, []);
+
+  const displayedItems = useMemo(
+    () => (selectedCompanyId ? items.filter((i) => (i as any).companyId === selectedCompanyId) : items),
+    [items, selectedCompanyId],
+  );
 
   useEffect(() => {
     if (!dotsMenuId) return;
@@ -192,7 +192,7 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
         itemLocation: itemLocation || undefined,
         taxRate: taxRate ? Number(taxRate) : undefined,
         inclusiveOfTax: taxRate ? inclusiveOfTax : undefined,
-        companyTag: selectedCompanyTag || undefined,
+        companyId: formCompanyId || undefined,
       });
       setItems((prev) => [created, ...prev]);
       setSelectedItem(created);
@@ -239,7 +239,7 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
     setShowPrimaryPicker(false);
     setShowSecondaryPicker(false);
     setShowTertiaryPicker(false);
-    setSelectedCompanyTag(companies[0]?.name ?? "");
+    setFormCompanyId(selectedCompanyId ?? companies[0]?.id ?? "");
   }
 
   function openEditForm(item: Item) {
@@ -267,7 +267,7 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
     setTertiaryUnit((item as any).tertiaryUnit ?? "None");
     setTertiaryConversionRate((item as any).tertiaryConversionRate ?? "");
     setSelectedCategory((item as any).category ?? "");
-    setSelectedCompanyTag((item as any).companyTag ?? companies[0]?.name ?? "");
+    setFormCompanyId((item as any).companyId ?? selectedCompanyId ?? companies[0]?.id ?? "");
     setFormTab("pricing");
     setItemType("product");
     setShowAddForm(false);
@@ -295,7 +295,7 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
         itemLocation: itemLocation || undefined,
         taxRate: taxRate ? Number(taxRate) : undefined,
         inclusiveOfTax: taxRate ? inclusiveOfTax : undefined,
-        companyTag: selectedCompanyTag || undefined,
+        companyId: formCompanyId || undefined,
       });
       setItems((prev) => prev.map((i) => i.id === updated.id ? updated : i));
       setSelectedItem(updated);
@@ -307,7 +307,7 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
     // Same column set (and order) as the Import Items template, built from each item's own
     // field of the same key — keeps export/import/template all in lockstep automatically.
     const headers = ITEM_IMPORT_FIELDS.map((f) => f.label);
-    const rows = items.map((it) => ITEM_IMPORT_FIELDS.map((f) => (it as any)[f.key] ?? ""));
+    const rows = displayedItems.map((it) => ITEM_IMPORT_FIELDS.map((f) => (it as any)[f.key] ?? ""));
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
     ws["!cols"] = headers.map((h) => ({ wch: Math.max(h.length + 4, 16) }));
     const wb = XLSX.utils.book_new();
@@ -371,12 +371,13 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
                     <label className="items-form-label">Company</label>
                     <select
                       className="items-form-input"
-                      value={selectedCompanyTag}
-                      onChange={(e) => setSelectedCompanyTag(e.target.value)}
+                      value={formCompanyId}
+                      onChange={(e) => setFormCompanyId(e.target.value)}
                       style={{ cursor: "pointer" }}
                     >
+                      <option value="">No specific company</option>
                       {companies.map((c) => (
-                        <option key={c.id} value={c.name}>{c.name}</option>
+                        <option key={c.id} value={c.id}>{c.name}</option>
                       ))}
                     </select>
                   </div>
@@ -747,6 +748,7 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
                   if (isLocked) { onLockedAction?.(); return; }
                   setShowAddForm(true);
                   setShowImportMenu(false);
+                  setFormCompanyId(selectedCompanyId ?? companies[0]?.id ?? "");
                 }}
               >
                 + Add Item
@@ -797,12 +799,14 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
 
         {/* Item rows */}
         <div className="items-rows">
-          {items.length === 0 && (
+          {displayedItems.length === 0 && (
             <div style={{ padding: "32px 16px", textAlign: "center", color: "#94a3b8", fontSize: 13 }}>
-              No items yet. Click + Add Item to get started.
+              {items.length === 0
+                ? "No items yet. Click + Add Item to get started."
+                : "No items for this company. Switch the company filter or add one."}
             </div>
           )}
-          {items.map((item) => (
+          {displayedItems.map((item) => (
             <button
               key={item.id}
               type="button"

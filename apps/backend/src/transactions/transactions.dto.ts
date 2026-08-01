@@ -8,6 +8,8 @@ export class CreateTransactionDto {
   @IsNumber() total!: number;
   @IsNumber() balance!: number;
   @IsOptional() @IsString() notes?: string;
+  @IsOptional() @IsUUID() companyId?: string;
+  @IsOptional() @IsUUID() bookerId?: string;
 }
 
 export class UpdateTransactionDto {
@@ -16,4 +18,6 @@ export class UpdateTransactionDto {
   @IsOptional() @IsNumber() total?: number;
   @IsOptional() @IsNumber() balance?: number;
   @IsOptional() @IsString() notes?: string;
+  @IsOptional() @IsUUID() companyId?: string;
+  @IsOptional() @IsUUID() bookerId?: string;
 }

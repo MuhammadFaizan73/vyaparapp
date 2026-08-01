@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import * as XLSX from "xlsx";
 import { api } from "../lib/api";
+import { useCompany } from "../lib/CompanyContext";
 
 // ─── Report list structure ────────────────────────────────────────────────────
 
@@ -276,24 +277,11 @@ function DateRange({ from, to, onFrom, onTo }: { from: string; to: string; onFro
 
 // ─── SALE REPORT ──────────────────────────────────────────────────────────────
 
-function useCompanies() {
-  const [companies, setCompanies] = useState<Array<{ id: string; name: string }>>([]);
-  useEffect(() => {
-    api.getTenant().then((t) => {
-      const mainName = t.companyName || t.phone || "My Company";
-      const extras = Array.isArray(t.extraCompanies) ? t.extraCompanies : [];
-      setCompanies([{ id: "__main__", name: mainName }, ...extras.map((e: any) => ({ id: e.id, name: e.name }))]);
-    }).catch(() => {});
-  }, []);
-  return companies;
-}
-
 function SaleReport() {
   const [from, setFrom] = useState(monthStart);
   const [to,   setTo]   = useState(monthEnd);
-  const [companyTag, setCompanyTag] = useState("");
-  const companies = useCompanies();
-  const { data, loading, error } = useReport("sale", { from, to, ...(companyTag ? { companyTag } : {}) });
+  const { selectedCompanyId } = useCompany();
+  const { data, loading, error } = useReport("sale", { from, to, companyId: selectedCompanyId ?? undefined });
 
   function handleExport() {
     if (!data?.transactions?.length) return;
@@ -317,14 +305,6 @@ function SaleReport() {
         <DateRange from={from} to={to} onFrom={setFrom} onTo={setTo} />
         <ExcelPrint onExport={handleExport} />
       </div>
-      {companies.length > 1 && (
-        <div className="nsf-company-chips" style={{ padding: "8px 0 4px" }}>
-          <button type="button" className={`nsf-company-chip${!companyTag ? " nsf-company-chip--active" : ""}`} onClick={() => setCompanyTag("")}>All</button>
-          {companies.map((c) => (
-            <button key={c.id} type="button" className={`nsf-company-chip${companyTag === c.name ? " nsf-company-chip--active" : ""}`} onClick={() => setCompanyTag(companyTag === c.name ? "" : c.name)}>{c.name}</button>
-          ))}
-        </div>
-      )}
       <ReportWrap loading={loading} error={error}>
         {data && (
           <>
@@ -342,7 +322,7 @@ function SaleReport() {
               <table className="rpt-table">
                 <thead><tr>
                   <th>Date</th><th>Invoice No</th><th>Party Name</th>
-                  <th>Transaction</th><th>Payment Type</th>
+                  <th>Transaction</th><th>Payment Type</th><th>Booker</th>
                   <th className="rpt-num">Amount</th><th className="rpt-num">Balance</th>
                   <th>Status</th>
                 </tr></thead>
@@ -354,6 +334,7 @@ function SaleReport() {
                       <td>{r.partyName}</td>
                       <td>{txnLabel(r.type)}</td>
                       <td>{r.paymentType}</td>
+                      <td>{r.bookerName || "–"}</td>
                       <td className="rpt-num">{rs(r.amount)}</td>
                       <td className="rpt-num">{rs(r.balance)}</td>
                       <td><StatusBadge status={r.status} /></td>
@@ -374,7 +355,8 @@ function SaleReport() {
 function PurchaseReport() {
   const [from, setFrom] = useState(monthStart);
   const [to,   setTo]   = useState(monthEnd);
-  const { data, loading, error } = useReport("purchase", { from, to });
+  const { selectedCompanyId } = useCompany();
+  const { data, loading, error } = useReport("purchase", { from, to, companyId: selectedCompanyId ?? undefined });
 
   function handleExport() {
     if (!data?.transactions?.length) return;
@@ -451,7 +433,8 @@ function PurchaseReport() {
 
 function DayBookReport() {
   const [date, setDate] = useState(todayStr);
-  const { data, loading, error } = useReport("day-book", { date });
+  const { selectedCompanyId } = useCompany();
+  const { data, loading, error } = useReport("day-book", { date, companyId: selectedCompanyId ?? undefined });
 
   function handleExport() {
     if (!data?.transactions?.length) return;
@@ -512,7 +495,8 @@ function AllTransactionsReport() {
   const [from,    setFrom]    = useState(monthStart);
   const [to,      setTo]      = useState(monthEnd);
   const [txnType, setTxnType] = useState("");
-  const { data, loading, error } = useReport("all-transactions", { from, to, txnType: txnType || undefined });
+  const { selectedCompanyId } = useCompany();
+  const { data, loading, error } = useReport("all-transactions", { from, to, txnType: txnType || undefined, companyId: selectedCompanyId ?? undefined });
 
   function handleExport() {
     if (!data?.transactions?.length) return;
@@ -747,7 +731,8 @@ function PartyStatementReport() {
   const [from, setFrom] = useState(monthStart);
   const [to,   setTo]   = useState(monthEnd);
   const [view, setView] = useState<"godigi" | "accounting">("godigi");
-  const { data, loading, error } = useReport("party-statement", { from, to });
+  const { selectedCompanyId } = useCompany();
+  const { data, loading, error } = useReport("party-statement", { from, to, companyId: selectedCompanyId ?? undefined });
 
   function handleExport() {
     if (!data?.transactions?.length) return;
@@ -1093,7 +1078,8 @@ function formatStockQty(
 
 function StockSummaryReport() {
   const [asOf,   setAsOf]   = useState(todayStr);
-  const { data, loading, error } = useReport("stock-summary", { asOf });
+  const { selectedCompanyId } = useCompany();
+  const { data, loading, error } = useReport("stock-summary", { asOf, companyId: selectedCompanyId ?? undefined });
 
   function handleExport() {
     if (!data?.items?.length) return;

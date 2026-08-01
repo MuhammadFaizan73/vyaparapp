@@ -24,6 +24,7 @@ function toRow(i: any) {
     openingStock: i.openingStock ?? 0,
     minStock: i.minStock ?? 0,
     companyTag: i.companyTag ?? null,
+    companyId: i.companyId ?? null,
     createdAt: i.createdAt.toISOString(),
     updatedAt: i.updatedAt.toISOString(),
   };
@@ -64,6 +65,7 @@ export class ItemsService {
         openingStock: dto.openingStock ?? 0,
         minStock: dto.minStock ?? 0,
         companyTag: dto.companyTag ?? null,
+        companyId: dto.companyId ?? null,
       },
     });
     return toRow(item);
@@ -95,6 +97,7 @@ export class ItemsService {
         ...(dto.openingStock !== undefined && { openingStock: dto.openingStock }),
         ...(dto.minStock !== undefined && { minStock: dto.minStock }),
         ...(dto.companyTag !== undefined && { companyTag: dto.companyTag || null }),
+        ...(dto.companyId !== undefined && { companyId: dto.companyId || null }),
       },
     });
     return toRow(item);

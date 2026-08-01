@@ -17,6 +17,7 @@ export class TransactionsController {
     @Query("skip") skip?: string,
     @Query("from") from?: string,
     @Query("to") to?: string,
+    @Query("companyId") companyId?: string,
   ) {
     if (partyId) return this.transactionsService.listForParty(req.tenantId, partyId);
     if (type) {
@@ -25,9 +26,10 @@ export class TransactionsController {
         skip: skip ? Number(skip) : undefined,
         from,
         to,
+        companyId,
       });
     }
-    return this.transactionsService.listAll(req.tenantId);
+    return this.transactionsService.listAll(req.tenantId, companyId);
   }
 
   @Get("summary")

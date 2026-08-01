@@ -31,6 +31,7 @@ model Tenant {
   businessType     String?
   companyEmail     String?
   extraCompanies   String   @default("[]")
+  companies        Company[]
   officeLat        Float?
   officeLng        Float?
   officeLabel      String?
@@ -38,6 +39,23 @@ model Tenant {
   isActive         Boolean            @default(true)
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
+}
+
+model Company {
+  id           String   @id @default(uuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  name         String
+  businessType String?
+  email        String?
+  phone        String?
+  gstin        String?
+  items        Item[]
+  transactions Transaction[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([tenantId])
 }
 
 model License {
@@ -125,6 +143,8 @@ model Item {
   openingStock           Float    @default(0)
   minStock               Float    @default(0)
   companyTag             String?
+  companyId              String?
+  company                Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 }
@@ -140,11 +160,16 @@ model Transaction {
   total     Float                @default(0)
   balance   Float                @default(0)
   notes     String?
+  companyId String?
+  company   Company?             @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  bookerId  String?
+  booker    TeamMember?          @relation(fields: [bookerId], references: [id], onDelete: SetNull)
   createdAt DateTime             @default(now())
   history   TransactionHistory[]
 
   @@index([tenantId, type, date])
   @@index([tenantId, partyId])
+  @@index([tenantId, companyId])
 }
 
 model TransactionHistory {
@@ -174,6 +199,7 @@ model TeamMember {
   locationPings LocationPing[]
   shopVisits    ShopVisit[]
   assignments   PartyAssignment[]
+  bookedSales   Transaction[]
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 }

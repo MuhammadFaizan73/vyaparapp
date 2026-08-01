@@ -472,6 +472,169 @@ body,
   letter-spacing: -0.2px;
   white-space: nowrap;
 }
+
+/* ───────── Company dropdown ───────── */
+.company-dropdown {
+  position: relative;
+}
+.company-dropdown__btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+  max-width: 200px;
+}
+.company-dropdown__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.company-dropdown__caret {
+  font-size: 10px;
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+.company-dropdown__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 220px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #e5e7ef;
+  border-radius: 10px;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.15);
+  padding: 6px;
+  z-index: 600;
+}
+.company-dropdown__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  background: none;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #1f2937;
+  text-align: left;
+  cursor: pointer;
+}
+.company-dropdown__item:hover { background: #f1f5f9; }
+.company-dropdown__item--active { background: #eef2ff; color: #4338ca; font-weight: 600; }
+.company-dropdown__edit {
+  font-size: 11px;
+  color: #94a3b8;
+  padding: 2px 6px;
+}
+.company-dropdown__edit:hover { color: #4338ca; text-decoration: underline; }
+.company-dropdown__divider {
+  height: 1px;
+  background: #e5e7ef;
+  margin: 4px 0;
+}
+.company-dropdown__add {
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  background: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #4338ca;
+  text-align: left;
+  cursor: pointer;
+}
+.company-dropdown__add:hover { background: #eef2ff; }
+
+/* ───────── Company form modal ───────── */
+.company-form-modal {
+  width: 100%;
+  max-width: 420px;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.2);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.company-form-modal__title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 4px;
+}
+.company-form-modal__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+}
+.company-form-modal__input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #0f172a;
+}
+.company-form-modal__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.company-form-modal__error {
+  font-size: 12px;
+  color: #dc2626;
+}
+.company-form-modal__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.company-form-modal__spacer { flex: 1; }
+.company-form-modal__delete {
+  padding: 8px 12px;
+  border: none;
+  background: none;
+  color: #dc2626;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.company-form-modal__cancel {
+  padding: 8px 14px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+}
+.company-form-modal__save {
+  padding: 8px 14px;
+  border: none;
+  background: #4338ca;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  cursor: pointer;
+}
+.company-form-modal__save:disabled,
+.company-form-modal__cancel:disabled,
+.company-form-modal__delete:disabled { opacity: 0.6; cursor: not-allowed; }
 .topbar__search {
   display: flex;
   align-items: center;

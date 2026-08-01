@@ -12,6 +12,8 @@ export type TransactionRow = {
   total: number;
   balance: number;
   notes: string | null;
+  companyId: string | null;
+  bookerId: string | null;
   createdAt: string;
 };
 
@@ -33,6 +35,8 @@ function toRow(t: any): TransactionRow {
     total: t.total,
     balance: t.balance,
     notes: t.notes ?? null,
+    companyId: t.companyId ?? null,
+    bookerId: t.bookerId ?? null,
     createdAt: t.createdAt.toISOString(),
   };
 }
@@ -49,9 +53,9 @@ export class TransactionsService {
     return rows.map(toRow);
   }
 
-  async listAll(tenantId: string): Promise<TransactionRow[]> {
+  async listAll(tenantId: string, companyId?: string): Promise<TransactionRow[]> {
     const rows = await this.prisma.transaction.findMany({
-      where: { tenantId },
+      where: { tenantId, ...(companyId && { companyId }) },
       orderBy: { date: "desc" },
       take: 200,
     });
@@ -69,11 +73,15 @@ export class TransactionsService {
   async listByType(
     tenantId: string,
     type: string,
-    opts?: { take?: number; skip?: number; from?: string; to?: string },
+    opts?: { take?: number; skip?: number; from?: string; to?: string; companyId?: string },
   ): Promise<TransactionRow[]> {
     const dateFilter = this.dateFilter(opts?.from, opts?.to);
     const rows = await this.prisma.transaction.findMany({
-      where: { tenantId, type, ...(dateFilter && { date: dateFilter }) },
+      where: {
+        tenantId, type,
+        ...(dateFilter && { date: dateFilter }),
+        ...(opts?.companyId && { companyId: opts.companyId }),
+      },
       orderBy: { date: "desc" },
       ...(opts?.take !== undefined && { take: opts.take }),
       ...(opts?.skip !== undefined && { skip: opts.skip }),
@@ -129,6 +137,8 @@ export class TransactionsService {
         total: dto.total,
         balance: dto.balance,
         notes: dto.notes ?? null,
+        companyId: dto.companyId ?? null,
+        bookerId: dto.bookerId ?? null,
       },
     });
     return toRow(transaction);
@@ -211,6 +221,8 @@ export class TransactionsService {
         ...(dto.total !== undefined && { total: dto.total }),
         ...(dto.balance !== undefined && { balance: dto.balance }),
         ...(dto.notes !== undefined && { notes: dto.notes }),
+        ...(dto.companyId !== undefined && { companyId: dto.companyId }),
+        ...(dto.bookerId !== undefined && { bookerId: dto.bookerId }),
       },
     });
 

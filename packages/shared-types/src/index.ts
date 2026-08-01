@@ -167,10 +167,34 @@ export const ItemSchema = z.object({
   openingStock: z.number(),
   minStock: z.number(),
   companyTag: z.string().nullable().optional(),
+  companyId: z.string().uuid().nullable().optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
 export type Item = z.infer<typeof ItemSchema>;
+
+export const CompanySchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  businessType: z.string().nullable(),
+  email: z.string().nullable(),
+  phone: z.string().nullable(),
+  gstin: z.string().nullable(),
+  createdAt: z.string().datetime(),
+});
+export type Company = z.infer<typeof CompanySchema>;
+
+export const CreateCompanyRequestSchema = z.object({
+  name: z.string().min(1).max(100),
+  businessType: z.string().optional(),
+  email: z.string().optional(),
+  phone: z.string().optional(),
+  gstin: z.string().optional(),
+});
+export type CreateCompanyRequest = z.infer<typeof CreateCompanyRequestSchema>;
+
+export const UpdateCompanyRequestSchema = CreateCompanyRequestSchema.partial();
+export type UpdateCompanyRequest = z.infer<typeof UpdateCompanyRequestSchema>;
 
 export const CreateItemRequestSchema = z.object({
   name: z.string().min(1).max(200),
@@ -192,6 +216,7 @@ export const CreateItemRequestSchema = z.object({
   openingStock: z.number().min(0).optional(),
   minStock: z.number().min(0).optional(),
   companyTag: z.string().optional(),
+  companyId: z.string().uuid().nullable().optional(),
 });
 export type CreateItemRequest = z.infer<typeof CreateItemRequestSchema>;
 
@@ -208,6 +233,8 @@ export const TransactionSchema = z.object({
   total: z.number(),
   balance: z.number(),
   notes: z.string().nullable(),
+  companyId: z.string().uuid().nullable().optional(),
+  bookerId: z.string().uuid().nullable().optional(),
   createdAt: z.string().datetime(),
 });
 export type Transaction = z.infer<typeof TransactionSchema>;
@@ -220,6 +247,8 @@ export const CreateTransactionRequestSchema = z.object({
   total: z.number(),
   balance: z.number(),
   notes: z.string().optional(),
+  companyId: z.string().uuid().nullable().optional(),
+  bookerId: z.string().uuid().nullable().optional(),
 });
 export type CreateTransactionRequest = z.infer<typeof CreateTransactionRequestSchema>;
 
@@ -229,6 +258,8 @@ export const UpdateTransactionRequestSchema = z.object({
   total: z.number().optional(),
   balance: z.number().optional(),
   notes: z.string().optional(),
+  companyId: z.string().uuid().nullable().optional(),
+  bookerId: z.string().uuid().nullable().optional(),
 });
 export type UpdateTransactionRequest = z.infer<typeof UpdateTransactionRequestSchema>;
 

@@ -15,9 +15,9 @@ export class ReportsController {
     @Query('to') to?: string,
     @Query('status') status?: string,
     @Query('partyId') partyId?: string,
-    @Query('companyTag') companyTag?: string,
+    @Query('companyId') companyId?: string,
   ) {
-    return this.reports.getSaleReport(req.tenantId, from, to, status, partyId, companyTag);
+    return this.reports.getSaleReport(req.tenantId, from, to, status, partyId, companyId);
   }
 
   @Get('purchase')
@@ -27,16 +27,18 @@ export class ReportsController {
     @Query('to') to?: string,
     @Query('status') status?: string,
     @Query('partyId') partyId?: string,
+    @Query('companyId') companyId?: string,
   ) {
-    return this.reports.getPurchaseReport(req.tenantId, from, to, status, partyId);
+    return this.reports.getPurchaseReport(req.tenantId, from, to, status, partyId, companyId);
   }
 
   @Get('day-book')
   getDayBook(
     @Req() req: AuthedRequest,
     @Query('date') date?: string,
+    @Query('companyId') companyId?: string,
   ) {
-    return this.reports.getDayBook(req.tenantId, date);
+    return this.reports.getDayBook(req.tenantId, date, companyId);
   }
 
   @Get('all-transactions')
@@ -48,8 +50,9 @@ export class ReportsController {
     @Query('paymentType') paymentType?: string,
     @Query('status') status?: string,
     @Query('partyId') partyId?: string,
+    @Query('companyId') companyId?: string,
   ) {
-    return this.reports.getAllTransactions(req.tenantId, from, to, txnType, paymentType, status, partyId);
+    return this.reports.getAllTransactions(req.tenantId, from, to, txnType, paymentType, status, partyId, companyId);
   }
 
   @Get('profit-and-loss')
@@ -76,8 +79,9 @@ export class ReportsController {
     @Query('from') from?: string,
     @Query('to') to?: string,
     @Query('partyId') partyId?: string,
+    @Query('companyId') companyId?: string,
   ) {
-    return this.reports.getPartyStatement(req.tenantId, from, to, partyId);
+    return this.reports.getPartyStatement(req.tenantId, from, to, partyId, companyId);
   }
 
   @Get('all-parties')
@@ -116,8 +120,9 @@ export class ReportsController {
   getStockSummary(
     @Req() req: AuthedRequest,
     @Query('asOf') asOf?: string,
+    @Query('companyId') companyId?: string,
   ) {
-    return this.reports.getStockSummary(req.tenantId, asOf);
+    return this.reports.getStockSummary(req.tenantId, asOf, companyId);
   }
 
   @Get('low-stock')

@@ -21,6 +21,7 @@ import { PartyAssignmentsModule } from "./party-assignments/party-assignments.mo
 import { AdminModule } from "./admin/admin.module";
 import { DevicesModule } from "./devices/devices.module";
 import { BulkImportModule } from "./bulk-import/bulk-import.module";
+import { CompaniesModule } from "./companies/companies.module";
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { BulkImportModule } from "./bulk-import/bulk-import.module";
     AdminModule,
     DevicesModule,
     BulkImportModule,
+    CompaniesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

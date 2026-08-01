@@ -14,6 +14,9 @@ import type {
   Item,
   CreateItemRequest,
   UpdateItemRequest,
+  Company,
+  CreateCompanyRequest,
+  UpdateCompanyRequest,
   TeamMember,
   BulkSaleImportRequest,
   BulkSaleImportJobStatus,
@@ -189,13 +192,14 @@ export class VyaparApiClient {
 
   async getTransactionsByType(
     type: string,
-    opts?: { take?: number; skip?: number; from?: string; to?: string },
+    opts?: { take?: number; skip?: number; from?: string; to?: string; companyId?: string },
   ): Promise<Transaction[]> {
     const params = new URLSearchParams({ type });
     if (opts?.take !== undefined) params.set("take", String(opts.take));
     if (opts?.skip !== undefined) params.set("skip", String(opts.skip));
     if (opts?.from) params.set("from", opts.from);
     if (opts?.to) params.set("to", opts.to);
+    if (opts?.companyId) params.set("companyId", opts.companyId);
     const { data } = await this.http.get<Transaction[]>(`/transactions?${params.toString()}`);
     return data;
   }
@@ -241,6 +245,25 @@ export class VyaparApiClient {
   async getItems(): Promise<Item[]> {
     const { data } = await this.http.get<Item[]>("/items");
     return data;
+  }
+
+  async getCompanies(): Promise<Company[]> {
+    const { data } = await this.http.get<Company[]>("/companies");
+    return data;
+  }
+
+  async createCompany(body: CreateCompanyRequest): Promise<Company> {
+    const { data } = await this.http.post<Company>("/companies", body);
+    return data;
+  }
+
+  async updateCompany(id: string, body: UpdateCompanyRequest): Promise<Company> {
+    const { data } = await this.http.patch<Company>(`/companies/${id}`, body);
+    return data;
+  }
+
+  async deleteCompany(id: string): Promise<void> {
+    await this.http.delete(`/companies/${id}`);
   }
 
   async createItem(body: CreateItemRequest): Promise<Item> {
@@ -525,6 +548,9 @@ export type {
   Item,
   CreateItemRequest,
   UpdateItemRequest,
+  Company,
+  CreateCompanyRequest,
+  UpdateCompanyRequest,
   TeamMember,
   TeamRole,
 } from "@vyapar/shared-types";

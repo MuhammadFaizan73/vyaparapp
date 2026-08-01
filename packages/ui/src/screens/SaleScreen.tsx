@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 
 import { api } from "../lib/api";
-import type { Transaction, Party, Item } from "@vyapar/api-client";
+import type { Transaction, Party, Item, Company, TeamMember } from "@vyapar/api-client";
+import { useCompany } from "../lib/CompanyContext";
 import { AddPartyModal } from "./AddPartyModal";
 import { AddItemModal } from "./AddItemModal";
 import { InvoicePreviewModal } from "./InvoicePreviewModal";
@@ -152,7 +153,7 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
   const datePanelRef = useRef<HTMLDivElement>(null);
   const [parties, setParties] = useState<Party[]>([]);
   const [items, setItems] = useState<Item[]>([]);
-  const [companies, setCompanies] = useState<Array<{ id: string; name: string }>>([]);
+  const { companies, selectedCompanyId } = useCompany();
   const [loading, setLoading] = useState(true);
 
   /* form visibility */
@@ -256,7 +257,7 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
   async function loadSales() {
     try {
       const [txns, ps, its] = await Promise.all([
-        api.getTransactionsByType("sale", { from: filterFrom, to: filterTo }),
+        api.getTransactionsByType("sale", { from: filterFrom, to: filterTo, companyId: selectedCompanyId ?? undefined }),
         api.getParties(),
         api.getItems(),
       ]);
@@ -266,20 +267,13 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
       setParties(ps);
       setItems(its);
     } catch { /* offline */ }
-
-    try {
-      const tenant = await api.getTenant();
-      const mainName = tenant.companyName || tenant.phone || "My Company";
-      const extras = Array.isArray(tenant.extraCompanies) ? tenant.extraCompanies : [];
-      setCompanies([{ id: "__main__", name: mainName }, ...extras.map((e) => ({ id: e.id, name: e.name }))]);
-    } catch { /* ignore */ }
   }
 
   useEffect(() => {
     setLoading(true);
     loadSales().finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterFrom, filterTo]);
+  }, [filterFrom, filterTo, selectedCompanyId]);
 
   /* close row menu on outside click */
   useEffect(() => {
@@ -738,6 +732,7 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
           parties={parties}
           catalog={items}
           companies={companies}
+          selectedCompanyId={selectedCompanyId}
           initialSale={editSale ?? undefined}
           initialParty={editSale ? parties.find((p) => p.id === editSale.partyId) : undefined}
           onClose={() => { setShowForm(false); setEditSale(null); }}
@@ -997,11 +992,12 @@ function emptyRow(): LineItem {
 }
 
 function NewSaleForm({
-  parties, catalog, companies, initialSale, initialParty, onClose, onSaved,
+  parties, catalog, companies, selectedCompanyId, initialSale, initialParty, onClose, onSaved,
 }: {
   parties: Party[];
   catalog: Item[];
-  companies: Array<{ id: string; name: string }>;
+  companies: Company[];
+  selectedCompanyId: string | null;
   initialSale?: SaleRow;
   initialParty?: Party;
   onClose: () => void;
@@ -1067,7 +1063,18 @@ function NewSaleForm({
   const [showLinkPayment, setShowLinkPayment] = useState(false);
   const [linkedTxnIds, setLinkedTxnIds] = useState<Set<string>>(new Set());
 
-  const [selectedCompanyFilters, setSelectedCompanyFilters] = useState<string[]>([]);
+  // Pre-narrow the item picker to whichever company is globally selected — still
+  // adjustable via the chips below (e.g. to browse across companies while "All" is active).
+  const [selectedCompanyFilters, setSelectedCompanyFilters] = useState<string[]>(
+    () => (selectedCompanyId ? [selectedCompanyId] : []),
+  );
+
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [bookerId, setBookerId] = useState((initialSale as any)?.bookerId ?? "");
+
+  useEffect(() => {
+    api.listTeamMembers().then(setTeamMembers).catch(() => {});
+  }, []);
 
   const dropRef = useRef<HTMLDivElement>(null);
   const tableWrapRef = useRef<HTMLDivElement>(null);
@@ -1085,7 +1092,7 @@ function NewSaleForm({
   function catalogFor(search: string) {
     let filtered = catalog;
     if (selectedCompanyFilters.length > 0) {
-      filtered = filtered.filter((c) => selectedCompanyFilters.some((name) => c.companyTag === name));
+      filtered = filtered.filter((c) => selectedCompanyFilters.some((id) => (c as any).companyId === id));
     }
     if (!search.trim()) return filtered;
     const q = search.toLowerCase();
@@ -1250,6 +1257,8 @@ function NewSaleForm({
           total,
           balance,
           notes: notesJson,
+          companyId: selectedCompanyId ?? null,
+          bookerId: bookerId || null,
         });
       } else {
         txn = await api.createTransaction({
@@ -1259,6 +1268,8 @@ function NewSaleForm({
           total,
           balance,
           notes: notesJson,
+          companyId: selectedCompanyId ?? undefined,
+          bookerId: bookerId || undefined,
         });
       }
 
@@ -1381,14 +1392,14 @@ function NewSaleForm({
                   All
                 </button>
                 {companies.map((c) => {
-                  const isActive = selectedCompanyFilters.includes(c.name);
+                  const isActive = selectedCompanyFilters.includes(c.id);
                   return (
                     <button
                       key={c.id}
                       type="button"
                       className={`nsf-company-chip${isActive ? " nsf-company-chip--active" : ""}`}
                       onClick={() => setSelectedCompanyFilters((prev) =>
-                        isActive ? prev.filter((n) => n !== c.name) : [...prev, c.name]
+                        isActive ? prev.filter((id) => id !== c.id) : [...prev, c.id]
                       )}
                     >
                       {c.name}
@@ -1827,14 +1838,14 @@ function NewSaleForm({
               All
             </button>
             {companies.map((c) => {
-              const isActive = selectedCompanyFilters.includes(c.name);
+              const isActive = selectedCompanyFilters.includes(c.id);
               return (
                 <button
                   key={c.id}
                   type="button"
                   className={`nsf-company-chip${isActive ? " nsf-company-chip--active" : ""}`}
                   onClick={() => setSelectedCompanyFilters((prev) =>
-                    isActive ? prev.filter((n) => n !== c.name) : [...prev, c.name]
+                    isActive ? prev.filter((id) => id !== c.id) : [...prev, c.id]
                   )}
                 >
                   {c.name}
@@ -2041,6 +2052,22 @@ function NewSaleForm({
               </select>
             </div>
             <button type="button" className="nsf-add-payment-btn">+ Add Payment type</button>
+
+            {teamMembers.length > 0 && (
+              <div className="nsf-payment-field">
+                <span className="nsf-payment-lbl">Booker</span>
+                <select
+                  className="nsf-payment-select"
+                  value={bookerId}
+                  onChange={(e) => setBookerId(e.target.value)}
+                >
+                  <option value="">No booker</option>
+                  {teamMembers.map((m) => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div className="nsf-add-btns">
               <button type="button" className="nsf-add-btn">

@@ -1,6 +1,8 @@
 import { useMemo, useState, useEffect, useCallback, type ReactNode } from "react";
 import type { LicenseStatus, DeviceSession } from "@vyapar/api-client";
 import { loadTenant, loadRole, api } from "../lib/api";
+import { CompanyProvider } from "../lib/CompanyContext";
+import { CompanyDropdown } from "./CompanyDropdown";
 
 const DESKTOP_DEVICE_ID_KEY = "vyapar.deviceId";
 
@@ -353,6 +355,7 @@ export function Shell({ status, onLogout, onLicenseActivated }: Props) {
   })();
 
   return (
+    <CompanyProvider>
     <div className="app">
       <aside className="sidebar">
 
@@ -460,6 +463,7 @@ export function Shell({ status, onLogout, onLicenseActivated }: Props) {
         <header className="topbar">
           <div className="topbar__left">
             <span className="topbar__page-name">{activeLabel}</span>
+            <CompanyDropdown />
           </div>
 
           <button type="button" className="topbar__search">
@@ -639,6 +643,7 @@ export function Shell({ status, onLogout, onLicenseActivated }: Props) {
         </div>
       )}
     </div>
+    </CompanyProvider>
   );
 }
 
