@@ -1578,6 +1578,17 @@ function NewSaleForm({
               <div className="lsf-balance-row">
                 <span>Balance: {fmt(balance)}</span>
               </div>
+              <div className="lsf-totals-row">
+                <span className="lsf-totals-lbl">Booker</span>
+                <div className="lsf-totals-controls">
+                  <select className="lsf-sm-select" value={bookerId} onChange={(e) => setBookerId(e.target.value)}>
+                    <option value="">No booker</option>
+                    {teamMembers.map((m) => (
+                      <option key={m.id} value={m.id}>{m.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
             </div>
 
             {/* Total bar */}

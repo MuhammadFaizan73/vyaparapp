@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { api } from "../lib/api";
 import type { Party, Transaction } from "@vyapar/api-client";
+import { useCompany } from "../lib/CompanyContext";
 
 type Period = "This Month" | "Last Month" | "This Year";
 
@@ -127,6 +128,7 @@ export function HomeScreen({ onNavigate }: Props) {
   const [stockValue, setStockValue] = useState<number | null>(null);
   const [cashInHand, setCashInHand] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const { selectedCompanyId } = useCompany();
 
   const range = useMemo(() => getRange(period), [period]);
 
@@ -154,13 +156,14 @@ export function HomeScreen({ onNavigate }: Props) {
 
   useEffect(() => {
     setLoading(true);
+    const companyId = selectedCompanyId ?? undefined;
     Promise.all([
-      api.getParties(),
-      api.getTransactionsByType("sale", { from: fetchFrom, to: fetchTo }),
-      api.getTransactionsByType("purchase", { from: fetchFrom, to: fetchTo }),
-      api.getTransactionsByType("expense", { from: fetchFrom, to: fetchTo }),
-      api.getReport("stock-summary", {}),
-      api.getCashInHand(),
+      api.getParties({ companyId }),
+      api.getTransactionsByType("sale", { from: fetchFrom, to: fetchTo, companyId }),
+      api.getTransactionsByType("purchase", { from: fetchFrom, to: fetchTo, companyId }),
+      api.getTransactionsByType("expense", { from: fetchFrom, to: fetchTo, companyId }),
+      api.getReport("stock-summary", { companyId }),
+      api.getCashInHand({ companyId }),
     ]).then(([ps, ss, pur, exp, stock, cash]) => {
       setParties(ps);
       setSales(ss);
@@ -169,7 +172,7 @@ export function HomeScreen({ onNavigate }: Props) {
       setStockValue(stock?.total?.stockValue ?? 0);
       setCashInHand(cash?.balance ?? 0);
     }).catch(() => {}).finally(() => setLoading(false));
-  }, [fetchFrom, fetchTo]);
+  }, [fetchFrom, fetchTo, selectedCompanyId]);
 
   const receivable = useMemo(() => {
     const pos = parties.filter(p => p.balance > 0);

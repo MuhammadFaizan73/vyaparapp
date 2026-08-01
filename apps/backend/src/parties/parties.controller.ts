@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { PartiesService } from "./parties.service";
 import { CreatePartyDto, UpdatePartyDto } from "./parties.dto";
 import { JwtGuard, type AuthedRequest } from "../auth/jwt.guard";
@@ -9,8 +9,8 @@ export class PartiesController {
   constructor(private readonly partiesService: PartiesService) {}
 
   @Get()
-  list(@Req() req: AuthedRequest) {
-    return this.partiesService.list(req.tenantId);
+  list(@Req() req: AuthedRequest, @Query("companyId") companyId?: string) {
+    return this.partiesService.list(req.tenantId, companyId);
   }
 
   @Post()

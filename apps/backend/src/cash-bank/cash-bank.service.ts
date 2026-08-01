@@ -52,9 +52,9 @@ export class CashBankService {
     return created.id;
   }
 
-  async getCashInHand(tenantId: string) {
+  async getCashInHand(tenantId: string, companyId?: string) {
     const txns = await this.prisma.transaction.findMany({
-      where: { tenantId },
+      where: { tenantId, ...(companyId && { companyId }) },
       orderBy: { date: "desc" },
       include: { party: { select: { name: true, isSystem: true } } },
     });

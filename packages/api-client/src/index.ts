@@ -122,8 +122,9 @@ export class VyaparApiClient {
     return data;
   }
 
-  async getParties(): Promise<Party[]> {
-    const { data } = await this.http.get<Party[]>("/parties");
+  async getParties(opts?: { companyId?: string }): Promise<Party[]> {
+    const params = opts?.companyId ? { companyId: opts.companyId } : undefined;
+    const { data } = await this.http.get<Party[]>("/parties", { params });
     return data;
   }
 
@@ -377,8 +378,9 @@ export class VyaparApiClient {
     await this.http.delete(`/loan-accounts/${id}`);
   }
 
-  async getCashInHand(): Promise<{ balance: number; transactions: Array<{ id: string; type: string; rawType: string; name: string; date: string; amount: number; direction: "in" | "out"; invoiceNo: string | null }> }> {
-    const { data } = await this.http.get("/cash-bank/cash-in-hand");
+  async getCashInHand(opts?: { companyId?: string }): Promise<{ balance: number; transactions: Array<{ id: string; type: string; rawType: string; name: string; date: string; amount: number; direction: "in" | "out"; invoiceNo: string | null }> }> {
+    const params = opts?.companyId ? { companyId: opts.companyId } : undefined;
+    const { data } = await this.http.get("/cash-bank/cash-in-hand", { params });
     return data;
   }
 

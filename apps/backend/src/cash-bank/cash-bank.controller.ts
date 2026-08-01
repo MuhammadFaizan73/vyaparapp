@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Body, Req, Param, UseGuards } from "@nestjs/common";
+import { Controller, Get, Post, Patch, Delete, Body, Req, Param, Query, UseGuards } from "@nestjs/common";
 import { CashBankService } from "./cash-bank.service";
 import { JwtGuard } from "../auth/jwt.guard";
 
@@ -12,8 +12,8 @@ export class CashBankController {
   constructor(private readonly svc: CashBankService) {}
 
   @Get("cash-in-hand")
-  getCashInHand(@Req() req: AuthedRequest) {
-    return this.svc.getCashInHand(req.tenantId);
+  getCashInHand(@Req() req: AuthedRequest, @Query("companyId") companyId?: string) {
+    return this.svc.getCashInHand(req.tenantId, companyId);
   }
 
   @Post("cash-in-hand/adjust")

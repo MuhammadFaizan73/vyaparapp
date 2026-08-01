@@ -70,11 +70,20 @@ function toRow(p: any): PartyRow {
 export class PartiesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async list(tenantId: string): Promise<PartyRow[]> {
+  // companyId, when provided, scopes the receivable/payable balance to that company's
+  // transactions only — the party list itself is never narrowed (parties are shared
+  // across companies), only which transactions count toward each party's balance.
+  async list(tenantId: string, companyId?: string): Promise<PartyRow[]> {
     const parties = await this.prisma.party.findMany({
       where: { tenantId },
       orderBy: { createdAt: "asc" },
-      include: { transactions: { select: { total: true, balance: true, type: true } }, group: true },
+      include: {
+        transactions: {
+          where: companyId ? { companyId } : undefined,
+          select: { total: true, balance: true, type: true },
+        },
+        group: true,
+      },
     });
     return parties.map((p) => {
       let receivable = 0;
