@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { companyIdWhere } from "../common/company-filter.util";
 
 function parseNoteObj(notes: string | null): Record<string, any> {
   if (!notes) return {};
@@ -54,7 +55,7 @@ export class CashBankService {
 
   async getCashInHand(tenantId: string, companyId?: string) {
     const txns = await this.prisma.transaction.findMany({
-      where: { tenantId, ...(companyId && { companyId }) },
+      where: { tenantId, ...companyIdWhere(companyId) },
       orderBy: { date: "desc" },
       include: { party: { select: { name: true, isSystem: true } } },
     });

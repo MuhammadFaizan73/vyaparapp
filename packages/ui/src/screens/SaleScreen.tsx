@@ -153,7 +153,7 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
   const datePanelRef = useRef<HTMLDivElement>(null);
   const [parties, setParties] = useState<Party[]>([]);
   const [items, setItems] = useState<Item[]>([]);
-  const { companies, selectedCompanyId } = useCompany();
+  const { companies, selectedCompanyId, companyFilter } = useCompany();
   const [loading, setLoading] = useState(true);
 
   /* form visibility */
@@ -257,7 +257,7 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
   async function loadSales() {
     try {
       const [txns, ps, its] = await Promise.all([
-        api.getTransactionsByType("sale", { from: filterFrom, to: filterTo, companyId: selectedCompanyId ?? undefined }),
+        api.getTransactionsByType("sale", { from: filterFrom, to: filterTo, companyId: companyFilter ?? undefined }),
         api.getParties(),
         api.getItems(),
       ]);
@@ -273,7 +273,7 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
     setLoading(true);
     loadSales().finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterFrom, filterTo, selectedCompanyId]);
+  }, [filterFrom, filterTo, companyFilter]);
 
   /* close row menu on outside click */
   useEffect(() => {

@@ -17,6 +17,12 @@ import type {
   Company,
   CreateCompanyRequest,
   UpdateCompanyRequest,
+  Distributor,
+  CreateDistributorRequest,
+  UpdateDistributorRequest,
+  Branch,
+  CreateBranchRequest,
+  UpdateBranchRequest,
   TeamMember,
   BulkSaleImportRequest,
   BulkSaleImportJobStatus,
@@ -249,8 +255,8 @@ export class VyaparApiClient {
     return data;
   }
 
-  async getCompanies(): Promise<Company[]> {
-    const { data } = await this.http.get<Company[]>("/companies");
+  async getCompanies(opts?: { branchId?: string }): Promise<Company[]> {
+    const { data } = await this.http.get<Company[]>("/companies", { params: opts });
     return data;
   }
 
@@ -266,6 +272,44 @@ export class VyaparApiClient {
 
   async deleteCompany(id: string): Promise<void> {
     await this.http.delete(`/companies/${id}`);
+  }
+
+  async getDistributors(): Promise<Distributor[]> {
+    const { data } = await this.http.get<Distributor[]>("/distributors");
+    return data;
+  }
+
+  async createDistributor(body: CreateDistributorRequest): Promise<Distributor> {
+    const { data } = await this.http.post<Distributor>("/distributors", body);
+    return data;
+  }
+
+  async updateDistributor(id: string, body: UpdateDistributorRequest): Promise<Distributor> {
+    const { data } = await this.http.patch<Distributor>(`/distributors/${id}`, body);
+    return data;
+  }
+
+  async deleteDistributor(id: string): Promise<void> {
+    await this.http.delete(`/distributors/${id}`);
+  }
+
+  async getBranches(opts?: { distributorId?: string }): Promise<Branch[]> {
+    const { data } = await this.http.get<Branch[]>("/branches", { params: opts });
+    return data;
+  }
+
+  async createBranch(body: CreateBranchRequest): Promise<Branch> {
+    const { data } = await this.http.post<Branch>("/branches", body);
+    return data;
+  }
+
+  async updateBranch(id: string, body: UpdateBranchRequest): Promise<Branch> {
+    const { data } = await this.http.patch<Branch>(`/branches/${id}`, body);
+    return data;
+  }
+
+  async deleteBranch(id: string): Promise<void> {
+    await this.http.delete(`/branches/${id}`);
   }
 
   async createItem(body: CreateItemRequest): Promise<Item> {
@@ -554,6 +598,12 @@ export type {
   Company,
   CreateCompanyRequest,
   UpdateCompanyRequest,
+  Distributor,
+  CreateDistributorRequest,
+  UpdateDistributorRequest,
+  Branch,
+  CreateBranchRequest,
+  UpdateBranchRequest,
   TeamMember,
   TeamRole,
 } from "@vyapar/shared-types";

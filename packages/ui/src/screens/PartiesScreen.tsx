@@ -40,9 +40,9 @@ export function PartiesScreen({ isLocked = false, onLockedAction }: PartiesScree
   const [printOptions, setPrintOptions] = useState<PrintOptions | null>(null);
   const [showExcelColumns, setShowExcelColumns] = useState(false);
   const moreMenuRef = useRef<HTMLDivElement>(null);
-  const { selectedCompanyId, setSelectedCompanyId } = useCompany();
+  const { companies, companyFilter, setSelectedDistributorId } = useCompany();
 
-  useEffect(() => { void load(); }, [selectedCompanyId]);
+  useEffect(() => { void load(); }, [companyFilter]);
 
   useEffect(() => {
     if (selected?.id) {
@@ -65,7 +65,7 @@ export function PartiesScreen({ isLocked = false, onLockedAction }: PartiesScree
   async function load() {
     setLoading(true);
     try {
-      const data = await api.getParties({ companyId: selectedCompanyId ?? undefined });
+      const data = await api.getParties({ companyId: companyFilter ?? undefined });
       setParties(data);
       setSelected((prev) => {
         if (!prev) return data[0] ?? null;
@@ -122,10 +122,10 @@ export function PartiesScreen({ isLocked = false, onLockedAction }: PartiesScree
     if (isNew) {
       setSearch("");
       setTypeFilter("all");
-      // A brand-new party has no transactions yet, so a company filter would make it
-      // vanish again the next time this list refetches — switch to "All Companies" so
-      // it stays visible until it has a transaction tied to a specific company.
-      if (selectedCompanyId) setSelectedCompanyId(null);
+      // A brand-new party (unless directly tagged to a company) has no transactions
+      // yet, so a company/branch/distributor filter would make it vanish again the
+      // next time this list refetches — switch to "All Companies" so it stays visible.
+      if (companyFilter) setSelectedDistributorId(null);
     }
     setSelected(party);
     setShowAdd(false);
@@ -155,7 +155,8 @@ export function PartiesScreen({ isLocked = false, onLockedAction }: PartiesScree
   }
 
   function handleExportParties() {
-    const headers = ["Name*", "Contact No.", "Email ID", "Address", "Opening Balance", "Opening Date (dd/MM/yyyy)", "Party Type"];
+    const headers = ["Name*", "Contact No.", "Email ID", "Address", "Opening Balance", "Opening Date (dd/MM/yyyy)", "Party Type", "Company"];
+    const companyName = (id: string | null | undefined) => companies.find((c) => c.id === id)?.name ?? "";
     const rows = parties.map((p) => [
       p.name,
       p.phone ?? "",
@@ -164,6 +165,7 @@ export function PartiesScreen({ isLocked = false, onLockedAction }: PartiesScree
       p.balance ?? "",
       "",
       p.partyType ? p.partyType.charAt(0).toUpperCase() + p.partyType.slice(1) : "",
+      companyName(p.companyId),
     ]);
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
     ws["!cols"] = headers.map((h) => ({ wch: Math.max(h.length + 4, 18) }));

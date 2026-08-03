@@ -22,6 +22,8 @@ import { AdminModule } from "./admin/admin.module";
 import { DevicesModule } from "./devices/devices.module";
 import { BulkImportModule } from "./bulk-import/bulk-import.module";
 import { CompaniesModule } from "./companies/companies.module";
+import { DistributorsModule } from "./distributors/distributors.module";
+import { BranchesModule } from "./branches/branches.module";
 
 @Module({
   imports: [
@@ -49,6 +51,8 @@ import { CompaniesModule } from "./companies/companies.module";
     DevicesModule,
     BulkImportModule,
     CompaniesModule,
+    DistributorsModule,
+    BranchesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

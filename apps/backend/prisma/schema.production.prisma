@@ -32,6 +32,8 @@ model Tenant {
   companyEmail     String?
   extraCompanies   String   @default("[]")
   companies        Company[]
+  distributors      Distributor[]
+  branches          Branch[]
   officeLat        Float?
   officeLng        Float?
   officeLabel      String?
@@ -41,7 +43,7 @@ model Tenant {
   updatedAt        DateTime           @updatedAt
 }
 
-model Company {
+model Distributor {
   id           String   @id @default(uuid())
   tenantId     String
   tenant       Tenant   @relation(fields: [tenantId], references: [id])
@@ -49,13 +51,47 @@ model Company {
   businessType String?
   email        String?
   phone        String?
-  gstin        String?
-  items        Item[]
-  transactions Transaction[]
+  branches     Branch[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   @@index([tenantId])
+}
+
+model Branch {
+  id            String      @id @default(uuid())
+  tenantId      String
+  tenant        Tenant      @relation(fields: [tenantId], references: [id])
+  distributorId String
+  distributor   Distributor @relation(fields: [distributorId], references: [id], onDelete: Cascade)
+  name          String
+  city          String?
+  companies     Company[]
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([tenantId, distributorId])
+}
+
+model Company {
+  id           String   @id @default(uuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  branchId     String?
+  branch       Branch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  name         String
+  businessType String?
+  email        String?
+  phone        String?
+  gstin        String?
+  items        Item[]
+  transactions Transaction[]
+  parties      Party[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([branchId])
 }
 
 model License {
@@ -100,11 +136,15 @@ model Party {
   isSystem        Boolean       @default(false)
   latitude        Float?
   longitude       Float?
+  companyId       String?
+  company         Company?      @relation(fields: [companyId], references: [id], onDelete: SetNull)
   transactions    Transaction[]
   shopVisits      ShopVisit[]
   assignments     PartyAssignment[]
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
+
+  @@index([tenantId, companyId])
 }
 
 model PartyGroup {

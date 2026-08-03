@@ -1,29 +1,25 @@
 import { useState } from "react";
-import type { Company, Branch } from "@vyapar/api-client";
+import type { Distributor } from "@vyapar/api-client";
 import { api } from "../lib/api";
 
 type Props = {
-  company: Company | null;
-  branches: Branch[];
-  defaultBranchId?: string | null;
+  distributor: Distributor | null;
   onClose: () => void;
-  onSaved: (company: Company) => void;
+  onSaved: (distributor: Distributor) => void;
   onDeleted: (id: string) => void;
 };
 
-export function CompanyFormModal({ company, branches, defaultBranchId, onClose, onSaved, onDeleted }: Props) {
-  const [name, setName] = useState(company?.name ?? "");
-  const [businessType, setBusinessType] = useState(company?.businessType ?? "");
-  const [email, setEmail] = useState(company?.email ?? "");
-  const [phone, setPhone] = useState(company?.phone ?? "");
-  const [gstin, setGstin] = useState(company?.gstin ?? "");
-  const [branchId, setBranchId] = useState(company?.branchId ?? defaultBranchId ?? "");
+export function DistributorFormModal({ distributor, onClose, onSaved, onDeleted }: Props) {
+  const [name, setName] = useState(distributor?.name ?? "");
+  const [businessType, setBusinessType] = useState(distributor?.businessType ?? "");
+  const [email, setEmail] = useState(distributor?.email ?? "");
+  const [phone, setPhone] = useState(distributor?.phone ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function save() {
     if (!name.trim()) {
-      setError("Please enter a company name.");
+      setError("Please enter a distributor name.");
       return;
     }
     setError(null);
@@ -34,15 +30,13 @@ export function CompanyFormModal({ company, branches, defaultBranchId, onClose, 
         businessType: businessType.trim() || undefined,
         email: email.trim() || undefined,
         phone: phone.trim() || undefined,
-        gstin: gstin.trim() || undefined,
-        branchId: branchId || null,
       };
-      const saved = company
-        ? await api.updateCompany(company.id, body)
-        : await api.createCompany(body);
+      const saved = distributor
+        ? await api.updateDistributor(distributor.id, body)
+        : await api.createDistributor(body);
       onSaved(saved);
     } catch (err) {
-      const msg = (err as { response?: { data?: { message?: string | string[] } } }).response?.data?.message ?? "Could not save company.";
+      const msg = (err as { response?: { data?: { message?: string | string[] } } }).response?.data?.message ?? "Could not save distributor.";
       setError(Array.isArray(msg) ? msg.join(", ") : String(msg));
     } finally {
       setBusy(false);
@@ -50,14 +44,15 @@ export function CompanyFormModal({ company, branches, defaultBranchId, onClose, 
   }
 
   async function remove() {
-    if (!company) return;
-    if (!confirm(`Delete "${company.name}"? Items/invoices already tagged to it will become uncategorized.`)) return;
+    if (!distributor) return;
+    if (!confirm(`Delete "${distributor.name}"? Its branches must be empty or reassigned first.`)) return;
     setBusy(true);
     try {
-      await api.deleteCompany(company.id);
-      onDeleted(company.id);
-    } catch {
-      setError("Could not delete company.");
+      await api.deleteDistributor(distributor.id);
+      onDeleted(distributor.id);
+    } catch (err) {
+      const msg = (err as { response?: { data?: { message?: string } } }).response?.data?.message ?? "Could not delete distributor.";
+      setError(msg);
       setBusy(false);
     }
   }
@@ -65,14 +60,14 @@ export function CompanyFormModal({ company, branches, defaultBranchId, onClose, 
   return (
     <div className="party-modal-backdrop" onClick={onClose}>
       <div className="company-form-modal" onClick={(e) => e.stopPropagation()}>
-        <h2 className="company-form-modal__title">{company ? "Edit Company" : "Add Company"}</h2>
+        <h2 className="company-form-modal__title">{distributor ? "Edit Distributor" : "Add Distributor"}</h2>
 
-        <label className="company-form-modal__label">Company Name</label>
+        <label className="company-form-modal__label">Distributor Name</label>
         <input
           className="company-form-modal__input"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Shan Foods"
+          placeholder="e.g. Al-Fateh Distribution"
           autoFocus
         />
 
@@ -83,19 +78,6 @@ export function CompanyFormModal({ company, branches, defaultBranchId, onClose, 
           onChange={(e) => setBusinessType(e.target.value)}
           placeholder="Optional"
         />
-
-        <label className="company-form-modal__label">Branch</label>
-        <select
-          className="company-form-modal__input"
-          value={branchId}
-          onChange={(e) => setBranchId(e.target.value)}
-          style={{ cursor: "pointer" }}
-        >
-          <option value="">No branch</option>
-          {branches.map((b) => (
-            <option key={b.id} value={b.id}>{b.name}</option>
-          ))}
-        </select>
 
         <div className="company-form-modal__row">
           <div>
@@ -118,18 +100,10 @@ export function CompanyFormModal({ company, branches, defaultBranchId, onClose, 
           </div>
         </div>
 
-        <label className="company-form-modal__label">GSTIN</label>
-        <input
-          className="company-form-modal__input"
-          value={gstin}
-          onChange={(e) => setGstin(e.target.value)}
-          placeholder="Optional"
-        />
-
         {error && <div className="company-form-modal__error">{error}</div>}
 
         <div className="company-form-modal__actions">
-          {company && (
+          {distributor && (
             <button type="button" className="company-form-modal__delete" onClick={remove} disabled={busy}>
               Delete
             </button>

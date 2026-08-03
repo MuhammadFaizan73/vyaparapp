@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { CompaniesService } from "./companies.service";
 import { CreateCompanyDto, UpdateCompanyDto } from "./companies.dto";
 import { JwtGuard, type AuthedRequest } from "../auth/jwt.guard";
@@ -9,8 +9,8 @@ export class CompaniesController {
   constructor(private readonly companiesService: CompaniesService) {}
 
   @Get()
-  list(@Req() req: AuthedRequest) {
-    return this.companiesService.list(req.tenantId);
+  list(@Req() req: AuthedRequest, @Query("branchId") branchId?: string) {
+    return this.companiesService.list(req.tenantId, branchId);
   }
 
   @Post()

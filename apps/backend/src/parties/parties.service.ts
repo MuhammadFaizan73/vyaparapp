@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreatePartyDto, UpdatePartyDto } from "./parties.dto";
+import { companyIdWhere, parseCompanyIds } from "../common/company-filter.util";
 
 export type PartyRow = {
   id: string;
@@ -30,6 +31,7 @@ export type PartyRow = {
   balance: number;
   latitude: number | null;
   longitude: number | null;
+  companyId: string | null;
   createdAt: string;
 };
 
@@ -62,6 +64,7 @@ function toRow(p: any): PartyRow {
     balance: p.openingBalance ?? 0,
     latitude: p.latitude ?? null,
     longitude: p.longitude ?? null,
+    companyId: p.companyId ?? null,
     createdAt: p.createdAt.toISOString(),
   };
 }
@@ -70,24 +73,29 @@ function toRow(p: any): PartyRow {
 export class PartiesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // companyId, when provided, scopes both which parties show up (only ones with at
-  // least one transaction tied to that company) and their receivable/payable balance
-  // (computed only from that company's transactions). System parties (e.g. "Cash Sale")
-  // are always kept regardless of the filter.
+  // companyId, when provided, scopes both which parties show up (parties directly
+  // tagged to the company, or with at least one transaction tied to it) and their
+  // receivable/payable balance (computed only from that company's transactions).
+  // System parties (e.g. "Cash Sale") are always kept regardless of the filter.
+  // companyId may be a single id or a comma-separated list (a Distributor/Branch
+  // rollup resolves to every Company id beneath it).
   async list(tenantId: string, companyId?: string): Promise<PartyRow[]> {
     const parties = await this.prisma.party.findMany({
       where: { tenantId },
       orderBy: { createdAt: "asc" },
       include: {
         transactions: {
-          where: companyId ? { companyId } : undefined,
+          where: companyIdWhere(companyId),
           select: { total: true, balance: true, type: true },
         },
         group: true,
       },
     });
-    const scoped = companyId
-      ? parties.filter((p) => p.isSystem || (p.transactions?.length ?? 0) > 0)
+    const filterIds = parseCompanyIds(companyId);
+    const scoped = filterIds.length
+      ? parties.filter(
+          (p) => p.isSystem || (p.transactions?.length ?? 0) > 0 || (p.companyId && filterIds.includes(p.companyId)),
+        )
       : parties;
     return scoped.map((p) => {
       let receivable = 0;
@@ -145,6 +153,7 @@ export class PartiesService {
         groupId: dto.groupId ?? null,
         latitude: dto.latitude ?? null,
         longitude: dto.longitude ?? null,
+        companyId: dto.companyId ?? null,
       },
     });
     return toRow(party);
@@ -182,6 +191,7 @@ export class PartiesService {
         ...(dto.groupId !== undefined && { groupId: dto.groupId || null }),
         ...(dto.latitude !== undefined && { latitude: dto.latitude ?? null }),
         ...(dto.longitude !== undefined && { longitude: dto.longitude ?? null }),
+        ...(dto.companyId !== undefined && { companyId: dto.companyId || null }),
       },
     });
     return toRow(party);

@@ -16,6 +16,7 @@ type RowData = {
   ntn: string;
   strn: string;
   partyType: string;
+  company: string;
 };
 
 const PARTY_TYPES = ["customer", "supplier", "both", "other"] as const;
@@ -85,6 +86,7 @@ export function ImportExcelModal({ onClose, onImported }: Props) {
           ntn: String(r["NTN"] ?? "").trim(),
           strn: String(r["STRN"] ?? "").trim(),
           partyType: normalizePartyType(rawPartyType),
+          company: String(r["Company"] ?? "").trim(),
         };
         return { ...row, errors: validateRow(row, rawPartyType) };
       });
@@ -129,6 +131,14 @@ export function ImportExcelModal({ onClose, onImported }: Props) {
       return created.id;
     }
 
+    // Resolve each row's "Company" name to a real Company id — unmatched names are
+    // just skipped (party still imports, without a company tag) rather than blocking.
+    const existingCompanies = await api.getCompanies().catch(() => []);
+    const companyIdByName = new Map(existingCompanies.map((c) => [c.name.trim().toLowerCase(), c.id]));
+    function resolveCompanyId(companyName: string): string | undefined {
+      return companyIdByName.get(companyName.trim().toLowerCase());
+    }
+
     let failed = 0;
     for (const r of valid) {
       try {
@@ -144,6 +154,7 @@ export function ImportExcelModal({ onClose, onImported }: Props) {
           ntn: r.ntn || undefined,
           strn: r.strn || undefined,
           partyType: (r.partyType || undefined) as any,
+          companyId: r.company ? resolveCompanyId(r.company) : undefined,
         });
       } catch {
         failed++;
@@ -213,7 +224,7 @@ export function ImportExcelModal({ onClose, onImported }: Props) {
                 onClick={() => {
                   const wb = XLSX.utils.book_new();
                   const ws = XLSX.utils.aoa_to_sheet([
-                    ["Name*", "Contact No.", "Email ID", "Address", "Opening Balance", "Opening Date (dd/MM/yyyy)", "Party Group", "CNIC", "NTN", "STRN", "Party Type (Customer/Supplier/Both/Other)"],
+                    ["Name*", "Contact No.", "Email ID", "Address", "Opening Balance", "Opening Date (dd/MM/yyyy)", "Party Group", "CNIC", "NTN", "STRN", "Party Type (Customer/Supplier/Both/Other)", "Company"],
                   ]);
                   XLSX.utils.book_append_sheet(wb, ws, "Parties");
                   XLSX.writeFile(wb, "parties_template.xlsx");
@@ -319,6 +330,7 @@ export function ImportExcelModal({ onClose, onImported }: Props) {
                   <th>NTN</th>
                   <th>STRN</th>
                   <th>Party Type</th>
+                  <th>Company</th>
                 </tr>
               </thead>
               <tbody>
@@ -350,11 +362,12 @@ export function ImportExcelModal({ onClose, onImported }: Props) {
                     <td className={row.errors.some(e => e.includes("Party Type")) ? "import-table__cell--invalid" : ""}>
                       {row.partyType ? row.partyType.charAt(0).toUpperCase() + row.partyType.slice(1) : ""}
                     </td>
+                    <td>{row.company}</td>
                   </tr>
                 ))}
                 {displayRows.length === 0 && (
                   <tr>
-                    <td colSpan={12} style={{ textAlign: "center", padding: "32px", color: "#94a3b8" }}>
+                    <td colSpan={13} style={{ textAlign: "center", padding: "32px", color: "#94a3b8" }}>
                       No {activeTab === "valid" ? "valid" : "error"} rows
                     </td>
                   </tr>

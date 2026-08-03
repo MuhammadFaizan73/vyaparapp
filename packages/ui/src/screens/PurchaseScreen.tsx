@@ -82,7 +82,7 @@ export function PurchaseScreen({ isLocked = false, onLockedAction, activeKey = "
   const [historyTarget, setHistoryTarget] = useState<PurchaseRow | null>(null);
   const [returnTarget,  setReturnTarget]  = useState<PurchaseRow | null>(null);
   const [previewTarget, setPreviewTarget] = useState<PurchaseRow | null>(null);
-  const { selectedCompanyId } = useCompany();
+  const { companyFilter, selectedCompanyId } = useCompany();
 
   async function loadPurchases() {
     // Load parties + items first — independent of transactions
@@ -96,7 +96,7 @@ export function PurchaseScreen({ isLocked = false, onLockedAction, activeKey = "
 
     // Load transactions for the current tab's type
     try {
-      const companyId = selectedCompanyId ?? undefined;
+      const companyId = companyFilter ?? undefined;
       const [txns, sum] = await Promise.all([
         api.getTransactionsByType(tabCfg.txnType, { take: RECENT_ROWS_LIMIT, companyId }),
         api.getTransactionsSummary(tabCfg.txnType, { companyId }),
@@ -108,7 +108,7 @@ export function PurchaseScreen({ isLocked = false, onLockedAction, activeKey = "
     } catch { /* offline */ }
   }
 
-  useEffect(() => { setLoading(true); loadPurchases().finally(() => setLoading(false)); }, [activeKey, selectedCompanyId]);
+  useEffect(() => { setLoading(true); loadPurchases().finally(() => setLoading(false)); }, [activeKey, companyFilter]);
   useEffect(() => {
     if (!menuId) return;
     const close = () => setMenuId(null);
@@ -1345,11 +1345,11 @@ function PaymentOutSubScreen({ isLocked, onLockedAction }: { isLocked?: boolean;
   const [parties,   setParties]   = useState<Party[]>([]);
   const [loading,   setLoading]   = useState(true);
   const [showAdd,   setShowAdd]   = useState(false);
-  const { selectedCompanyId } = useCompany();
+  const { companyFilter } = useCompany();
 
   async function load() {
     try {
-      const companyId = selectedCompanyId ?? undefined;
+      const companyId = companyFilter ?? undefined;
       const [txns, ps, sum] = await Promise.all([
         api.getTransactionsByType("payment_out", { take: RECENT_ROWS_LIMIT, companyId }),
         api.getParties(),
@@ -1370,7 +1370,7 @@ function PaymentOutSubScreen({ isLocked, onLockedAction }: { isLocked?: boolean;
     } catch { /* offline */ }
   }
 
-  useEffect(() => { setLoading(true); load().finally(() => setLoading(false)); }, [selectedCompanyId]);
+  useEffect(() => { setLoading(true); load().finally(() => setLoading(false)); }, [companyFilter]);
 
   const totalAmt  = summary.total;
   const totalPaid = summary.total - summary.balance;
@@ -2231,11 +2231,11 @@ function PurchaseReturnSubScreen({ isLocked, onLockedAction }: { isLocked?: bool
   const [showForm, setShowForm] = useState(false);
   const [search,  setSearch]  = useState("");
   const [filter,  setFilter]  = useState<"all" | "paid" | "unpaid">("all");
-  const { selectedCompanyId } = useCompany();
+  const { companyFilter } = useCompany();
 
   async function load() {
     try {
-      const companyId = selectedCompanyId ?? undefined;
+      const companyId = companyFilter ?? undefined;
       const [ps, txns, sum] = await Promise.all([
         api.getParties(),
         api.getTransactionsByType("debit_note", { take: RECENT_ROWS_LIMIT, companyId }),
@@ -2249,7 +2249,7 @@ function PurchaseReturnSubScreen({ isLocked, onLockedAction }: { isLocked?: bool
     } catch { /* offline */ }
   }
 
-  useEffect(() => { setLoading(true); load().finally(() => setLoading(false)); }, [selectedCompanyId]);
+  useEffect(() => { setLoading(true); load().finally(() => setLoading(false)); }, [companyFilter]);
 
   const now = new Date();
   const fmtDMY = (d: Date) =>
@@ -3331,7 +3331,7 @@ function ExpenseSubScreen({ isLocked, onLockedAction }: { isLocked?: boolean; on
   const [catSearch, setCatSearch] = useState("");
   const [catTab, setCatTab] = useState<"CATEGORY" | "ITEMS">("CATEGORY");
   const [txnSearch, setTxnSearch] = useState("");
-  const { selectedCompanyId } = useCompany();
+  const { companyFilter } = useCompany();
 
   const now = new Date();
   const fmtDMY = (d: Date) =>
@@ -3345,7 +3345,7 @@ function ExpenseSubScreen({ isLocked, onLockedAction }: { isLocked?: boolean; on
       // not a real column, so it can only reflect this capped, most-recent window — a
       // proper category aggregate would need a dedicated backend endpoint doing the
       // grouping in SQL, which this doesn't attempt.
-      const companyId = selectedCompanyId ?? undefined;
+      const companyId = companyFilter ?? undefined;
       const [ps, txns, sum] = await Promise.all([
         api.getParties(),
         api.getTransactionsByType("expense", { take: RECENT_ROWS_LIMIT, companyId }),
@@ -3359,7 +3359,7 @@ function ExpenseSubScreen({ isLocked, onLockedAction }: { isLocked?: boolean; on
     } catch { /* offline */ }
   }
 
-  useEffect(() => { setLoading(true); load().finally(() => setLoading(false)); }, [selectedCompanyId]);
+  useEffect(() => { setLoading(true); load().finally(() => setLoading(false)); }, [companyFilter]);
 
   function getCategoryFromRow(row: PurchaseRow): string {
     try { return JSON.parse(row.notes ?? "{}").category ?? "Uncategorized"; } catch { return "Uncategorized"; }

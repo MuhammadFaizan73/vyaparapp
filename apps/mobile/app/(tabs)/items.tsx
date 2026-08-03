@@ -29,7 +29,7 @@ export default function ItemsScreen() {
   const [search, setSearch] = useState("");
   const [showSearch, setShowSearch] = useState(false);
   const [items, setItems] = useState<Item[]>(getItems());
-  const { selectedCompanyId } = useSelectedCompany();
+  const { companyFilter } = useSelectedCompany();
 
   // Load from disk once on first mount
   useEffect(() => {
@@ -48,8 +48,11 @@ export default function ItemsScreen() {
     return subscribeItems(() => setItems(getItems()));
   }, []);
 
-  const companyItems = selectedCompanyId
-    ? items.filter((i) => (i as any).companyId === selectedCompanyId)
+  const companyItems = companyFilter
+    ? items.filter((i) => {
+        const ids = companyFilter.split(",");
+        return (i as any).companyId && ids.includes((i as any).companyId);
+      })
     : items;
 
   const lowItems = companyItems.filter((i) => {

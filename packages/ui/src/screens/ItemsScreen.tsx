@@ -90,7 +90,7 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
   // Company — the currently selected filter comes from the shared app-wide context
   // (same dropdown shown in the topbar on every screen); `formCompanyId` is the
   // Add/Edit Item form's own selector, defaulting to whichever company is filtered.
-  const { companies, selectedCompanyId } = useCompany();
+  const { companies, selectedCompanyId, companyFilter } = useCompany();
   const [formCompanyId, setFormCompanyId] = useState<string>("");
 
   // Settings state
@@ -129,10 +129,11 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
     api.getItems().then(setItems).catch(() => {});
   }, []);
 
-  const displayedItems = useMemo(
-    () => (selectedCompanyId ? items.filter((i) => (i as any).companyId === selectedCompanyId) : items),
-    [items, selectedCompanyId],
-  );
+  const displayedItems = useMemo(() => {
+    if (!companyFilter) return items;
+    const ids = new Set(companyFilter.split(","));
+    return items.filter((i) => (i as any).companyId && ids.has((i as any).companyId));
+  }, [items, companyFilter]);
 
   useEffect(() => {
     if (!dotsMenuId) return;

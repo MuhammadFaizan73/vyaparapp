@@ -187,12 +187,12 @@ export function SaleTxnScreen({ activeKey, isLocked = false, onLockedAction }: P
   const [showDatePanel, setShowDatePanel] = useState(false);
   const [datePanelPos, setDatePanelPos] = useState({ top: 0, left: 0 });
   const datePanelRef = useRef<HTMLDivElement>(null);
-  const { selectedCompanyId } = useCompany();
+  const { selectedCompanyId, companyFilter } = useCompany();
 
   async function load() {
     try {
       const [txns, ps, items] = await Promise.all([
-        api.getTransactionsByType(cfg.txnType, { from: filterFrom, to: filterTo, companyId: selectedCompanyId ?? undefined }),
+        api.getTransactionsByType(cfg.txnType, { from: filterFrom, to: filterTo, companyId: companyFilter ?? undefined }),
         api.getParties(),
         api.getItems(),
       ]);
@@ -207,7 +207,7 @@ export function SaleTxnScreen({ activeKey, isLocked = false, onLockedAction }: P
     setLoading(true);
     load().finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cfg.txnType, filterFrom, filterTo, selectedCompanyId]);
+  }, [cfg.txnType, filterFrom, filterTo, companyFilter]);
 
   useEffect(() => {
     if (!menuId) return;

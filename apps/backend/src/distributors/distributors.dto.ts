@@ -1,19 +1,15 @@
 import { IsOptional, IsString, MaxLength } from "class-validator";
 
-export class CreateCompanyDto {
+export class CreateDistributorDto {
   @IsString() @MaxLength(100) name!: string;
   @IsOptional() @IsString() businessType?: string;
   @IsOptional() @IsString() email?: string;
   @IsOptional() @IsString() phone?: string;
-  @IsOptional() @IsString() gstin?: string;
-  @IsOptional() @IsString() branchId?: string | null;
 }
 
-export class UpdateCompanyDto {
+export class UpdateDistributorDto {
   @IsOptional() @IsString() @MaxLength(100) name?: string;
   @IsOptional() @IsString() businessType?: string;
   @IsOptional() @IsString() email?: string;
   @IsOptional() @IsString() phone?: string;
-  @IsOptional() @IsString() gstin?: string;
-  @IsOptional() @IsString() branchId?: string | null;
 }

@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateTransactionDto, UpdateTransactionDto } from "./transactions.dto";
+import { companyIdWhere } from "../common/company-filter.util";
 
 export type TransactionRow = {
   id: string;
@@ -55,7 +56,7 @@ export class TransactionsService {
 
   async listAll(tenantId: string, companyId?: string): Promise<TransactionRow[]> {
     const rows = await this.prisma.transaction.findMany({
-      where: { tenantId, ...(companyId && { companyId }) },
+      where: { tenantId, ...companyIdWhere(companyId) },
       orderBy: { date: "desc" },
       take: 200,
     });
@@ -80,7 +81,7 @@ export class TransactionsService {
       where: {
         tenantId, type,
         ...(dateFilter && { date: dateFilter }),
-        ...(opts?.companyId && { companyId: opts.companyId }),
+        ...companyIdWhere(opts?.companyId),
       },
       orderBy: { date: "desc" },
       ...(opts?.take !== undefined && { take: opts.take }),
@@ -99,7 +100,7 @@ export class TransactionsService {
     opts?: { from?: string; to?: string; companyId?: string },
   ): Promise<{ count: number; total: number; balance: number }> {
     const dateFilter = this.dateFilter(opts?.from, opts?.to);
-    const where = { tenantId, type, ...(dateFilter && { date: dateFilter }), ...(opts?.companyId && { companyId: opts.companyId }) };
+    const where = { tenantId, type, ...(dateFilter && { date: dateFilter }), ...companyIdWhere(opts?.companyId) };
     const [agg, count] = await Promise.all([
       this.prisma.transaction.aggregate({ where, _sum: { total: true, balance: true } }),
       this.prisma.transaction.count({ where }),

@@ -155,20 +155,20 @@ export function CashInHandScreen() {
   const [showAdjust, setShowAdjust]   = useState(false);
   const [search, setSearch]           = useState("");
   const [typeFilter, setTypeFilter]   = useState("all");
-  const { selectedCompanyId } = useCompany();
+  const { companyFilter } = useCompany();
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.getCashInHand({ companyId: selectedCompanyId ?? undefined });
+      const res = await api.getCashInHand({ companyId: companyFilter ?? undefined });
       setData(res);
     } catch (e: any) {
       setError(e?.response?.data?.message ?? "Failed to load Cash In Hand data.");
     } finally {
       setLoading(false);
     }
-  }, [selectedCompanyId]);
+  }, [companyFilter]);
 
   useEffect(() => { load(); }, [load]);
 

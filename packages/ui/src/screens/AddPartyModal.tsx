@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import type { Party, PartyGroup } from "@vyapar/api-client";
 import { api } from "../lib/api";
+import { useCompany } from "../lib/CompanyContext";
 import type { PartySettings } from "./PartySettingsDrawer";
 import { DEFAULT_PARTY_SETTINGS } from "./PartySettingsDrawer";
 
@@ -38,6 +39,12 @@ export function AddPartyModal({ onClose, onSaved, party, settings = DEFAULT_PART
   const [newGroupName, setNewGroupName] = useState("");
   const [creatingGroup, setCreatingGroup] = useState(false);
   const showNewGroupInput = groupId === "__new__";
+
+  // Company — defaults to whichever single Company is currently filtered (a
+  // Distributor/Branch rollup has no single company to default to, so this stays
+  // blank in that case; the dropdown below still lists every company either way).
+  const { companies, selectedCompanyId } = useCompany();
+  const [companyId, setCompanyId] = useState<string>(party?.companyId ?? selectedCompanyId ?? "");
 
   useEffect(() => {
     api.listPartyGroups().then(setGroups).catch(() => {});
@@ -139,6 +146,7 @@ export function AddPartyModal({ onClose, onSaved, party, settings = DEFAULT_PART
       groupId: (groupId && groupId !== "__new__") ? groupId : undefined,
       latitude: !isNaN(lat) ? lat : undefined,
       longitude: !isNaN(lng) ? lng : undefined,
+      companyId: companyId || undefined,
     };
   }
 
@@ -242,6 +250,25 @@ export function AddPartyModal({ onClose, onSaved, party, settings = DEFAULT_PART
               </select>
             </div>
           </div>
+
+          {/* Company — which company this party belongs to, if any */}
+          {companies.length > 0 && (
+            <div className="party-modal__row">
+              <div className="party-modal__field">
+                <select
+                  className="party-modal__input"
+                  style={{ cursor: "pointer", color: companyId ? "#111827" : "#9ca3af" }}
+                  value={companyId}
+                  onChange={(e) => setCompanyId(e.target.value)}
+                >
+                  <option value="">No specific company</option>
+                  {companies.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
 
           {/* New group inline input — shown when "+ New Group" is selected */}
           {showNewGroupInput && (

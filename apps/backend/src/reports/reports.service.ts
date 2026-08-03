@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { companyIdWhere } from '../common/company-filter.util';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -72,7 +73,7 @@ export class ReportsService {
         type: { in: ['sale', 'credit_note'] },
         ...(dateFilter ? { date: dateFilter } : {}),
         ...(partyId ? { partyId } : {}),
-        ...(companyId ? { companyId } : {}),
+        ...companyIdWhere(companyId),
       },
       include: { party: true, booker: { select: { name: true } } },
       orderBy: { date: 'desc' },
@@ -133,7 +134,7 @@ export class ReportsService {
         type: { in: ['purchase', 'debit_note'] },
         ...(dateFilter ? { date: dateFilter } : {}),
         ...(partyId ? { partyId } : {}),
-        ...(companyId ? { companyId } : {}),
+        ...companyIdWhere(companyId),
       },
       include: { party: true },
       orderBy: { date: 'desc' },
@@ -184,7 +185,7 @@ export class ReportsService {
     const dayEnd = endOfDay(target);
 
     const txns = await this.prisma.transaction.findMany({
-      where: { tenantId, date: { gte: dayStart, lte: dayEnd }, ...(companyId ? { companyId } : {}) },
+      where: { tenantId, date: { gte: dayStart, lte: dayEnd }, ...companyIdWhere(companyId) },
       include: { party: true },
       orderBy: { date: 'asc' },
     });
@@ -244,7 +245,7 @@ export class ReportsService {
         ...(txnType ? { type: txnType } : {}),
         ...(dateFilter ? { date: dateFilter } : {}),
         ...(partyId ? { partyId } : {}),
-        ...(companyId ? { companyId } : {}),
+        ...companyIdWhere(companyId),
       },
       include: { party: true },
       orderBy: { date: 'desc' },
@@ -292,7 +293,7 @@ export class ReportsService {
       where: {
         tenantId,
         ...(dateFilter ? { date: dateFilter } : {}),
-        ...(companyId && { companyId }),
+        ...companyIdWhere(companyId),
       },
     });
 
@@ -313,7 +314,7 @@ export class ReportsService {
     }
 
     // All items for stock valuation
-    const items = await this.prisma.item.findMany({ where: { tenantId, ...(companyId && { companyId }) } });
+    const items = await this.prisma.item.findMany({ where: { tenantId, ...companyIdWhere(companyId) } });
 
     // Opening stock = items that existed before `from` valued at purchasePrice
     // We approximate by using all items' openingStock field
@@ -330,7 +331,7 @@ export class ReportsService {
         tenantId,
         type: { in: ['purchase', 'sale', 'credit_note', 'debit_note'] },
         ...(toDate ? { date: { lte: endOfDay(toDate) } } : {}),
-        ...(companyId && { companyId }),
+        ...companyIdWhere(companyId),
       },
     });
 
@@ -394,7 +395,7 @@ export class ReportsService {
           tenantId,
           type: { in: ['payment_in', 'payment_out', 'opening_balance'] },
           date: { lt: beforeFrom },
-          ...(companyId && { companyId }),
+          ...companyIdWhere(companyId),
         },
       });
       for (const t of preTxns) {
@@ -411,7 +412,7 @@ export class ReportsService {
         tenantId,
         type: { in: ['sale', 'purchase', 'payment_in', 'payment_out', 'expense', 'opening_balance'] },
         ...(dateFilter ? { date: dateFilter } : {}),
-        ...(companyId && { companyId }),
+        ...companyIdWhere(companyId),
       },
       include: { party: true },
       orderBy: { date: 'asc' },
@@ -463,7 +464,7 @@ export class ReportsService {
         tenantId,
         ...(partyId ? { partyId } : {}),
         ...(dateFilter ? { date: dateFilter } : {}),
-        ...(companyId ? { companyId } : {}),
+        ...companyIdWhere(companyId),
       },
       include: { party: true },
       orderBy: { date: 'asc' },
@@ -536,7 +537,7 @@ export class ReportsService {
   async getAllParties(tenantId: string, companyId?: string) {
     const allParties = await this.prisma.party.findMany({
       where: { tenantId, isSystem: false },
-      include: { transactions: { where: companyId ? { companyId } : undefined } },
+      include: { transactions: { where: companyIdWhere(companyId) } },
     });
     const parties = companyId ? allParties.filter((p) => p.transactions.length > 0) : allParties;
 
@@ -601,7 +602,7 @@ export class ReportsService {
         tenantId,
         type: { in: ['sale', 'purchase', 'credit_note', 'debit_note'] },
         ...(dateFilter ? { date: dateFilter } : {}),
-        ...(companyId && { companyId }),
+        ...companyIdWhere(companyId),
       },
       include: { party: true },
     });
@@ -659,7 +660,7 @@ export class ReportsService {
         tenantId,
         type: { in: ['sale', 'purchase'] },
         ...(dateFilter ? { date: dateFilter } : {}),
-        ...(companyId && { companyId }),
+        ...companyIdWhere(companyId),
       },
       include: { party: true },
     });
@@ -763,7 +764,7 @@ export class ReportsService {
         tenantId,
         type: { in: ['purchase', 'sale', 'credit_note', 'debit_note'] },
         ...(upTo ? { date: { lte: upTo } } : {}),
-        ...(companyId ? { companyId } : {}),
+        ...companyIdWhere(companyId),
       },
     });
 
@@ -788,7 +789,7 @@ export class ReportsService {
 
   async getStockSummary(tenantId: string, asOf?: string, companyId?: string) {
     const upTo = asOf ? (parseDate(asOf) ? endOfDay(parseDate(asOf)!) : undefined) : undefined;
-    const items = await this.prisma.item.findMany({ where: { tenantId, ...(companyId ? { companyId } : {}) } });
+    const items = await this.prisma.item.findMany({ where: { tenantId, ...companyIdWhere(companyId) } });
     const stockMap = await this.computeStockMap(tenantId, items, upTo, companyId);
 
     let totalStockQty = 0;
@@ -825,7 +826,7 @@ export class ReportsService {
   // ── Low Stock ───────────────────────────────────────────────────────────────
 
   async getLowStock(tenantId: string, companyId?: string) {
-    const items = await this.prisma.item.findMany({ where: { tenantId, ...(companyId && { companyId }) } });
+    const items = await this.prisma.item.findMany({ where: { tenantId, ...companyIdWhere(companyId) } });
     const stockMap = await this.computeStockMap(tenantId, items, undefined, companyId);
 
     let totalStockQty = 0;
@@ -864,7 +865,7 @@ export class ReportsService {
     const toDate = parseDate(to);
     const dateFilter = buildDateFilter(from, to);
 
-    const items = await this.prisma.item.findMany({ where: { tenantId, ...(companyId && { companyId }) } });
+    const items = await this.prisma.item.findMany({ where: { tenantId, ...companyIdWhere(companyId) } });
 
     // Beginning qty: stock before `from`
     const beginMap = fromDate
@@ -877,7 +878,7 @@ export class ReportsService {
         tenantId,
         type: { in: ['purchase', 'sale', 'credit_note', 'debit_note'] },
         ...(dateFilter ? { date: dateFilter } : {}),
-        ...(companyId && { companyId }),
+        ...companyIdWhere(companyId),
       },
     });
 
@@ -943,7 +944,7 @@ export class ReportsService {
         tenantId,
         type: { in: ['sale', 'purchase', 'credit_note', 'debit_note'] },
         ...(dateFilter ? { date: dateFilter } : {}),
-        ...(companyId && { companyId }),
+        ...companyIdWhere(companyId),
       },
       orderBy: { date: 'asc' },
     });
@@ -998,13 +999,13 @@ export class ReportsService {
     const dateFilter = buildDateFilter(from, to);
     const toDate = parseDate(to);
 
-    const allItems = await this.prisma.item.findMany({ where: { tenantId, ...(companyId && { companyId }) } });
+    const allItems = await this.prisma.item.findMany({ where: { tenantId, ...companyIdWhere(companyId) } });
     const txns = await this.prisma.transaction.findMany({
       where: {
         tenantId,
         type: { in: ['sale', 'purchase', 'credit_note', 'debit_note'] },
         ...(dateFilter ? { date: dateFilter } : {}),
-        ...(companyId && { companyId }),
+        ...companyIdWhere(companyId),
       },
     });
 
@@ -1093,7 +1094,7 @@ export class ReportsService {
         tenantId,
         type: { in: ['sale', 'purchase'] },
         ...(dateFilter ? { date: dateFilter } : {}),
-        ...(companyId && { companyId }),
+        ...companyIdWhere(companyId),
       },
     });
 
@@ -1178,7 +1179,7 @@ export class ReportsService {
         tenantId,
         type: 'expense',
         ...(dateFilter ? { date: dateFilter } : {}),
-        ...(companyId && { companyId }),
+        ...companyIdWhere(companyId),
       },
       include: { party: true },
       orderBy: { date: 'desc' },
@@ -1215,7 +1216,7 @@ export class ReportsService {
         tenantId,
         type: 'expense',
         ...(dateFilter ? { date: dateFilter } : {}),
-        ...(companyId && { companyId }),
+        ...companyIdWhere(companyId),
       },
     });
 
@@ -1248,7 +1249,7 @@ export class ReportsService {
         tenantId,
         type: 'expense',
         ...(dateFilter ? { date: dateFilter } : {}),
-        ...(companyId && { companyId }),
+        ...companyIdWhere(companyId),
       },
     });
 
@@ -1296,7 +1297,7 @@ export class ReportsService {
         tenantId,
         type: { in: orderTypes },
         ...(dateFilter ? { date: dateFilter } : {}),
-        ...(companyId && { companyId }),
+        ...companyIdWhere(companyId),
       },
       include: { party: true },
       orderBy: { date: 'desc' },
@@ -1341,7 +1342,7 @@ export class ReportsService {
         tenantId,
         type: { in: orderTypes },
         ...(dateFilter ? { date: dateFilter } : {}),
-        ...(companyId && { companyId }),
+        ...companyIdWhere(companyId),
       },
     });
 

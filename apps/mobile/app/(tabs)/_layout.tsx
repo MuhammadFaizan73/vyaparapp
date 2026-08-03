@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { Tabs, router } from "expo-router";
-import { Platform, View, StyleSheet, Text, TouchableOpacity, Modal, FlatList } from "react-native";
+import { Platform, View, StyleSheet, Text, TouchableOpacity, Modal, ScrollView } from "react-native";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import type { Distributor, Branch } from "@vyapar/api-client";
 import { colors } from "../../src/theme";
 import { getRole, getPermissions } from "../../src/auth";
 import { useDevice } from "../../src/useDeviceSession";
@@ -34,39 +35,151 @@ function ReadOnlyBanner() {
   );
 }
 
+// Drill-down state for the switch-company sheet: root (Distributors + any
+// unassigned Companies) -> a Distributor's Branches -> a Branch's Companies.
+type CompanyView =
+  | { level: "root" }
+  | { level: "distributor"; distributor: Distributor }
+  | { level: "branch"; distributor: Distributor; branch: Branch };
+
 function CompanyBanner() {
-  const { companies, selectedCompanyId, selectedCompany, setSelectedCompanyId } = useSelectedCompany();
+  const {
+    distributors, branches, companies,
+    selectedDistributorId, selectedBranchId, selectedCompanyId,
+    filterLabel,
+    setSelectedDistributorId, setSelectedBranchId, setSelectedCompanyId,
+  } = useSelectedCompany();
   const [open, setOpen] = useState(false);
-  if (companies.length < 2) return null;
+  const [view, setView] = useState<CompanyView>({ level: "root" });
+  if (companies.length < 2 && distributors.length === 0) return null;
+
+  function pick(fn: () => void) {
+    fn();
+    setOpen(false);
+    setView({ level: "root" });
+  }
+
+  const unassigned = companies.filter((c) => !c.branchId);
+  const branchesOf = (distributorId: string) => branches.filter((b) => b.distributorId === distributorId);
+  const companiesOf = (branchId: string) => companies.filter((c) => c.branchId === branchId);
 
   return (
     <>
       <TouchableOpacity style={styles.companyBanner} onPress={() => setOpen(true)} activeOpacity={0.85}>
         <Ionicons name="business-outline" size={14} color={colors.primary} />
-        <Text style={styles.companyBannerText} numberOfLines={1}>
-          {selectedCompany?.name ?? "All Companies"}
-        </Text>
+        <Text style={styles.companyBannerText} numberOfLines={1}>{filterLabel}</Text>
         <Ionicons name="chevron-down" size={14} color={colors.primary} />
       </TouchableOpacity>
 
-      <Modal visible={open} animationType="slide" transparent onRequestClose={() => setOpen(false)}>
-        <TouchableOpacity style={styles.companySheetBackdrop} onPress={() => setOpen(false)} activeOpacity={1}>
+      <Modal
+        visible={open}
+        animationType="slide"
+        transparent
+        onRequestClose={() => { setOpen(false); setView({ level: "root" }); }}
+      >
+        <TouchableOpacity
+          style={styles.companySheetBackdrop}
+          onPress={() => { setOpen(false); setView({ level: "root" }); }}
+          activeOpacity={1}
+        >
           <View style={styles.companySheet} onStartShouldSetResponder={() => true}>
             <View style={styles.companySheetHandle} />
             <Text style={styles.companySheetTitle}>Switch Company</Text>
-            <FlatList
-              data={[{ id: null as string | null, name: "All Companies" }, ...companies]}
-              keyExtractor={(item) => item.id ?? "__all__"}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.companySheetRow}
-                  onPress={() => { setSelectedCompanyId(item.id); setOpen(false); }}
-                >
-                  <Text style={styles.companySheetRowText}>{item.name}</Text>
-                  {selectedCompanyId === item.id && <Ionicons name="checkmark" size={18} color={colors.primary} />}
-                </TouchableOpacity>
+            <ScrollView style={{ maxHeight: "100%" }}>
+              <TouchableOpacity
+                style={styles.companySheetRow}
+                onPress={() => pick(() => setSelectedDistributorId(null))}
+              >
+                <Text style={styles.companySheetRowText}>All Companies</Text>
+                {!selectedDistributorId && !selectedBranchId && !selectedCompanyId && (
+                  <Ionicons name="checkmark" size={18} color={colors.primary} />
+                )}
+              </TouchableOpacity>
+
+              {view.level === "root" && (
+                <>
+                  {distributors.map((d) => (
+                    <TouchableOpacity
+                      key={d.id}
+                      style={styles.companySheetRow}
+                      onPress={() => setView({ level: "distributor", distributor: d })}
+                    >
+                      <Text style={styles.companySheetRowText}>{d.name}</Text>
+                      <Ionicons name="chevron-forward" size={16} color="#94a3b8" />
+                    </TouchableOpacity>
+                  ))}
+                  {unassigned.map((c) => (
+                    <TouchableOpacity
+                      key={c.id}
+                      style={styles.companySheetRow}
+                      onPress={() => pick(() => setSelectedCompanyId(c.id))}
+                    >
+                      <Text style={styles.companySheetRowText}>{c.name}</Text>
+                      {selectedCompanyId === c.id && <Ionicons name="checkmark" size={18} color={colors.primary} />}
+                    </TouchableOpacity>
+                  ))}
+                </>
               )}
-            />
+
+              {view.level === "distributor" && (
+                <>
+                  <TouchableOpacity style={styles.companySheetBack} onPress={() => setView({ level: "root" })}>
+                    <Ionicons name="chevron-back" size={16} color="#64748b" />
+                    <Text style={styles.companySheetBackText}>All Distributors</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.companySheetRow}
+                    onPress={() => pick(() => setSelectedDistributorId(view.distributor.id))}
+                  >
+                    <Text style={styles.companySheetRowText}>All of {view.distributor.name}</Text>
+                    {selectedDistributorId === view.distributor.id && !selectedBranchId && !selectedCompanyId && (
+                      <Ionicons name="checkmark" size={18} color={colors.primary} />
+                    )}
+                  </TouchableOpacity>
+                  {branchesOf(view.distributor.id).map((b) => (
+                    <TouchableOpacity
+                      key={b.id}
+                      style={styles.companySheetRow}
+                      onPress={() => setView({ level: "branch", distributor: view.distributor, branch: b })}
+                    >
+                      <Text style={styles.companySheetRowText}>{b.name}</Text>
+                      <Ionicons name="chevron-forward" size={16} color="#94a3b8" />
+                    </TouchableOpacity>
+                  ))}
+                </>
+              )}
+
+              {view.level === "branch" && (
+                <>
+                  <TouchableOpacity
+                    style={styles.companySheetBack}
+                    onPress={() => setView({ level: "distributor", distributor: view.distributor })}
+                  >
+                    <Ionicons name="chevron-back" size={16} color="#64748b" />
+                    <Text style={styles.companySheetBackText}>{view.distributor.name}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.companySheetRow}
+                    onPress={() => pick(() => setSelectedBranchId(view.branch.id))}
+                  >
+                    <Text style={styles.companySheetRowText}>All of {view.branch.name}</Text>
+                    {selectedBranchId === view.branch.id && !selectedCompanyId && (
+                      <Ionicons name="checkmark" size={18} color={colors.primary} />
+                    )}
+                  </TouchableOpacity>
+                  {companiesOf(view.branch.id).map((c) => (
+                    <TouchableOpacity
+                      key={c.id}
+                      style={styles.companySheetRow}
+                      onPress={() => pick(() => setSelectedCompanyId(c.id))}
+                    >
+                      <Text style={styles.companySheetRowText}>{c.name}</Text>
+                      {selectedCompanyId === c.id && <Ionicons name="checkmark" size={18} color={colors.primary} />}
+                    </TouchableOpacity>
+                  ))}
+                </>
+              )}
+            </ScrollView>
           </View>
         </TouchableOpacity>
       </Modal>
@@ -277,4 +390,9 @@ const styles = StyleSheet.create({
     paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: "#f0f2f5",
   },
   companySheetRowText: { fontSize: 14, color: "#0f172a" },
+  companySheetBack: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    paddingVertical: 10,
+  },
+  companySheetBackText: { fontSize: 13, fontWeight: "600", color: "#64748b" },
 });

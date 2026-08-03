@@ -9,6 +9,7 @@ export type CompanyRow = {
   email: string | null;
   phone: string | null;
   gstin: string | null;
+  branchId: string | null;
   createdAt: string;
 };
 
@@ -20,6 +21,7 @@ function toRow(c: any): CompanyRow {
     email: c.email,
     phone: c.phone,
     gstin: c.gstin,
+    branchId: c.branchId ?? null,
     createdAt: c.createdAt.toISOString(),
   };
 }
@@ -60,16 +62,24 @@ export class CompaniesService {
     });
   }
 
-  async list(tenantId: string): Promise<CompanyRow[]> {
+  async list(tenantId: string, branchId?: string): Promise<CompanyRow[]> {
     await this.ensureMigratedFromLegacyBlob(tenantId);
     const companies = await this.prisma.company.findMany({
-      where: { tenantId },
+      where: { tenantId, ...(branchId ? { branchId } : {}) },
       orderBy: { createdAt: "asc" },
     });
     return companies.map(toRow);
   }
 
+  private async assertBranchOwned(tenantId: string, branchId: string) {
+    const branch = await this.prisma.branch.findUnique({ where: { id: branchId } });
+    if (!branch || branch.tenantId !== tenantId) {
+      throw new NotFoundException("Branch not found");
+    }
+  }
+
   async create(tenantId: string, dto: CreateCompanyDto): Promise<CompanyRow> {
+    if (dto.branchId) await this.assertBranchOwned(tenantId, dto.branchId);
     const company = await this.prisma.company.create({
       data: {
         tenantId,
@@ -78,6 +88,7 @@ export class CompaniesService {
         email: dto.email ?? null,
         phone: dto.phone ?? null,
         gstin: dto.gstin ?? null,
+        branchId: dto.branchId ?? null,
       },
     });
     return toRow(company);
@@ -87,6 +98,7 @@ export class CompaniesService {
     const existing = await this.prisma.company.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException("Company not found");
     if (existing.tenantId !== tenantId) throw new ForbiddenException();
+    if (dto.branchId) await this.assertBranchOwned(tenantId, dto.branchId);
 
     const company = await this.prisma.company.update({
       where: { id },
@@ -96,6 +108,7 @@ export class CompaniesService {
         ...(dto.email !== undefined && { email: dto.email || null }),
         ...(dto.phone !== undefined && { phone: dto.phone || null }),
         ...(dto.gstin !== undefined && { gstin: dto.gstin || null }),
+        ...(dto.branchId !== undefined && { branchId: dto.branchId || null }),
       },
     });
     return toRow(company);

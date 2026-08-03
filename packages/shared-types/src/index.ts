@@ -72,6 +72,7 @@ export const PartySchema = z.object({
   balance: z.number(),
   latitude: z.number().nullable(),
   longitude: z.number().nullable(),
+  companyId: z.string().uuid().nullable().optional(),
   createdAt: z.string().datetime(),
 });
 export type Party = z.infer<typeof PartySchema>;
@@ -100,6 +101,7 @@ const partyFields = {
   groupId: z.string().optional(),
   latitude: z.number().optional(),
   longitude: z.number().optional(),
+  companyId: z.string().optional(),
 };
 
 export const CreatePartyRequestSchema = z.object({
@@ -173,6 +175,50 @@ export const ItemSchema = z.object({
 });
 export type Item = z.infer<typeof ItemSchema>;
 
+export const DistributorSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  businessType: z.string().nullable(),
+  email: z.string().nullable(),
+  phone: z.string().nullable(),
+  createdAt: z.string().datetime(),
+});
+export type Distributor = z.infer<typeof DistributorSchema>;
+
+export const CreateDistributorRequestSchema = z.object({
+  name: z.string().min(1).max(100),
+  businessType: z.string().optional(),
+  email: z.string().optional(),
+  phone: z.string().optional(),
+});
+export type CreateDistributorRequest = z.infer<typeof CreateDistributorRequestSchema>;
+
+export const UpdateDistributorRequestSchema = CreateDistributorRequestSchema.partial();
+export type UpdateDistributorRequest = z.infer<typeof UpdateDistributorRequestSchema>;
+
+export const BranchSchema = z.object({
+  id: z.string().uuid(),
+  distributorId: z.string().uuid(),
+  name: z.string(),
+  city: z.string().nullable(),
+  createdAt: z.string().datetime(),
+});
+export type Branch = z.infer<typeof BranchSchema>;
+
+export const CreateBranchRequestSchema = z.object({
+  distributorId: z.string().uuid(),
+  name: z.string().min(1).max(100),
+  city: z.string().optional(),
+});
+export type CreateBranchRequest = z.infer<typeof CreateBranchRequestSchema>;
+
+export const UpdateBranchRequestSchema = z.object({
+  distributorId: z.string().uuid().optional(),
+  name: z.string().min(1).max(100).optional(),
+  city: z.string().optional(),
+});
+export type UpdateBranchRequest = z.infer<typeof UpdateBranchRequestSchema>;
+
 export const CompanySchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
@@ -180,6 +226,7 @@ export const CompanySchema = z.object({
   email: z.string().nullable(),
   phone: z.string().nullable(),
   gstin: z.string().nullable(),
+  branchId: z.string().uuid().nullable(),
   createdAt: z.string().datetime(),
 });
 export type Company = z.infer<typeof CompanySchema>;
@@ -190,6 +237,7 @@ export const CreateCompanyRequestSchema = z.object({
   email: z.string().optional(),
   phone: z.string().optional(),
   gstin: z.string().optional(),
+  branchId: z.string().nullable().optional(),
 });
 export type CreateCompanyRequest = z.infer<typeof CreateCompanyRequestSchema>;
 

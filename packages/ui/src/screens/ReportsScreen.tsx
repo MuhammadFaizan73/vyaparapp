@@ -280,8 +280,8 @@ function DateRange({ from, to, onFrom, onTo }: { from: string; to: string; onFro
 function SaleReport() {
   const [from, setFrom] = useState(monthStart);
   const [to,   setTo]   = useState(monthEnd);
-  const { selectedCompanyId } = useCompany();
-  const { data, loading, error } = useReport("sale", { from, to, companyId: selectedCompanyId ?? undefined });
+  const { companyFilter } = useCompany();
+  const { data, loading, error } = useReport("sale", { from, to, companyId: companyFilter ?? undefined });
 
   function handleExport() {
     if (!data?.transactions?.length) return;
@@ -355,8 +355,8 @@ function SaleReport() {
 function PurchaseReport() {
   const [from, setFrom] = useState(monthStart);
   const [to,   setTo]   = useState(monthEnd);
-  const { selectedCompanyId } = useCompany();
-  const { data, loading, error } = useReport("purchase", { from, to, companyId: selectedCompanyId ?? undefined });
+  const { companyFilter } = useCompany();
+  const { data, loading, error } = useReport("purchase", { from, to, companyId: companyFilter ?? undefined });
 
   function handleExport() {
     if (!data?.transactions?.length) return;
@@ -433,8 +433,8 @@ function PurchaseReport() {
 
 function DayBookReport() {
   const [date, setDate] = useState(todayStr);
-  const { selectedCompanyId } = useCompany();
-  const { data, loading, error } = useReport("day-book", { date, companyId: selectedCompanyId ?? undefined });
+  const { companyFilter } = useCompany();
+  const { data, loading, error } = useReport("day-book", { date, companyId: companyFilter ?? undefined });
 
   function handleExport() {
     if (!data?.transactions?.length) return;
@@ -495,8 +495,8 @@ function AllTransactionsReport() {
   const [from,    setFrom]    = useState(monthStart);
   const [to,      setTo]      = useState(monthEnd);
   const [txnType, setTxnType] = useState("");
-  const { selectedCompanyId } = useCompany();
-  const { data, loading, error } = useReport("all-transactions", { from, to, txnType: txnType || undefined, companyId: selectedCompanyId ?? undefined });
+  const { companyFilter } = useCompany();
+  const { data, loading, error } = useReport("all-transactions", { from, to, txnType: txnType || undefined, companyId: companyFilter ?? undefined });
 
   function handleExport() {
     if (!data?.transactions?.length) return;
@@ -571,8 +571,8 @@ function ProfitAndLossReport() {
   const [from, setFrom] = useState(monthStart);
   const [to,   setTo]   = useState(todayStr);
   const [view, setView] = useState<"godigi" | "accounting">("godigi");
-  const { selectedCompanyId } = useCompany();
-  const { data, loading, error } = useReport("profit-and-loss", { from, to, companyId: selectedCompanyId ?? undefined });
+  const { companyFilter } = useCompany();
+  const { data, loading, error } = useReport("profit-and-loss", { from, to, companyId: companyFilter ?? undefined });
 
   function handleExport() {
     if (!data) return;
@@ -669,8 +669,8 @@ function PnlRow({ label, value, isNeg, bold, green, indent }: { label: string; v
 function CashFlowReport() {
   const [from, setFrom] = useState(monthStart);
   const [to,   setTo]   = useState(monthEnd);
-  const { selectedCompanyId } = useCompany();
-  const { data, loading, error } = useReport("cash-flow", { from, to, companyId: selectedCompanyId ?? undefined });
+  const { companyFilter } = useCompany();
+  const { data, loading, error } = useReport("cash-flow", { from, to, companyId: companyFilter ?? undefined });
 
   function handleExport() {
     if (!data?.transactions?.length) return;
@@ -733,8 +733,8 @@ function PartyStatementReport() {
   const [from, setFrom] = useState(monthStart);
   const [to,   setTo]   = useState(monthEnd);
   const [view, setView] = useState<"godigi" | "accounting">("godigi");
-  const { selectedCompanyId } = useCompany();
-  const { data, loading, error } = useReport("party-statement", { from, to, companyId: selectedCompanyId ?? undefined });
+  const { companyFilter } = useCompany();
+  const { data, loading, error } = useReport("party-statement", { from, to, companyId: companyFilter ?? undefined });
 
   function handleExport() {
     if (!data?.transactions?.length) return;
@@ -812,8 +812,8 @@ function PartyStatementReport() {
 // ─── ALL PARTIES ──────────────────────────────────────────────────────────────
 
 function AllPartiesReport() {
-  const { selectedCompanyId } = useCompany();
-  const { data, loading, error } = useReport("all-parties", { companyId: selectedCompanyId ?? undefined });
+  const { companyFilter } = useCompany();
+  const { data, loading, error } = useReport("all-parties", { companyId: companyFilter ?? undefined });
 
   function handleExport() {
     if (!data?.parties?.length) return;
@@ -881,8 +881,8 @@ function AllPartiesReport() {
 function PartyReportByItemReport() {
   const [from, setFrom] = useState(monthStart);
   const [to,   setTo]   = useState(monthEnd);
-  const { selectedCompanyId } = useCompany();
-  const { data, loading, error } = useReport("party-report-by-item", { from, to, companyId: selectedCompanyId ?? undefined });
+  const { companyFilter } = useCompany();
+  const { data, loading, error } = useReport("party-report-by-item", { from, to, companyId: companyFilter ?? undefined });
 
   function handleExport() {
     if (!data?.parties?.length) return;
@@ -946,8 +946,8 @@ function PartyReportByItemReport() {
 function SalePurchaseByPartyReport() {
   const [from, setFrom] = useState(monthStart);
   const [to,   setTo]   = useState(monthEnd);
-  const { selectedCompanyId } = useCompany();
-  const { data, loading, error } = useReport("sale-purchase-by-party", { from, to, companyId: selectedCompanyId ?? undefined });
+  const { companyFilter } = useCompany();
+  const { data, loading, error } = useReport("sale-purchase-by-party", { from, to, companyId: companyFilter ?? undefined });
 
   function handleExport() {
     if (!data?.parties?.length) return;
@@ -1002,8 +1002,8 @@ function SalePurchaseByPartyReport() {
 function SalePurchaseByPartyGroupReport() {
   const [from, setFrom] = useState(monthStart);
   const [to,   setTo]   = useState(monthEnd);
-  const { selectedCompanyId } = useCompany();
-  const { data, loading, error } = useReport("sale-purchase-by-party-group", { from, to, companyId: selectedCompanyId ?? undefined });
+  const { companyFilter } = useCompany();
+  const { data, loading, error } = useReport("sale-purchase-by-party-group", { from, to, companyId: companyFilter ?? undefined });
 
   function handleExport() {
     if (!data?.groups?.length) return;
@@ -1084,8 +1084,8 @@ function formatStockQty(
 
 function StockSummaryReport() {
   const [asOf,   setAsOf]   = useState(todayStr);
-  const { selectedCompanyId } = useCompany();
-  const { data, loading, error } = useReport("stock-summary", { asOf, companyId: selectedCompanyId ?? undefined });
+  const { companyFilter } = useCompany();
+  const { data, loading, error } = useReport("stock-summary", { asOf, companyId: companyFilter ?? undefined });
 
   function handleExport() {
     if (!data?.items?.length) return;
@@ -1221,8 +1221,8 @@ function ItemReportByPartyReport() {
 function ItemWisePnlReport() {
   const [from, setFrom] = useState(monthStart);
   const [to,   setTo]   = useState(todayStr);
-  const { selectedCompanyId } = useCompany();
-  const { data, loading, error } = useReport("item-wise-pnl", { from, to, companyId: selectedCompanyId ?? undefined });
+  const { companyFilter } = useCompany();
+  const { data, loading, error } = useReport("item-wise-pnl", { from, to, companyId: companyFilter ?? undefined });
 
   function handleExport() {
     if (!data?.items?.length) return;
@@ -1293,8 +1293,8 @@ function ItemWisePnlReport() {
 function ItemCategoryPnlReport() {
   const [from, setFrom] = useState(monthStart);
   const [to,   setTo]   = useState(todayStr);
-  const { selectedCompanyId } = useCompany();
-  const { data, loading, error } = useReport("item-category-pnl", { from, to, companyId: selectedCompanyId ?? undefined });
+  const { companyFilter } = useCompany();
+  const { data, loading, error } = useReport("item-category-pnl", { from, to, companyId: companyFilter ?? undefined });
 
   function handleExport() {
     if (!data?.categories?.length) return;
@@ -1354,8 +1354,8 @@ function ItemCategoryPnlReport() {
 // ─── LOW STOCK ────────────────────────────────────────────────────────────────
 
 function LowStockReport() {
-  const { selectedCompanyId } = useCompany();
-  const { data, loading, error } = useReport("low-stock", { companyId: selectedCompanyId ?? undefined });
+  const { companyFilter } = useCompany();
+  const { data, loading, error } = useReport("low-stock", { companyId: companyFilter ?? undefined });
 
   function handleExport() {
     if (!data?.items?.length) return;
@@ -1406,8 +1406,8 @@ function LowStockReport() {
 function StockDetailReport() {
   const [from, setFrom] = useState(monthStart);
   const [to,   setTo]   = useState(todayStr);
-  const { selectedCompanyId } = useCompany();
-  const { data, loading, error } = useReport("stock-detail", { from, to, companyId: selectedCompanyId ?? undefined });
+  const { companyFilter } = useCompany();
+  const { data, loading, error } = useReport("stock-detail", { from, to, companyId: companyFilter ?? undefined });
 
   function handleExport() {
     if (!data?.items?.length) return;
@@ -1478,8 +1478,8 @@ function ItemDetailReport() {
   const [from,     setFrom]     = useState(monthStart);
   const [to,       setTo]       = useState(todayStr);
   const [itemName, setItemName] = useState("");
-  const { selectedCompanyId } = useCompany();
-  const { data, loading, error } = useReport("item-detail", { from, to, itemName: itemName || undefined, companyId: selectedCompanyId ?? undefined });
+  const { companyFilter } = useCompany();
+  const { data, loading, error } = useReport("item-detail", { from, to, itemName: itemName || undefined, companyId: companyFilter ?? undefined });
 
   function handleExport() {
     if (!data?.items?.length) return;
@@ -1537,8 +1537,8 @@ function ItemDetailReport() {
 function SalePurchaseByItemCategoryReport() {
   const [from, setFrom] = useState(monthStart);
   const [to,   setTo]   = useState(todayStr);
-  const { selectedCompanyId } = useCompany();
-  const { data, loading, error } = useReport("sale-purchase-by-item-category", { from, to, companyId: selectedCompanyId ?? undefined });
+  const { companyFilter } = useCompany();
+  const { data, loading, error } = useReport("sale-purchase-by-item-category", { from, to, companyId: companyFilter ?? undefined });
 
   function handleExport() {
     if (!data?.categories?.length) return;
@@ -1585,8 +1585,8 @@ function SalePurchaseByItemCategoryReport() {
 // ─── STOCK SUMMARY BY CATEGORY ────────────────────────────────────────────────
 
 function StockSummaryByCategoryReport() {
-  const { selectedCompanyId } = useCompany();
-  const { data, loading, error } = useReport("stock-summary-by-category", { companyId: selectedCompanyId ?? undefined });
+  const { companyFilter } = useCompany();
+  const { data, loading, error } = useReport("stock-summary-by-category", { companyId: companyFilter ?? undefined });
 
   function handleExport() {
     if (!data?.categories?.length) return;
@@ -1862,8 +1862,8 @@ function TaxRateReport() {
 function ExpenseReport() {
   const [from, setFrom] = useState(monthStart);
   const [to,   setTo]   = useState(monthEnd);
-  const { selectedCompanyId } = useCompany();
-  const { data, loading, error } = useReport("expense", { from, to, companyId: selectedCompanyId ?? undefined });
+  const { companyFilter } = useCompany();
+  const { data, loading, error } = useReport("expense", { from, to, companyId: companyFilter ?? undefined });
 
   function handleExport() {
     if (!data?.transactions?.length) return;
@@ -1921,8 +1921,8 @@ function ExpenseReport() {
 function ExpenseCategoryReport() {
   const [from, setFrom] = useState(monthStart);
   const [to,   setTo]   = useState(todayStr);
-  const { selectedCompanyId } = useCompany();
-  const { data, loading, error } = useReport("expense-category", { from, to, companyId: selectedCompanyId ?? undefined });
+  const { companyFilter } = useCompany();
+  const { data, loading, error } = useReport("expense-category", { from, to, companyId: companyFilter ?? undefined });
 
   function handleExport() {
     if (!data?.categories?.length) return;
@@ -1975,8 +1975,8 @@ function ExpenseCategoryReport() {
 function ExpenseItemReport() {
   const [from, setFrom] = useState(monthStart);
   const [to,   setTo]   = useState(monthEnd);
-  const { selectedCompanyId } = useCompany();
-  const { data, loading, error } = useReport("expense-item", { from, to, companyId: selectedCompanyId ?? undefined });
+  const { companyFilter } = useCompany();
+  const { data, loading, error } = useReport("expense-item", { from, to, companyId: companyFilter ?? undefined });
 
   function handleExport() {
     if (!data?.items?.length) return;
@@ -2033,8 +2033,8 @@ function SalePurchaseOrdersReport() {
   const [from,      setFrom]      = useState(monthStart);
   const [to,        setTo]        = useState(todayStr);
   const [orderType, setOrderType] = useState("sale_order");
-  const { selectedCompanyId } = useCompany();
-  const { data, loading, error } = useReport("sale-purchase-orders", { from, to, orderType, companyId: selectedCompanyId ?? undefined });
+  const { companyFilter } = useCompany();
+  const { data, loading, error } = useReport("sale-purchase-orders", { from, to, orderType, companyId: companyFilter ?? undefined });
 
   function handleExport() {
     if (!data?.orders?.length) return;
@@ -2101,8 +2101,8 @@ function SalePurchaseOrderItemsReport() {
   const [from,      setFrom]      = useState(monthStart);
   const [to,        setTo]        = useState(todayStr);
   const [orderType, setOrderType] = useState("sale_order");
-  const { selectedCompanyId } = useCompany();
-  const { data, loading, error } = useReport("sale-purchase-order-items", { from, to, orderType, companyId: selectedCompanyId ?? undefined });
+  const { companyFilter } = useCompany();
+  const { data, loading, error } = useReport("sale-purchase-order-items", { from, to, orderType, companyId: companyFilter ?? undefined });
 
   function handleExport() {
     if (!data?.items?.length) return;

@@ -75,11 +75,11 @@ export function PaymentInScreen({ isLocked = false, onLockedAction }: Props) {
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
   const [deleteConfirmRow, setDeleteConfirmRow] = useState<PiRow | null>(null);
   const [viewHistoryRow, setViewHistoryRow] = useState<PiRow | null>(null);
-  const { selectedCompanyId } = useCompany();
+  const { companyFilter, selectedCompanyId } = useCompany();
 
   async function loadData() {
     try {
-      const companyId = selectedCompanyId ?? undefined;
+      const companyId = companyFilter ?? undefined;
       const [txns, ps, sum] = await Promise.all([
         api.getTransactionsByType("payment_in", { take: RECENT_ROWS_LIMIT, companyId }),
         api.getParties(),
@@ -98,7 +98,7 @@ export function PaymentInScreen({ isLocked = false, onLockedAction }: Props) {
   useEffect(() => {
     setLoading(true);
     loadData().finally(() => setLoading(false));
-  }, [selectedCompanyId]);
+  }, [companyFilter]);
 
   useEffect(() => {
     if (!menuId) return;

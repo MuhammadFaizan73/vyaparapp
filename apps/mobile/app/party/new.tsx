@@ -9,6 +9,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../src/theme";
 import { api } from "../../src/auth";
 import { usePartySettings } from "../../src/usePartySettings";
+import { useSelectedCompany } from "../../src/useSelectedCompany";
 import type { PartyGroup } from "@vyapar/api-client";
 
 export default function NewPartyScreen() {
@@ -36,11 +37,19 @@ export default function NewPartyScreen() {
   const [newGroupName, setNewGroupName] = useState("");
   const [creatingGroup, setCreatingGroup] = useState(false);
 
+  // Company — defaults to whichever single Company is currently filtered (a
+  // Distributor/Branch rollup has no single company to default to).
+  const { companies, selectedCompanyId: filteredCompanyId } = useSelectedCompany();
+  const [companyId, setCompanyId] = useState("");
+  const [companyPickerOpen, setCompanyPickerOpen] = useState(false);
+  useEffect(() => { if (filteredCompanyId) setCompanyId(filteredCompanyId); }, [filteredCompanyId]);
+
   useEffect(() => {
     api.listPartyGroups().then(setGroups).catch(() => {});
   }, []);
 
   const selectedGroup = groups.find((g) => g.id === groupId);
+  const selectedCompany = companies.find((c) => c.id === companyId);
 
   async function handleCreateGroup() {
     if (!newGroupName.trim()) return;
@@ -62,7 +71,7 @@ export default function NewPartyScreen() {
     setName(""); setPhone(""); setEmail(""); setOpeningBalance("");
     setBillingAddress(""); setShippingAddress(""); setTin("");
     setNtn(""); setCnic(""); setStrn("");
-    setPartyType("both"); setGroupId("");
+    setPartyType("both"); setGroupId(""); setCompanyId(filteredCompanyId ?? "");
   }
 
   async function handleSave(andNew = false) {
@@ -85,6 +94,7 @@ export default function NewPartyScreen() {
         strn: strn.trim() || undefined,
         partyType,
         groupId: groupId || undefined,
+        companyId: companyId || undefined,
       });
       if (andNew) { reset(); } else { router.back(); }
     } catch (err: any) {
@@ -178,7 +188,7 @@ export default function NewPartyScreen() {
           <FormRow label="STRN" value={strn} onChangeText={setStrn} placeholder="e.g. 03-00-9999-001-03" />
 
           {/* Group picker */}
-          <View style={[fr.row, fr.rowLast]}>
+          <View style={fr.row}>
             <Text style={fr.label}>Party Group</Text>
             <TouchableOpacity style={fr.dropdownBtn} onPress={() => setGroupPickerOpen(true)} activeOpacity={0.7}>
               <Text style={selectedGroup ? fr.dropdownValue : fr.dropdownPlaceholder}>
@@ -187,6 +197,19 @@ export default function NewPartyScreen() {
               <Ionicons name="chevron-down" size={14} color={colors.textLight} />
             </TouchableOpacity>
           </View>
+
+          {/* Company picker */}
+          {companies.length > 0 && (
+            <View style={[fr.row, fr.rowLast]}>
+              <Text style={fr.label}>Company</Text>
+              <TouchableOpacity style={fr.dropdownBtn} onPress={() => setCompanyPickerOpen(true)} activeOpacity={0.7}>
+                <Text style={selectedCompany ? fr.dropdownValue : fr.dropdownPlaceholder}>
+                  {selectedCompany ? selectedCompany.name : "No specific company"}
+                </Text>
+                <Ionicons name="chevron-down" size={14} color={colors.textLight} />
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
 
 
@@ -246,6 +269,37 @@ export default function NewPartyScreen() {
             {groups.length === 0 && (
               <Text style={gp.empty}>No groups yet. Type a name above to create one.</Text>
             )}
+          </ScrollView>
+        </View>
+      </Modal>
+
+      {/* Company Picker Modal */}
+      <Modal visible={companyPickerOpen} transparent animationType="slide" onRequestClose={() => setCompanyPickerOpen(false)}>
+        <TouchableOpacity style={gp.backdrop} activeOpacity={1} onPress={() => setCompanyPickerOpen(false)} />
+        <View style={gp.sheet}>
+          <View style={gp.sheetHeader}>
+            <Text style={gp.sheetTitle}>Select Company</Text>
+            <TouchableOpacity onPress={() => setCompanyPickerOpen(false)} hitSlop={8}>
+              <Ionicons name="close" size={22} color={colors.textMuted} />
+            </TouchableOpacity>
+          </View>
+          <ScrollView style={{ maxHeight: 280 }}>
+            {companyId !== "" && (
+              <TouchableOpacity style={gp.option} onPress={() => { setCompanyId(""); setCompanyPickerOpen(false); }}>
+                <Text style={gp.optionClear}>— No specific company</Text>
+              </TouchableOpacity>
+            )}
+            {companies.map((c) => (
+              <TouchableOpacity
+                key={c.id}
+                style={[gp.option, c.id === companyId && gp.optionActive]}
+                onPress={() => { setCompanyId(c.id); setCompanyPickerOpen(false); }}
+                activeOpacity={0.7}
+              >
+                <Text style={[gp.optionTxt, c.id === companyId && gp.optionTxtActive]}>{c.name}</Text>
+                {c.id === companyId && <Ionicons name="checkmark" size={16} color={colors.primary} />}
+              </TouchableOpacity>
+            ))}
           </ScrollView>
         </View>
       </Modal>

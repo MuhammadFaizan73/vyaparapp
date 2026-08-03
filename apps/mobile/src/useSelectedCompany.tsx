@@ -1,44 +1,82 @@
-import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, useMemo, type ReactNode } from "react";
 import * as SecureStore from "expo-secure-store";
-import type { Company } from "@vyapar/api-client";
+import type { Company, Distributor, Branch } from "@vyapar/api-client";
 import { api } from "./auth";
 
+const SELECTED_DISTRIBUTOR_KEY = "vyapar_selected_distributor_id";
+const SELECTED_BRANCH_KEY = "vyapar_selected_branch_id";
 const SELECTED_COMPANY_KEY = "vyapar_selected_company_id";
 
 type Ctx = {
+  distributors: Distributor[];
+  branches: Branch[];
   companies: Company[];
   loading: boolean;
+  selectedDistributorId: string | null;
+  selectedBranchId: string | null;
+  // The one specific Company chosen at the bottom level, if any — every "tag this new
+  // item/sale/party" call site defaults to this, since a new record belongs to exactly one.
   selectedCompanyId: string | null;
   selectedCompany: Company | null;
+  // What every READ/list-filter query should filter by — a single id, a comma-joined
+  // list (a Distributor/Branch rollup), or null ("All Companies").
+  companyFilter: string | null;
+  filterLabel: string;
+  setSelectedDistributorId: (id: string | null) => void;
+  setSelectedBranchId: (id: string | null) => void;
   setSelectedCompanyId: (id: string | null) => void;
   refreshCompanies: () => Promise<void>;
 };
 
 const SelectedCompanyContext = createContext<Ctx>({
+  distributors: [],
+  branches: [],
   companies: [],
   loading: true,
+  selectedDistributorId: null,
+  selectedBranchId: null,
   selectedCompanyId: null,
   selectedCompany: null,
+  companyFilter: null,
+  filterLabel: "All Companies",
+  setSelectedDistributorId: () => {},
+  setSelectedBranchId: () => {},
   setSelectedCompanyId: () => {},
   refreshCompanies: async () => {},
 });
 
 export function SelectedCompanyProvider({ children }: { children: ReactNode }) {
+  const [distributors, setDistributors] = useState<Distributor[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedDistributorId, setSelectedDistributorIdState] = useState<string | null>(null);
+  const [selectedBranchId, setSelectedBranchIdState] = useState<string | null>(null);
   const [selectedCompanyId, setSelectedCompanyIdState] = useState<string | null>(null);
 
   useEffect(() => {
-    SecureStore.getItemAsync(SELECTED_COMPANY_KEY).then((id) => {
-      if (id) setSelectedCompanyIdState(id);
+    Promise.all([
+      SecureStore.getItemAsync(SELECTED_DISTRIBUTOR_KEY),
+      SecureStore.getItemAsync(SELECTED_BRANCH_KEY),
+      SecureStore.getItemAsync(SELECTED_COMPANY_KEY),
+    ]).then(([d, b, c]) => {
+      if (d) setSelectedDistributorIdState(d);
+      if (b) setSelectedBranchIdState(b);
+      if (c) setSelectedCompanyIdState(c);
     });
   }, []);
 
   const refreshCompanies = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api.getCompanies();
-      setCompanies(data);
+      const [d, b, c] = await Promise.all([
+        api.getDistributors().catch(() => []),
+        api.getBranches().catch(() => []),
+        api.getCompanies(),
+      ]);
+      setDistributors(d);
+      setBranches(b);
+      setCompanies(c);
     } catch {
       setCompanies([]);
     } finally {
@@ -50,8 +88,22 @@ export function SelectedCompanyProvider({ children }: { children: ReactNode }) {
     void refreshCompanies();
   }, [refreshCompanies]);
 
-  // If the previously-selected company was deleted, fall back to "All Companies"
-  // instead of silently filtering everything down to zero rows.
+  // If a previously-selected Distributor/Branch/Company was deleted, fall back to
+  // "All" at that level instead of silently filtering everything down to zero rows.
+  useEffect(() => {
+    if (loading) return;
+    if (selectedDistributorId && !distributors.some((d) => d.id === selectedDistributorId)) {
+      setSelectedDistributorId(null);
+    }
+  }, [distributors, loading, selectedDistributorId]);
+
+  useEffect(() => {
+    if (loading) return;
+    if (selectedBranchId && !branches.some((b) => b.id === selectedBranchId)) {
+      setSelectedBranchId(null);
+    }
+  }, [branches, loading, selectedBranchId]);
+
   useEffect(() => {
     if (loading) return;
     if (selectedCompanyId && !companies.some((c) => c.id === selectedCompanyId)) {
@@ -59,6 +111,24 @@ export function SelectedCompanyProvider({ children }: { children: ReactNode }) {
       void SecureStore.deleteItemAsync(SELECTED_COMPANY_KEY);
     }
   }, [companies, loading, selectedCompanyId]);
+
+  function setSelectedDistributorId(id: string | null) {
+    setSelectedDistributorIdState(id);
+    if (id) void SecureStore.setItemAsync(SELECTED_DISTRIBUTOR_KEY, id);
+    else void SecureStore.deleteItemAsync(SELECTED_DISTRIBUTOR_KEY);
+    setSelectedBranchIdState(null);
+    void SecureStore.deleteItemAsync(SELECTED_BRANCH_KEY);
+    setSelectedCompanyIdState(null);
+    void SecureStore.deleteItemAsync(SELECTED_COMPANY_KEY);
+  }
+
+  function setSelectedBranchId(id: string | null) {
+    setSelectedBranchIdState(id);
+    if (id) void SecureStore.setItemAsync(SELECTED_BRANCH_KEY, id);
+    else void SecureStore.deleteItemAsync(SELECTED_BRANCH_KEY);
+    setSelectedCompanyIdState(null);
+    void SecureStore.deleteItemAsync(SELECTED_COMPANY_KEY);
+  }
 
   function setSelectedCompanyId(id: string | null) {
     setSelectedCompanyIdState(id);
@@ -68,9 +138,51 @@ export function SelectedCompanyProvider({ children }: { children: ReactNode }) {
 
   const selectedCompany = companies.find((c) => c.id === selectedCompanyId) ?? null;
 
+  const companyFilter = useMemo(() => {
+    if (selectedCompanyId) return selectedCompanyId;
+    if (selectedBranchId) {
+      const ids = companies.filter((c) => c.branchId === selectedBranchId).map((c) => c.id);
+      return ids.length ? ids.join(",") : null;
+    }
+    if (selectedDistributorId) {
+      const branchIds = new Set(branches.filter((b) => b.distributorId === selectedDistributorId).map((b) => b.id));
+      const ids = companies.filter((c) => c.branchId && branchIds.has(c.branchId)).map((c) => c.id);
+      return ids.length ? ids.join(",") : null;
+    }
+    return null;
+  }, [selectedCompanyId, selectedBranchId, selectedDistributorId, companies, branches]);
+
+  const filterLabel = useMemo(() => {
+    if (selectedCompany) return selectedCompany.name;
+    if (selectedBranchId) {
+      const b = branches.find((x) => x.id === selectedBranchId);
+      return b ? b.name : "All Companies";
+    }
+    if (selectedDistributorId) {
+      const d = distributors.find((x) => x.id === selectedDistributorId);
+      return d ? d.name : "All Companies";
+    }
+    return "All Companies";
+  }, [selectedCompany, selectedBranchId, selectedDistributorId, branches, distributors]);
+
   return (
     <SelectedCompanyContext.Provider
-      value={{ companies, loading, selectedCompanyId, selectedCompany, setSelectedCompanyId, refreshCompanies }}
+      value={{
+        distributors,
+        branches,
+        companies,
+        loading,
+        selectedDistributorId,
+        selectedBranchId,
+        selectedCompanyId,
+        selectedCompany,
+        companyFilter,
+        filterLabel,
+        setSelectedDistributorId,
+        setSelectedBranchId,
+        setSelectedCompanyId,
+        refreshCompanies,
+      }}
     >
       {children}
     </SelectedCompanyContext.Provider>
