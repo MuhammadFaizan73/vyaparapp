@@ -22,9 +22,40 @@ type LineItem = {
   qty: number;
   unit: string;
   rate: number;
+  // Carried over from the selected catalog Item so the row's own unit picker can offer
+  // only that item's configured units (Piece/Box/Carton) instead of a generic fixed list.
+  secondaryUnit?: string;
+  conversionRate?: number;
+  tertiaryUnit?: string;
+  tertiaryConversionRate?: number;
+  baseSalePrice?: number;
 };
 
 const UNITS = ["NONE", "PCS", "KG", "LTR", "MTR", "BOX", "BAG", "DOZ"];
+
+// Every sellable unit for this item, biggest to smallest: tertiaryUnit (Carton) > unit
+// (Box — the item's normal stocking unit, what its sale price is denominated in) >
+// secondaryUnit (Pieces). Each option carries `toUnit`, how many of the item's `unit`
+// it's worth, so qty/rate can convert correctly (e.g. 1 Carton = 12 Box, 1 Piece = 1/20 Box).
+function unitOptionsFor(item: Pick<LineItem, "unit" | "secondaryUnit" | "conversionRate" | "tertiaryUnit" | "tertiaryConversionRate">): { unit: string; toUnit: number }[] {
+  const opts: { unit: string; toUnit: number }[] = [];
+  if (item.tertiaryUnit && item.tertiaryConversionRate) opts.push({ unit: item.tertiaryUnit, toUnit: item.tertiaryConversionRate });
+  if (item.unit && item.unit !== "NONE") opts.push({ unit: item.unit, toUnit: 1 });
+  if (item.secondaryUnit && item.conversionRate) opts.push({ unit: item.secondaryUnit, toUnit: 1 / item.conversionRate });
+  return opts;
+}
+
+// Re-prices the in-progress item when the user switches which pack size they're selling
+// (e.g. Box -> Carton) — rate is always "price per selected unit", scaled from the item's
+// per-unit sale price.
+function rateForUnit(
+  item: Pick<LineItem, "unit" | "secondaryUnit" | "conversionRate" | "tertiaryUnit" | "tertiaryConversionRate" | "baseSalePrice" | "rate">,
+  newUnit: string,
+): number {
+  if (!item.baseSalePrice) return item.rate;
+  const opt = unitOptionsFor(item).find((o) => o.unit === newUnit);
+  return opt ? Number((item.baseSalePrice * opt.toUnit).toFixed(2)) : item.rate;
+}
 
 function fmt4(n: number) {
   return n.toLocaleString("en-PK", { minimumFractionDigits: 4, maximumFractionDigits: 4 });
@@ -122,6 +153,11 @@ export default function NewSaleScreen() {
   const [newItemUnit, setNewItemUnit] = useState("NONE");
   const [newItemMrp, setNewItemMrp] = useState("");
   const [newItemRate, setNewItemRate] = useState("");
+  const [newItemSecondaryUnit, setNewItemSecondaryUnit] = useState("");
+  const [newItemConversionRate, setNewItemConversionRate] = useState(0);
+  const [newItemTertiaryUnit, setNewItemTertiaryUnit] = useState("");
+  const [newItemTertiaryConversionRate, setNewItemTertiaryConversionRate] = useState(0);
+  const [newItemBaseSalePrice, setNewItemBaseSalePrice] = useState(0);
   const [showUnitPicker, setShowUnitPicker] = useState(false);
   const [itemSearch, setItemSearch] = useState("");
   const [showCatalog, setShowCatalog] = useState(false);
@@ -169,6 +205,9 @@ export default function NewSaleScreen() {
     setEditItemId(null);
     setNewItemName(""); setNewItemQty("1"); setNewItemUnit("NONE");
     setNewItemMrp(""); setNewItemRate("");
+    setNewItemSecondaryUnit(""); setNewItemConversionRate(0);
+    setNewItemTertiaryUnit(""); setNewItemTertiaryConversionRate(0);
+    setNewItemBaseSalePrice(0);
     setItemSearch(""); setShowCatalog(false);
     setShowAddItem(true);
   }
@@ -179,6 +218,11 @@ export default function NewSaleScreen() {
     setNewItemUnit(item.unit);
     setNewItemMrp(item.mrp ? String(item.mrp) : "");
     setNewItemRate(item.rate ? String(item.rate) : "");
+    setNewItemSecondaryUnit(item.secondaryUnit ?? "");
+    setNewItemConversionRate(item.conversionRate ?? 0);
+    setNewItemTertiaryUnit(item.tertiaryUnit ?? "");
+    setNewItemTertiaryConversionRate(item.tertiaryConversionRate ?? 0);
+    setNewItemBaseSalePrice(item.baseSalePrice ?? 0);
     setItemSearch(item.name); setShowCatalog(false);
     setShowAddItem(true);
   }
@@ -193,6 +237,11 @@ export default function NewSaleScreen() {
       qty: parseFloat(newItemQty) || 1,
       unit: newItemUnit,
       rate: parseFloat(newItemRate) || 0,
+      secondaryUnit: newItemSecondaryUnit || undefined,
+      conversionRate: newItemConversionRate || undefined,
+      tertiaryUnit: newItemTertiaryUnit || undefined,
+      tertiaryConversionRate: newItemTertiaryConversionRate || undefined,
+      baseSalePrice: newItemBaseSalePrice || undefined,
     };
     if (editItemId) {
       setItems((prev) => prev.map((it) => (it.id === editItemId ? item : it)));
@@ -202,6 +251,9 @@ export default function NewSaleScreen() {
     if (andNew) {
       setNewItemName(""); setNewItemQty("1"); setNewItemUnit("NONE");
       setNewItemMrp(""); setNewItemRate(""); setItemSearch("");
+      setNewItemSecondaryUnit(""); setNewItemConversionRate(0);
+      setNewItemTertiaryUnit(""); setNewItemTertiaryConversionRate(0);
+      setNewItemBaseSalePrice(0);
       setEditItemId(null);
     } else {
       setShowAddItem(false);
@@ -834,6 +886,11 @@ export default function NewSaleScreen() {
                         setNewItemMrp(c.mrp ? String(c.mrp) : "");
                         setNewItemRate(c.salePrice ? String(c.salePrice) : "");
                         setNewItemUnit(c.unit || "NONE");
+                        setNewItemSecondaryUnit(c.secondaryUnit ?? "");
+                        setNewItemConversionRate(c.conversionRate ? Number(c.conversionRate) : 0);
+                        setNewItemTertiaryUnit((c as any).tertiaryUnit ?? "");
+                        setNewItemTertiaryConversionRate((c as any).tertiaryConversionRate ? Number((c as any).tertiaryConversionRate) : 0);
+                        setNewItemBaseSalePrice(c.salePrice ?? 0);
                         setItemSearch(c.name);
                         setShowCatalog(false);
                       }}
@@ -871,21 +928,47 @@ export default function NewSaleScreen() {
                 </TouchableOpacity>
               </View>
 
-              {showUnitPicker && (
-                <View style={styles.unitPicker}>
-                  {UNITS.map((u) => (
-                    <TouchableOpacity
-                      key={u}
-                      style={styles.unitPickerRow}
-                      onPress={() => { setNewItemUnit(u); setShowUnitPicker(false); }}
-                    >
-                      <Text style={[styles.unitPickerTxt, u === newItemUnit && { color: colors.primary, fontWeight: "700" }]}>
-                        {u}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
+              {showUnitPicker && (() => {
+                const dynamicOpts = unitOptionsFor({
+                  unit: newItemUnit,
+                  secondaryUnit: newItemSecondaryUnit || undefined,
+                  conversionRate: newItemConversionRate || undefined,
+                  tertiaryUnit: newItemTertiaryUnit || undefined,
+                  tertiaryConversionRate: newItemTertiaryConversionRate || undefined,
+                });
+                const unitChoices = dynamicOpts.length > 0 ? dynamicOpts.map((o) => o.unit) : UNITS;
+                return (
+                  <View style={styles.unitPicker}>
+                    {unitChoices.map((u) => (
+                      <TouchableOpacity
+                        key={u}
+                        style={styles.unitPickerRow}
+                        onPress={() => {
+                          const newRate = rateForUnit(
+                            {
+                              unit: newItemUnit,
+                              secondaryUnit: newItemSecondaryUnit || undefined,
+                              conversionRate: newItemConversionRate || undefined,
+                              tertiaryUnit: newItemTertiaryUnit || undefined,
+                              tertiaryConversionRate: newItemTertiaryConversionRate || undefined,
+                              baseSalePrice: newItemBaseSalePrice || undefined,
+                              rate: parseFloat(newItemRate) || 0,
+                            },
+                            u,
+                          );
+                          setNewItemUnit(u);
+                          setNewItemRate(newRate ? String(newRate) : "");
+                          setShowUnitPicker(false);
+                        }}
+                      >
+                        <Text style={[styles.unitPickerTxt, u === newItemUnit && { color: colors.primary, fontWeight: "700" }]}>
+                          {u}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                );
+              })()}
 
               {/* MRP */}
               <View style={styles.outlinedField}>
