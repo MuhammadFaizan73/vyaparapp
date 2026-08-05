@@ -24,6 +24,7 @@ import { BulkImportModule } from "./bulk-import/bulk-import.module";
 import { CompaniesModule } from "./companies/companies.module";
 import { DistributorsModule } from "./distributors/distributors.module";
 import { BranchesModule } from "./branches/branches.module";
+import { TaxRatesModule } from "./tax-rates/tax-rates.module";
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { BranchesModule } from "./branches/branches.module";
     CompaniesModule,
     DistributorsModule,
     BranchesModule,
+    TaxRatesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

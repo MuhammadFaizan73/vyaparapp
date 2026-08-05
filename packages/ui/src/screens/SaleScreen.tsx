@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 
 import { api } from "../lib/api";
-import type { Transaction, Party, Item, Company, TeamMember } from "@vyapar/api-client";
+import type { Transaction, Party, Item, Company, TeamMember, TaxRate } from "@vyapar/api-client";
 import { useCompany } from "../lib/CompanyContext";
 import { AddPartyModal } from "./AddPartyModal";
 import { AddItemModal } from "./AddItemModal";
@@ -1047,6 +1047,8 @@ function NewSaleForm({
   });
   const [discountPct, setDiscountPct] = useState("");
   const [discountRs, setDiscountRs] = useState("");
+  const [taxRates, setTaxRates] = useState<TaxRate[]>([]);
+  const [taxRateId, setTaxRateId] = useState("");
   const [roundOff, setRoundOff] = useState(true);
   const [paymentType, setPaymentType] = useState("Cash");
   const [showReceived, setShowReceived] = useState(false);
@@ -1074,6 +1076,7 @@ function NewSaleForm({
 
   useEffect(() => {
     api.listTeamMembers().then(setTeamMembers).catch(() => {});
+    api.listTaxRates().then(setTaxRates).catch(() => {});
   }, []);
 
   const dropRef = useRef<HTMLDivElement>(null);
@@ -1138,8 +1141,11 @@ function NewSaleForm({
     ? (subtotal * parseFloat(discountPct)) / 100
     : parseFloat(discountRs) || 0;
   const afterDiscount = subtotal - discountAmt;
-  const roundOffAmt = roundOff ? Math.round(afterDiscount) - afterDiscount : 0;
-  const total = afterDiscount + roundOffAmt;
+  const selectedTaxRate = taxRates.find((t) => t.id === taxRateId);
+  const taxAmt = selectedTaxRate ? (afterDiscount * selectedTaxRate.rate) / 100 : 0;
+  const afterTax = afterDiscount + taxAmt;
+  const roundOffAmt = roundOff ? Math.round(afterTax) - afterTax : 0;
+  const total = afterTax + roundOffAmt;
   const receivedAmt = showReceived ? parseFloat(received) || 0 : 0;
   const linkedAmount = partyTxns
     .filter((t) => linkedTxnIds.has(t.id))
@@ -1559,8 +1565,11 @@ function NewSaleForm({
               <div className="lsf-totals-row">
                 <span className="lsf-totals-lbl">Tax</span>
                 <div className="lsf-totals-controls">
-                  <select className="lsf-sm-select"><option>NONE</option></select>
-                  <span className="lsf-tax-val">0</span>
+                  <select className="lsf-sm-select" value={taxRateId} onChange={(e) => setTaxRateId(e.target.value)}>
+                    <option value="">NONE</option>
+                    {taxRates.map((t) => <option key={t.id} value={t.id}>{t.name} ({t.rate}%)</option>)}
+                  </select>
+                  <span className="lsf-tax-val">{fmt(taxAmt)}</span>
                 </div>
               </div>
               <div className="lsf-totals-row">
@@ -2139,8 +2148,11 @@ function NewSaleForm({
             <div className="nsf-totals-row">
               <span className="nsf-totals-lbl">Tax</span>
               <div className="nsf-discount-controls">
-                <select className="nsf-tiny-select"><option>NONE</option></select>
-                <span className="nsf-tax-val">0</span>
+                <select className="nsf-tiny-select" value={taxRateId} onChange={(e) => setTaxRateId(e.target.value)}>
+                  <option value="">NONE</option>
+                  {taxRates.map((t) => <option key={t.id} value={t.id}>{t.name} ({t.rate}%)</option>)}
+                </select>
+                <span className="nsf-tax-val">{fmt(taxAmt)}</span>
               </div>
             </div>
 

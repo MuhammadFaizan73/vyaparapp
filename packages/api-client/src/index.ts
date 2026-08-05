@@ -7,6 +7,7 @@ import type {
   CreatePartyRequest,
   UpdatePartyRequest,
   PartyGroup,
+  TaxRate,
   User,
   Transaction,
   CreateTransactionRequest,
@@ -160,6 +161,25 @@ export class VyaparApiClient {
 
   async deletePartyGroup(id: string): Promise<void> {
     await this.http.delete(`/party-groups/${id}`);
+  }
+
+  async listTaxRates(): Promise<TaxRate[]> {
+    const { data } = await this.http.get<TaxRate[]>("/tax-rates");
+    return data;
+  }
+
+  async createTaxRate(name: string, rate: number): Promise<TaxRate> {
+    const { data } = await this.http.post<TaxRate>("/tax-rates", { name, rate });
+    return data;
+  }
+
+  async updateTaxRate(id: string, name: string, rate: number): Promise<TaxRate> {
+    const { data } = await this.http.patch<TaxRate>(`/tax-rates/${id}`, { name, rate });
+    return data;
+  }
+
+  async deleteTaxRate(id: string): Promise<void> {
+    await this.http.delete(`/tax-rates/${id}`);
   }
 
   async getMe(): Promise<User> {
@@ -584,6 +604,7 @@ export type {
   CreatePartyRequest,
   UpdatePartyRequest,
   PartyGroup,
+  TaxRate,
   Tenant,
   RegisterRequest,
   RegisterResponse,

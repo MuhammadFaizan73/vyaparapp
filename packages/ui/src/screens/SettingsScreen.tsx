@@ -1,9 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "../lib/api";
+import type { TaxRate } from "@vyapar/api-client";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-type TaxRate = { id: string; name: string; rate: number };
 
 type Settings = {
   // GENERAL
@@ -71,8 +70,6 @@ type Settings = {
   orientation: string;
   companyNameSize: string;
   invoiceTextSize: string;
-  // TAXES
-  taxRates: TaxRate[];
   // TRANSACTION MESSAGE
   sendMsgToParty: boolean;
   webInvoiceLinkInMsg: boolean;
@@ -133,7 +130,6 @@ const DEFAULT_SETTINGS: Settings = {
   companyName: "Godigi", companyAddress: "", companyEmail: "", companyPhone: "",
   showTinOnSale: false, paperSize: "A4", orientation: "Portrait",
   companyNameSize: "Large", invoiceTextSize: "Medium",
-  taxRates: [{ id: "1", name: "Sale tax", rate: 2 }],
   sendMsgToParty: true, webInvoiceLinkInMsg: true,
   autoMsgSales: true, autoMsgPurchase: true, autoMsgSaleReturn: true, autoMsgPurchaseReturn: true,
   autoMsgPaymentIn: true, autoMsgPaymentOut: true, autoMsgSaleOrder: true, autoMsgPurchaseOrder: false,
@@ -201,8 +197,10 @@ export function SettingsScreen() {
   const [s, setS] = useState<Settings>(loadSettings);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [taxRates, setTaxRates] = useState<TaxRate[]>([]);
   const [newTaxName, setNewTaxName] = useState("");
   const [newTaxRate, setNewTaxRate] = useState("");
+  const [editingTaxId, setEditingTaxId] = useState<string | null>(null);
   const [appVersion, setAppVersion] = useState<string | null>(null);
   const [hasUpdateBridge, setHasUpdateBridge] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
@@ -216,6 +214,10 @@ export function SettingsScreen() {
       setHasUpdateBridge(true);
       return bridge.onUpdateStatus((status: UpdateStatus) => setUpdateStatus(status));
     }
+  }, []);
+
+  useEffect(() => {
+    api.listTaxRates().then(setTaxRates).catch(() => {});
   }, []);
 
   function handleCheckForUpdates() {
@@ -539,40 +541,55 @@ export function SettingsScreen() {
   }
 
   function Taxes() {
-    function addTax() {
+    async function saveTax() {
       if (!newTaxName.trim() || !newTaxRate) return;
-      const updated = [...s.taxRates, { id: Date.now().toString(), name: newTaxName.trim(), rate: Number(newTaxRate) }];
-      set("taxRates", updated);
+      if (editingTaxId) {
+        const updated = await api.updateTaxRate(editingTaxId, newTaxName.trim(), Number(newTaxRate));
+        setTaxRates(prev => prev.map(t => (t.id === editingTaxId ? updated : t)));
+      } else {
+        const created = await api.createTaxRate(newTaxName.trim(), Number(newTaxRate));
+        setTaxRates(prev => [...prev, created]);
+      }
+      setNewTaxName(""); setNewTaxRate(""); setEditingTaxId(null);
+    }
+    function editTax(t: TaxRate) {
+      setEditingTaxId(t.id);
+      setNewTaxName(t.name);
+      setNewTaxRate(String(t.rate));
+    }
+    function cancelEditTax() {
+      setEditingTaxId(null);
       setNewTaxName(""); setNewTaxRate("");
     }
-    function deleteTax(id: string) {
-      set("taxRates", s.taxRates.filter(t => t.id !== id));
+    async function deleteTax(id: string) {
+      await api.deleteTaxRate(id);
+      setTaxRates(prev => prev.filter(t => t.id !== id));
+      if (editingTaxId === id) cancelEditTax();
     }
     return (
       <div className="st-cols-2">
         <div>
           <div className="st-section-header-row">
             <SectionTitle title="Tax Rates" />
-            <button className="st-icon-add" title="Add tax rate">⊕</button>
           </div>
-          {s.taxRates.map(t => (
+          {taxRates.map(t => (
             <div key={t.id} className="st-tax-row">
               <span className="st-tax-name">{t.name}</span>
               <span className="st-tax-rate">{t.rate}</span>
-              <button className="st-tax-btn" title="Edit">✎</button>
+              <button className="st-tax-btn" title="Edit" onClick={() => editTax(t)}>✎</button>
               <button className="st-tax-btn st-tax-btn--del" title="Delete" onClick={() => deleteTax(t.id)}>🗑</button>
             </div>
           ))}
           <div className="st-tax-add-row">
             <input className="st-input" placeholder="Tax name" value={newTaxName} onChange={e => setNewTaxName(e.target.value)} style={{ flex: 2 }} />
             <input className="st-input" placeholder="Rate %" type="number" min="0" value={newTaxRate} onChange={e => setNewTaxRate(e.target.value)} style={{ flex: 1 }} />
-            <button className="st-btn-primary" onClick={addTax}>Add</button>
+            <button className="st-btn-primary" onClick={saveTax}>{editingTaxId ? "Save" : "Add"}</button>
+            {editingTaxId && <button className="st-tax-btn" title="Cancel" onClick={cancelEditTax}>✕</button>}
           </div>
         </div>
         <div>
           <div className="st-section-header-row">
             <SectionTitle title="Tax Group" />
-            <button className="st-icon-add" title="Add tax group">⊕</button>
           </div>
           <p className="st-desc">No tax groups yet. Add a group to combine multiple tax rates.</p>
         </div>

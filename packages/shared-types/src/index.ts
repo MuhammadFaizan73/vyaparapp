@@ -120,6 +120,14 @@ export const PartyGroupSchema = z.object({
 });
 export type PartyGroup = z.infer<typeof PartyGroupSchema>;
 
+export const TaxRateSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  rate: z.number(),
+  createdAt: z.string().datetime(),
+});
+export type TaxRate = z.infer<typeof TaxRateSchema>;
+
 export const UserSchema = z.object({
   id: z.string().uuid(),
   email: z.string().email(),
