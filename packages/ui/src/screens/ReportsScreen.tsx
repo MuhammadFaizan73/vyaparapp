@@ -1176,7 +1176,8 @@ function StockSummaryReport() {
 function ItemReportByPartyReport() {
   const [from, setFrom] = useState(monthStart);
   const [to,   setTo]   = useState(todayStr);
-  const { data, loading, error } = useReport("item-report-by-party", { from, to });
+  const { companyFilter } = useCompany();
+  const { data, loading, error } = useReport("item-report-by-party", { from, to, companyId: companyFilter ?? undefined });
 
   function handleExport() {
     if (!data?.items?.length) return;

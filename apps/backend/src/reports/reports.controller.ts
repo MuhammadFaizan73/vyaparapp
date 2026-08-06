@@ -106,6 +106,16 @@ export class ReportsController {
     return this.reports.getPartyReportByItem(req.tenantId, from, to, companyId);
   }
 
+  @Get('item-report-by-party')
+  getItemReportByParty(
+    @Req() req: AuthedRequest,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('companyId') companyId?: string,
+  ) {
+    return this.reports.getItemReportByParty(req.tenantId, from, to, companyId);
+  }
+
   @Get('sale-purchase-by-party')
   getSalePurchaseByParty(
     @Req() req: AuthedRequest,

@@ -669,6 +669,67 @@ export class ReportsService {
     return { parties, total };
   }
 
+  // ── Item Report By Party ────────────────────────────────────────────────────
+  // Same shape as Party Report By Item, grouped the other way: per item, sale/purchase
+  // qty and amount attributed from each transaction's own line items (not the whole
+  // transaction total, since one invoice can cover several items).
+
+  async getItemReportByParty(tenantId: string, from?: string, to?: string, companyId?: string) {
+    const dateFilter = buildDateFilter(from, to);
+
+    const txns = await this.prisma.transaction.findMany({
+      where: {
+        tenantId,
+        type: { in: ['sale', 'purchase', 'credit_note', 'debit_note'] },
+        ...(dateFilter ? { date: dateFilter } : {}),
+        ...companyIdWhere(companyId),
+      },
+    });
+
+    const itemMap = new Map<
+      string,
+      { itemName: string; saleQty: number; saleAmount: number; purchaseQty: number; purchaseAmount: number }
+    >();
+
+    for (const t of txns) {
+      for (const li of parseItems(t.notes)) {
+        if (!itemMap.has(li.name)) {
+          itemMap.set(li.name, { itemName: li.name, saleQty: 0, saleAmount: 0, purchaseQty: 0, purchaseAmount: 0 });
+        }
+        const entry = itemMap.get(li.name)!;
+        const qty = li.qty ?? 0;
+        const amount = qty * (li.rate ?? 0);
+
+        if (t.type === 'sale') {
+          entry.saleQty += qty;
+          entry.saleAmount += amount;
+        } else if (t.type === 'purchase') {
+          entry.purchaseQty += qty;
+          entry.purchaseAmount += amount;
+        } else if (t.type === 'credit_note') {
+          entry.saleQty -= qty;
+          entry.saleAmount -= amount;
+        } else if (t.type === 'debit_note') {
+          entry.purchaseQty -= qty;
+          entry.purchaseAmount -= amount;
+        }
+      }
+    }
+
+    const items = Array.from(itemMap.values());
+    const total = items.reduce(
+      (acc, i) => ({
+        saleQty: acc.saleQty + i.saleQty,
+        saleAmount: acc.saleAmount + i.saleAmount,
+        purchaseQty: acc.purchaseQty + i.purchaseQty,
+        purchaseAmount: acc.purchaseAmount + i.purchaseAmount,
+      }),
+      { saleQty: 0, saleAmount: 0, purchaseQty: 0, purchaseAmount: 0 },
+    );
+
+    return { items, total };
+  }
+
   // ── Sale/Purchase By Party ──────────────────────────────────────────────────
 
   async getSalePurchaseByParty(tenantId: string, from?: string, to?: string, companyId?: string) {
