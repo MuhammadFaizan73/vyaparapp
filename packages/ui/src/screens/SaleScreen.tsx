@@ -134,9 +134,9 @@ function partyColor(name: string) {
 /* ═══════════════════════════════════════════════════════════
    MAIN COMPONENT
 ═══════════════════════════════════════════════════════════ */
-type Props = { isLocked?: boolean; onLockedAction?: () => void; activeKey?: string };
+type Props = { isLocked?: boolean; onLockedAction?: () => void; activeKey?: string; autoOpenAdd?: number };
 
-export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale-invoices" }: Props = {}) {
+export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale-invoices", autoOpenAdd }: Props = {}) {
   const subTab: SubTab = ACTIVE_KEY_TO_SUBTAB[activeKey] ?? "invoices";
   const [filter, setFilter] = useState<"all" | "unpaid" | "paid">("all");
   const [sales, setSales] = useState<SaleRow[]>([]);
@@ -312,6 +312,13 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
     if (isLocked) { onLockedAction?.(); return; }
     setShowForm(true);
   }
+
+  // Lets the global topbar "+ Add Sale" button (Shell.tsx) open this screen's own form —
+  // it can't reach `setShowForm` directly since that's internal state, so Shell bumps this
+  // prop's value on every click and we react to the change.
+  useEffect(() => {
+    if (autoOpenAdd) handleAddSale();
+  }, [autoOpenAdd]);
 
   async function handleDuplicate(sale: SaleRow) {
     try {
@@ -991,6 +998,20 @@ function emptyRow(): LineItem {
   return { id: Date.now().toString() + Math.random(), name: "", mrp: 0, qty: 0, unit: "NONE", rate: 0 };
 }
 
+// Notes have two shapes in the wild: a bare array of line items (older invoices, saved
+// before paymentType/mode were tracked) or `{ items: [...], paymentType }` (current
+// format). Centralized here so item-prefill and mode/paymentType-prefill agree on shape.
+function parseSaleNotes(notes: string | null | undefined): { items: any[]; paymentType?: string } {
+  if (!notes) return { items: [] };
+  try {
+    const parsed = JSON.parse(notes);
+    if (Array.isArray(parsed)) return { items: parsed };
+    return { items: Array.isArray(parsed?.items) ? parsed.items : [], paymentType: parsed?.paymentType };
+  } catch {
+    return { items: [] };
+  }
+}
+
 function NewSaleForm({
   parties, catalog, companies, selectedCompanyId, initialSale, initialParty, onClose, onSaved,
 }: {
@@ -1006,7 +1027,10 @@ function NewSaleForm({
   const isEdit = Boolean(initialSale);
   /* Party field is locked when editing an invoice that has any payment applied */
   const partyLocked = isEdit && !!initialSale && initialSale.balance < initialSale.total;
-  const [mode, setMode] = useState<"credit" | "cash">(initialParty ? "credit" : "cash");
+  const initialPaymentType = initialSale ? parseSaleNotes(initialSale.notes).paymentType : undefined;
+  const [mode, setMode] = useState<"credit" | "cash">(
+    initialPaymentType ? (initialPaymentType === "Credit" ? "credit" : "cash") : initialParty ? "credit" : "cash"
+  );
   const [customer, setCustomer] = useState(initialParty?.name ?? "");
   const [customerPhone, setCustomerPhone] = useState(initialParty?.phone ?? "");
   const [showPartyDrop, setShowPartyDrop] = useState(false);
@@ -1027,20 +1051,17 @@ function NewSaleForm({
   const [invoiceNumber] = useState(1);
   const [lineItems, setLineItems] = useState<LineItem[]>(() => {
     if (initialSale) {
-      try {
-        const stored: { name: string; qty: number; unit: string; rate: number; mrp: number }[] =
-          JSON.parse(initialSale.notes ?? "");
-        if (Array.isArray(stored) && stored.length > 0) {
-          return stored.map((i, idx) => ({
-            id: String(idx),
-            name: i.name ?? "",
-            qty: Number(i.qty) || 0,
-            unit: i.unit ?? "NONE",
-            rate: Number(i.rate) || 0,
-            mrp: Number(i.mrp) || 0,
-          }));
-        }
-      } catch { /* notes is not JSON — fall through */ }
+      const stored = parseSaleNotes(initialSale.notes).items;
+      if (stored.length > 0) {
+        return stored.map((i, idx) => ({
+          id: String(idx),
+          name: i.name ?? "",
+          qty: Number(i.qty) || 0,
+          unit: i.unit ?? "NONE",
+          rate: Number(i.rate) || 0,
+          mrp: Number(i.mrp) || 0,
+        }));
+      }
       return [{ id: "init", name: "Invoice Total", mrp: 0, qty: 1, unit: "NONE", rate: Number(initialSale.total) || 0 }];
     }
     return [emptyRow(), emptyRow()];
@@ -1050,7 +1071,9 @@ function NewSaleForm({
   const [taxRates, setTaxRates] = useState<TaxRate[]>([]);
   const [taxRateId, setTaxRateId] = useState("");
   const [roundOff, setRoundOff] = useState(true);
-  const [paymentType, setPaymentType] = useState("Cash");
+  const [paymentType, setPaymentType] = useState(
+    initialPaymentType && initialPaymentType !== "Credit" ? initialPaymentType : "Cash"
+  );
   const [showReceived, setShowReceived] = useState(false);
   const [received, setReceived] = useState("");
   const [saving, setSaving] = useState(false);
@@ -1251,9 +1274,13 @@ function NewSaleForm({
   async function saveConfirmed() {
     setStockWarningItems([]);
     setSaving(true);
-    const notesJson = JSON.stringify(
-      validItems.map((i) => ({ name: i.name, qty: i.qty, unit: i.unit, rate: i.rate, mrp: i.mrp }))
-    );
+    // Payment Type only means anything once money has actually changed hands — for a
+    // Credit sale (nothing received yet) it's recorded as "Credit" rather than whatever
+    // the (still-visible, informational) Payment Type dropdown happens to show.
+    const notesJson = JSON.stringify({
+      items: validItems.map((i) => ({ name: i.name, qty: i.qty, unit: i.unit, rate: i.rate, mrp: i.mrp })),
+      paymentType: mode === "credit" ? "Credit" : paymentType,
+    });
     try {
       let txn;
       if (isEdit && initialSale) {
@@ -2056,14 +2083,18 @@ function NewSaleForm({
 
           {/* ── Left column ── */}
           <div className="nsf-bottom-left">
-            {/* Payment Type floating-label select */}
+            {/* Payment Type floating-label select — a method of payment only means anything
+                once money has actually changed hands, so a Credit sale shows/stores "Credit"
+                here instead of offering a method that hasn't been received yet. */}
             <div className="nsf-payment-field">
               <span className="nsf-payment-lbl">Payment Type</span>
               <select
                 className="nsf-payment-select"
-                value={paymentType}
+                value={mode === "credit" ? "Credit" : paymentType}
+                disabled={mode === "credit"}
                 onChange={(e) => setPaymentType(e.target.value)}
               >
+                {mode === "credit" && <option>Credit</option>}
                 <option>Cash</option>
                 <option>UPI</option>
                 <option>Bank Transfer</option>

@@ -216,6 +216,10 @@ type Props = {
 export function Shell({ status, onLogout, onLicenseActivated }: Props) {
   const [active, setActive]     = useState("home");
   const [pendingReportKey, setPendingReportKey] = useState<string | null>(null);
+  // Bumped (never reset) so SaleScreen/PurchaseScreen's useEffect fires on every click,
+  // even repeat clicks while already on that screen — a plain boolean wouldn't re-trigger.
+  const [autoOpenSaleNonce, setAutoOpenSaleNonce] = useState(0);
+  const [autoOpenPurchaseNonce, setAutoOpenPurchaseNonce] = useState(0);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [showReviewOrder, setShowReviewOrder] = useState(false);
   const [showActivate,    setShowActivate]    = useState(false);
@@ -476,14 +480,22 @@ export function Shell({ status, onLogout, onLicenseActivated }: Props) {
             <button
               type="button"
               className="topbar__btn-sale"
-              onClick={() => isLocked && handleLockedAction()}
+              onClick={() => {
+                if (isLocked) { handleLockedAction(); return; }
+                setActive("sale-invoices");
+                setAutoOpenSaleNonce(n => n + 1);
+              }}
             >
               <TopbarPlusIcon /> Add Sale
             </button>
             <button
               type="button"
               className="topbar__btn-purchase"
-              onClick={() => isLocked && handleLockedAction()}
+              onClick={() => {
+                if (isLocked) { handleLockedAction(); return; }
+                setActive("purchase-bills");
+                setAutoOpenPurchaseNonce(n => n + 1);
+              }}
             >
               <TopbarPlusIcon /> Add Purchase
             </button>
@@ -555,9 +567,9 @@ export function Shell({ status, onLogout, onLicenseActivated }: Props) {
         {screenKey === "import-cash-flow" && <ImportCashFlowPage onGoToParties={() => setActive("parties")} />}
         {screenKey === "import-expenses" && <ImportExpensesPage onGoToExpenses={() => setActive("purchase-expense")} />}
         {screenKey === "payment-in"  && <PaymentInScreen isLocked={isLocked} onLockedAction={handleLockedAction} />}
-        {screenKey === "sale"        && <SaleScreen     isLocked={isLocked} onLockedAction={handleLockedAction} activeKey={active} />}
+        {screenKey === "sale"        && <SaleScreen     isLocked={isLocked} onLockedAction={handleLockedAction} activeKey={active} autoOpenAdd={autoOpenSaleNonce} />}
         {screenKey === "sale-txn"    && <SaleTxnScreen  isLocked={isLocked} onLockedAction={handleLockedAction} activeKey={active} />}
-        {screenKey === "purchase"    && <PurchaseScreen isLocked={isLocked} onLockedAction={handleLockedAction} activeKey={active} />}
+        {screenKey === "purchase"    && <PurchaseScreen isLocked={isLocked} onLockedAction={handleLockedAction} activeKey={active} autoOpenAdd={autoOpenPurchaseNonce} />}
         {screenKey === "sync-share"  && <SyncShareScreen />}
         {screenKey === "reports"     && <ReportsScreen initialReportKey={pendingReportKey} />}
         {screenKey === "bank-accounts" && <BankAccountsScreen />}

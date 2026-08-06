@@ -59,9 +59,9 @@ function partyColor(name: string) {
   return avatarCache[name];
 }
 
-type Props = { isLocked?: boolean; onLockedAction?: () => void; activeKey?: string };
+type Props = { isLocked?: boolean; onLockedAction?: () => void; activeKey?: string; autoOpenAdd?: number };
 
-export function PurchaseScreen({ isLocked = false, onLockedAction, activeKey = "purchase-bills" }: Props = {}) {
+export function PurchaseScreen({ isLocked = false, onLockedAction, activeKey = "purchase-bills", autoOpenAdd }: Props = {}) {
   const tabCfg = TAB_CONFIG[activeKey] ?? TAB_CONFIG["purchase-bills"];
   const [filter, setFilter]   = useState<"all" | "unpaid" | "paid">("all");
   const [search, setSearch]   = useState("");
@@ -144,6 +144,14 @@ export function PurchaseScreen({ isLocked = false, onLockedAction, activeKey = "
       setShowSimpleForm(true);
     }
   }
+
+  // Lets the global topbar "+ Add Purchase" button (Shell.tsx) open this screen's own form —
+  // it can't reach `setShowForm` directly since that's internal state, so Shell bumps this
+  // prop's value on every click and we react to the change. Placed before the activeKey
+  // early-returns below so the hook always runs (Rules of Hooks).
+  useEffect(() => {
+    if (autoOpenAdd) handleAddPurchase();
+  }, [autoOpenAdd]);
 
   async function handleDuplicate(purchase: PurchaseRow) {
     try {

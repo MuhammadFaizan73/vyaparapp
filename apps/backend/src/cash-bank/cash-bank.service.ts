@@ -25,6 +25,15 @@ function txnDirection(type: string): "in" | "out" {
   return CASH_IN_TYPES.has(type) ? "in" : "out";
 }
 
+// Sale/Purchase invoices can be partially or fully unpaid — only the portion actually
+// received/paid moves cash, not the full invoice total. Every other cash-affecting type
+// (payment_in/out, cash_in/out, credit/debit note, expense, pos_sale) IS the money
+// movement itself, so its `total` is used as-is.
+function cashAmount(t: { type: string; total: number; balance: number }): number {
+  if (t.type === "sale" || t.type === "purchase") return t.total - t.balance;
+  return t.total;
+}
+
 function txnLabel(type: string): string {
   const map: Record<string, string> = {
     sale: "Sale", purchase: "Purchase", payment_in: "Payment-In",
@@ -62,13 +71,14 @@ export class CashBankService {
 
     const cashTxns = txns.filter(t =>
       (CASH_IN_TYPES.has(t.type) || CASH_OUT_TYPES.has(t.type)) &&
-      isCashTxn(t.type, t.notes)
+      isCashTxn(t.type, t.notes) &&
+      cashAmount(t) !== 0 // drop fully-unpaid credit sales/purchases — no cash actually moved
     );
 
     let balance = 0;
     for (const t of cashTxns) {
-      if (txnDirection(t.type) === "in")  balance += t.total;
-      else                                balance -= t.total;
+      if (txnDirection(t.type) === "in")  balance += cashAmount(t);
+      else                                balance -= cashAmount(t);
     }
 
     const transactions = cashTxns.map(t => {
@@ -81,7 +91,7 @@ export class CashBankService {
         rawType:   t.type,
         name:      partyName ?? noteObj.description ?? noteObj.category ?? "—",
         date:      t.date.toISOString(),
-        amount:    t.total,
+        amount:    cashAmount(t),
         direction: dir,
         invoiceNo: t.number ?? null,
       };

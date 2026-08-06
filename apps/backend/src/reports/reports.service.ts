@@ -4,13 +4,18 @@ import { companyIdWhere } from '../common/company-filter.util';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
+// Notes have two shapes in the wild: a bare array of line items (older sales, before
+// paymentType was tracked), or `{ items: [...], paymentType, ... }` (current format,
+// carries the line items alongside metadata like the actual payment type/Credit-vs-Cash
+// mode). Both parsers below handle either shape so historical rows keep working.
 function parseItems(
   notes: string | null,
 ): Array<{ name: string; qty: number; rate: number; mrp?: number; unit?: string }> {
   if (!notes) return [];
   try {
     const p = JSON.parse(notes);
-    return Array.isArray(p) ? p : [];
+    if (Array.isArray(p)) return p;
+    return Array.isArray(p?.items) ? p.items : [];
   } catch {
     return [];
   }
