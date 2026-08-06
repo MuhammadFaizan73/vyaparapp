@@ -4584,7 +4584,7 @@ body,
 /* KPI row — two cards side by side inside one white card */
 .hs-kpi-row {
   display: grid; grid-template-columns: 1fr 1fr;
-  background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden;
+  background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
 }
 .hs-kpi-card {
   padding: 20px 24px; display: flex; flex-direction: column; gap: 10px;
@@ -4727,7 +4727,7 @@ body,
 /* Metric summary row */
 .hs-metric-row {
   display: flex; background: #fff; border-radius: 10px;
-  border: 1px solid #e5e7eb; overflow: hidden;
+  border: 1px solid #e5e7eb;
 }
 .hs-metric-item {
   flex: 1; display: flex; flex-direction: column; gap: 4px;
