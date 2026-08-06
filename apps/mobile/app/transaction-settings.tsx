@@ -14,6 +14,85 @@ const SHARE_OPTIONS = ["Ask me Everytime", "WhatsApp", "SMS", "Email", "PDF", "D
 const NEAREST_OPTIONS = ["Nearest", "Round Up", "Round Down"];
 const ROUND_TO_OPTIONS = ["0.01", "0.1", "1", "5", "10", "50", "100"];
 
+// Hoisted to module scope (not defined inside TransactionSettingsScreen) — a component
+// redefined on every render of its parent gets a new function identity each time, so React
+// treats it as a different component type and remounts the whole subtree on every state
+// change instead of diffing it normally.
+function Row({
+  label, info, value, onToggle, premium, chevron, dot,
+}: {
+  label: string; info?: boolean; value?: boolean;
+  onToggle?: (v: boolean) => void;
+  premium?: boolean; chevron?: boolean; dot?: boolean;
+}) {
+  return (
+    <TouchableOpacity
+      style={s.row}
+      activeOpacity={chevron ? 0.7 : 1}
+      onPress={chevron ? () => {} : undefined}
+    >
+      <View style={s.rowLeft}>
+        <Text style={s.rowLabel}>{label}</Text>
+        {info && <View style={s.infoIcon}><Text style={s.infoTxt}>i</Text></View>}
+        {dot && <View style={s.redDot} />}
+        {premium && <View style={s.premiumBadge}><Text style={s.premiumTxt}>👑</Text></View>}
+      </View>
+      {chevron ? (
+        <Ionicons name="chevron-forward" size={18} color={colors.textLight} />
+      ) : (
+        <Switch
+          value={value ?? false}
+          onValueChange={onToggle}
+          trackColor={{ false: "#d1d5db", true: colors.primary + "99" }}
+          thumbColor={value ? colors.primary : "#9ca3af"}
+          disabled={premium}
+        />
+      )}
+    </TouchableOpacity>
+  );
+}
+
+function DropdownRow({
+  label, info, value, onPress,
+}: {
+  label: string; info?: boolean; value: string; onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity style={s.row} onPress={onPress}>
+      <View style={s.rowLeft}>
+        <Text style={s.rowLabel}>{label}</Text>
+        {info && <View style={s.infoIcon}><Text style={s.infoTxt}>i</Text></View>}
+      </View>
+      <View style={s.dropdownBox}>
+        <Text style={s.dropdownVal}>{value}</Text>
+        <Ionicons name="chevron-down" size={14} color={colors.textLight} />
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+function SectionHeader({ title }: { title: string }) {
+  return (
+    <View style={s.sectionHeader}>
+      <Text style={s.sectionHeaderTxt}>{title}</Text>
+    </View>
+  );
+}
+
+function PrefixDropdown({ label, value, onPress }: { label: string; value: string; onPress: () => void }) {
+  return (
+    <View style={s.prefixRow}>
+      <View style={s.prefixLabelWrap}>
+        <Text style={s.prefixLabel}>{label}</Text>
+      </View>
+      <TouchableOpacity style={s.prefixDropdown} onPress={onPress}>
+        <Text style={s.prefixDropdownTxt}>{value}</Text>
+        <Ionicons name="chevron-down" size={14} color={colors.textLight} />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 export default function TransactionSettingsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -39,85 +118,6 @@ export default function TransactionSettingsScreen() {
     if (!dropdown) return;
     update({ [dropdown.field]: val } as any);
     setDropdown(null);
-  }
-
-  function Row({
-    label, info, value, onToggle, premium, chevron, dot,
-  }: {
-    label: string; info?: boolean; value?: boolean;
-    onToggle?: (v: boolean) => void;
-    premium?: boolean; chevron?: boolean; dot?: boolean;
-  }) {
-    return (
-      <TouchableOpacity
-        style={s.row}
-        activeOpacity={chevron ? 0.7 : 1}
-        onPress={chevron ? () => {} : undefined}
-      >
-        <View style={s.rowLeft}>
-          <Text style={s.rowLabel}>{label}</Text>
-          {info && <View style={s.infoIcon}><Text style={s.infoTxt}>i</Text></View>}
-          {dot && <View style={s.redDot} />}
-          {premium && <View style={s.premiumBadge}><Text style={s.premiumTxt}>👑</Text></View>}
-        </View>
-        {chevron ? (
-          <Ionicons name="chevron-forward" size={18} color={colors.textLight} />
-        ) : (
-          <Switch
-            value={value ?? false}
-            onValueChange={onToggle}
-            trackColor={{ false: "#d1d5db", true: colors.primary + "99" }}
-            thumbColor={value ? colors.primary : "#9ca3af"}
-            disabled={premium}
-          />
-        )}
-      </TouchableOpacity>
-    );
-  }
-
-  function DropdownRow({
-    label, info, field, value, options, title,
-  }: {
-    label: string; info?: boolean; field: string;
-    value: string; options: string[]; title: string;
-  }) {
-    return (
-      <TouchableOpacity style={s.row} onPress={() => openDropdown(field, options, value, title)}>
-        <View style={s.rowLeft}>
-          <Text style={s.rowLabel}>{label}</Text>
-          {info && <View style={s.infoIcon}><Text style={s.infoTxt}>i</Text></View>}
-        </View>
-        <View style={s.dropdownBox}>
-          <Text style={s.dropdownVal}>{value}</Text>
-          <Ionicons name="chevron-down" size={14} color={colors.textLight} />
-        </View>
-      </TouchableOpacity>
-    );
-  }
-
-  function SectionHeader({ title }: { title: string }) {
-    return (
-      <View style={s.sectionHeader}>
-        <Text style={s.sectionHeaderTxt}>{title}</Text>
-      </View>
-    );
-  }
-
-  function PrefixDropdown({ label, field, value }: { label: string; field: string; value: string }) {
-    return (
-      <View style={s.prefixRow}>
-        <View style={s.prefixLabelWrap}>
-          <Text style={s.prefixLabel}>{label}</Text>
-        </View>
-        <TouchableOpacity
-          style={s.prefixDropdown}
-          onPress={() => openDropdown(field, PREFIX_OPTIONS, value, label)}
-        >
-          <Text style={s.prefixDropdownTxt}>{value}</Text>
-          <Ionicons name="chevron-down" size={14} color={colors.textLight} />
-        </TouchableOpacity>
-      </View>
-    );
   }
 
   return (
@@ -212,8 +212,9 @@ export default function TransactionSettingsScreen() {
         {/* ── More Transaction Features ── */}
         <SectionHeader title="More Transaction Features" />
         <View style={s.group}>
-          <DropdownRow label="Share Transaction as" info field="shareTransactionAs"
-            value={settings.shareTransactionAs} options={SHARE_OPTIONS} title="Share Transaction as" />
+          <DropdownRow label="Share Transaction as" info
+            value={settings.shareTransactionAs}
+            onPress={() => openDropdown("shareTransactionAs", SHARE_OPTIONS, settings.shareTransactionAs, "Share Transaction as")} />
           <View style={s.divider} />
           <Row label="Passcode for edit/delete" info value={settings.passcodeForEditDelete}
             onToggle={(v) => update({ passcodeForEditDelete: v })} />
@@ -259,38 +260,46 @@ export default function TransactionSettingsScreen() {
           <View style={s.prefixGrid}>
             <View style={s.prefixGridRow}>
               <View style={{ flex: 1 }}>
-                <PrefixDropdown label="Sale invoices" field="prefixSaleInvoices" value={settings.prefixSaleInvoices} />
+                <PrefixDropdown label="Sale invoices" value={settings.prefixSaleInvoices}
+                  onPress={() => openDropdown("prefixSaleInvoices", PREFIX_OPTIONS, settings.prefixSaleInvoices, "Sale invoices")} />
               </View>
               <View style={{ width: 12 }} />
               <View style={{ flex: 1 }}>
-                <PrefixDropdown label="Credit Note" field="prefixCreditNote" value={settings.prefixCreditNote} />
+                <PrefixDropdown label="Credit Note" value={settings.prefixCreditNote}
+                  onPress={() => openDropdown("prefixCreditNote", PREFIX_OPTIONS, settings.prefixCreditNote, "Credit Note")} />
               </View>
             </View>
             <View style={s.prefixGridRow}>
               <View style={{ flex: 1 }}>
-                <PrefixDropdown label="Sale Order" field="prefixSaleOrder" value={settings.prefixSaleOrder} />
+                <PrefixDropdown label="Sale Order" value={settings.prefixSaleOrder}
+                  onPress={() => openDropdown("prefixSaleOrder", PREFIX_OPTIONS, settings.prefixSaleOrder, "Sale Order")} />
               </View>
               <View style={{ width: 12 }} />
               <View style={{ flex: 1 }}>
-                <PrefixDropdown label="Purchase Order" field="prefixPurchaseOrder" value={settings.prefixPurchaseOrder} />
+                <PrefixDropdown label="Purchase Order" value={settings.prefixPurchaseOrder}
+                  onPress={() => openDropdown("prefixPurchaseOrder", PREFIX_OPTIONS, settings.prefixPurchaseOrder, "Purchase Order")} />
               </View>
             </View>
             <View style={s.prefixGridRow}>
               <View style={{ flex: 1 }}>
-                <PrefixDropdown label="Estimate" field="prefixEstimate" value={settings.prefixEstimate} />
+                <PrefixDropdown label="Estimate" value={settings.prefixEstimate}
+                  onPress={() => openDropdown("prefixEstimate", PREFIX_OPTIONS, settings.prefixEstimate, "Estimate")} />
               </View>
               <View style={{ width: 12 }} />
               <View style={{ flex: 1 }}>
-                <PrefixDropdown label="Proforma Invoice" field="prefixProformaInvoice" value={settings.prefixProformaInvoice} />
+                <PrefixDropdown label="Proforma Invoice" value={settings.prefixProformaInvoice}
+                  onPress={() => openDropdown("prefixProformaInvoice", PREFIX_OPTIONS, settings.prefixProformaInvoice, "Proforma Invoice")} />
               </View>
             </View>
             <View style={s.prefixGridRow}>
               <View style={{ flex: 1 }}>
-                <PrefixDropdown label="Delivery Note" field="prefixDeliveryNote" value={settings.prefixDeliveryNote} />
+                <PrefixDropdown label="Delivery Note" value={settings.prefixDeliveryNote}
+                  onPress={() => openDropdown("prefixDeliveryNote", PREFIX_OPTIONS, settings.prefixDeliveryNote, "Delivery Note")} />
               </View>
               <View style={{ width: 12 }} />
               <View style={{ flex: 1 }}>
-                <PrefixDropdown label="Payment-In" field="prefixPaymentIn" value={settings.prefixPaymentIn} />
+                <PrefixDropdown label="Payment-In" value={settings.prefixPaymentIn}
+                  onPress={() => openDropdown("prefixPaymentIn", PREFIX_OPTIONS, settings.prefixPaymentIn, "Payment-In")} />
               </View>
             </View>
           </View>

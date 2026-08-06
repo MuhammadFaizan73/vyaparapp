@@ -804,10 +804,16 @@ export function SettingsScreen() {
     );
   }
 
+  // Called as plain functions, NOT JSX components (`General()`, not `<General />`) — each
+  // one is defined inside this component's body, so as JSX its function identity would be
+  // brand new on every render, making React treat it as a different component type and
+  // remount the whole subtree on every keystroke (losing input focus after each character).
+  // Calling them directly returns their JSX inline instead, with no separate component
+  // boundary, so the actual <input>/<div> elements diff normally across renders.
   const tabContent: Record<Tab, React.ReactNode> = {
-    general: <General />, transaction: <Transaction />, print: <Print />,
-    taxes: <Taxes />, message: <TxnMessage />, party: <Party />,
-    item: <Item />, reminders: <Reminders />,
+    general: General(), transaction: Transaction(), print: Print(),
+    taxes: Taxes(), message: TxnMessage(), party: Party(),
+    item: Item(), reminders: Reminders(),
   };
 
   return (

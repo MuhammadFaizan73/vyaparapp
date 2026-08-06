@@ -39,6 +39,76 @@ function fmtAmt(n: number) {
   return n.toLocaleString("en-PK", { minimumFractionDigits: 4, maximumFractionDigits: 4 });
 }
 
+// Hoisted to module scope (not defined inside HomeScreen) — a component redefined on every
+// render of its parent gets a new function identity each time, so React treats it as a
+// different component type and remounts every visible FlatList row on each keystroke in the
+// search box instead of diffing them normally.
+function TxnCard({ item }: { item: TxnRow }) {
+  const badge = getBadge(item.type, item.balance);
+  return (
+    <View style={s.card}>
+      <View style={s.cardTop}>
+        <View style={{ flex: 1 }}>
+          <Text style={s.cardParty} numberOfLines={1}>{item.partyName}</Text>
+          <View style={[s.badge, { backgroundColor: badge.bg }]}>
+            <Text style={[s.badgeTxt, { color: badge.fg }]}>{badge.label}</Text>
+          </View>
+        </View>
+        <View style={{ alignItems: "flex-end" }}>
+          {item.number ? <Text style={s.cardNum}>#{item.number}</Text> : null}
+          <Text style={s.cardDate}>{fmtDate(item.date)}</Text>
+        </View>
+      </View>
+      <View style={s.cardMid}>
+        <View>
+          <Text style={s.amtLbl}>Total</Text>
+          <Text style={s.amtVal}>Rs {fmtAmt(item.total)}</Text>
+        </View>
+        <View>
+          <Text style={s.amtLbl}>Balance</Text>
+          <Text style={[s.amtVal, item.balance > 0 && { color: "#dc2626" }]}>
+            Rs {fmtAmt(item.balance)}
+          </Text>
+        </View>
+        <View style={s.cardActions}>
+          <TouchableOpacity style={s.actionBtn} hitSlop={8}>
+            <Ionicons name="print-outline" size={18} color={colors.textMuted} />
+          </TouchableOpacity>
+          <TouchableOpacity style={s.actionBtn} hitSlop={8}>
+            <Ionicons name="share-outline" size={18} color={colors.textMuted} />
+          </TouchableOpacity>
+          <TouchableOpacity style={s.actionBtn} hitSlop={8}>
+            <Ionicons name="ellipsis-vertical" size={18} color={colors.textMuted} />
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function PartyCard({ item, onPress }: { item: Party; onPress: () => void }) {
+  const bal = item.balance ?? 0;
+  return (
+    <TouchableOpacity style={s.card} onPress={onPress} activeOpacity={0.8}>
+      <View style={s.partyRow}>
+        <View style={s.partyAvatar}>
+          <Text style={s.partyAvatarTxt}>{item.name[0]?.toUpperCase()}</Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={s.partyName}>{item.name}</Text>
+          {item.phone ? <Text style={s.partyPhone}>{item.phone}</Text> : null}
+        </View>
+        <View style={{ alignItems: "flex-end" }}>
+          <Text style={[s.partyBal, { color: bal > 0 ? "#dc2626" : bal < 0 ? "#16a34a" : colors.textMuted }]}>
+            Rs {Math.abs(bal).toLocaleString("en-PK")}
+          </Text>
+          <Text style={s.partyBalLbl}>{bal > 0 ? "You'll receive" : bal < 0 ? "You'll pay" : "Settled"}</Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
 /* ── Add Transaction bottom-sheet data ── */
 type TxnTypeItem = {
   label: string;
@@ -150,77 +220,6 @@ export default function HomeScreen() {
     !q || p.name.toLowerCase().includes(q) || (p.phone ?? "").includes(q)
   );
 
-  /* ── Transaction card ── */
-  function TxnCard({ item }: { item: TxnRow }) {
-    const badge = getBadge(item.type, item.balance);
-    return (
-      <View style={s.card}>
-        <View style={s.cardTop}>
-          <View style={{ flex: 1 }}>
-            <Text style={s.cardParty} numberOfLines={1}>{item.partyName}</Text>
-            <View style={[s.badge, { backgroundColor: badge.bg }]}>
-              <Text style={[s.badgeTxt, { color: badge.fg }]}>{badge.label}</Text>
-            </View>
-          </View>
-          <View style={{ alignItems: "flex-end" }}>
-            {item.number ? <Text style={s.cardNum}>#{item.number}</Text> : null}
-            <Text style={s.cardDate}>{fmtDate(item.date)}</Text>
-          </View>
-        </View>
-        <View style={s.cardMid}>
-          <View>
-            <Text style={s.amtLbl}>Total</Text>
-            <Text style={s.amtVal}>Rs {fmtAmt(item.total)}</Text>
-          </View>
-          <View>
-            <Text style={s.amtLbl}>Balance</Text>
-            <Text style={[s.amtVal, item.balance > 0 && { color: "#dc2626" }]}>
-              Rs {fmtAmt(item.balance)}
-            </Text>
-          </View>
-          <View style={s.cardActions}>
-            <TouchableOpacity style={s.actionBtn} hitSlop={8}>
-              <Ionicons name="print-outline" size={18} color={colors.textMuted} />
-            </TouchableOpacity>
-            <TouchableOpacity style={s.actionBtn} hitSlop={8}>
-              <Ionicons name="share-outline" size={18} color={colors.textMuted} />
-            </TouchableOpacity>
-            <TouchableOpacity style={s.actionBtn} hitSlop={8}>
-              <Ionicons name="ellipsis-vertical" size={18} color={colors.textMuted} />
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    );
-  }
-
-  /* ── Party card ── */
-  function PartyCard({ item }: { item: Party }) {
-    const bal = item.balance ?? 0;
-    return (
-      <TouchableOpacity
-        style={s.card}
-        onPress={() => router.push(`/party/${item.id}` as never)}
-        activeOpacity={0.8}
-      >
-        <View style={s.partyRow}>
-          <View style={s.partyAvatar}>
-            <Text style={s.partyAvatarTxt}>{item.name[0]?.toUpperCase()}</Text>
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={s.partyName}>{item.name}</Text>
-            {item.phone ? <Text style={s.partyPhone}>{item.phone}</Text> : null}
-          </View>
-          <View style={{ alignItems: "flex-end" }}>
-            <Text style={[s.partyBal, { color: bal > 0 ? "#dc2626" : bal < 0 ? "#16a34a" : colors.textMuted }]}>
-              Rs {Math.abs(bal).toLocaleString("en-PK")}
-            </Text>
-            <Text style={s.partyBalLbl}>{bal > 0 ? "You'll receive" : bal < 0 ? "You'll pay" : "Settled"}</Text>
-          </View>
-        </View>
-      </TouchableOpacity>
-    );
-  }
 
   return (
     <View style={[s.screen, { paddingTop: insets.top }]}>
@@ -344,7 +343,7 @@ export default function HomeScreen() {
           keyExtractor={(r) => r.id}
           contentContainerStyle={[s.list, filteredParties.length === 0 && s.listEmpty]}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
-          renderItem={({ item }) => <PartyCard item={item} />}
+          renderItem={({ item }) => <PartyCard item={item} onPress={() => router.push(`/party/${item.id}` as never)} />}
           ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
           ListEmptyComponent={
             <View style={s.emptyWrap}>
