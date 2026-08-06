@@ -311,7 +311,7 @@ const TXN_TYPE_LABELS: Record<string, string> = {
   delivery_challan: "Delivery Challan",
 };
 
-function parseNotesItems(notes: string | null | undefined): Array<{ name: string; qty: number; unit: string; rate: number; mrp: number }> {
+function parseNotesItems(notes: string | null | undefined): Array<{ name: string; qty: number; unit: string; rate: number; mrp: number; discount?: number }> {
   if (!notes) return [];
   try {
     const parsed = JSON.parse(notes);
@@ -321,6 +321,12 @@ function parseNotesItems(notes: string | null | undefined): Array<{ name: string
     if (Array.isArray(parsed?.items)) return parsed.items;
     return [];
   } catch { return []; }
+}
+
+// Amount after this row's own discount (Sale Invoice item rows can carry one) — mirrors
+// SaleScreen.tsx's rowAmount so the printed/shared invoice matches what was entered.
+function itemAmount(item: { qty: number; rate: number; discount?: number }): number {
+  return item.qty * item.rate * (1 - (item.discount || 0) / 100);
 }
 
 function InvoicePaperHeader({ tc, color, fg, companyName, companyPhone }: {
@@ -670,7 +676,7 @@ function InvoicePaper({ tc, color, sale, party, invoiceNumber, received }: {
               <td className="tinv__td">{idx + 1}</td>
               <td className="tinv__td">{item.name}</td>
               <td className="tinv__td tinv__td--r">{item.qty}</td>
-              <td className="tinv__td tinv__td--r">Rs {fmt(item.rate * item.qty)}</td>
+              <td className="tinv__td tinv__td--r">Rs {fmt(itemAmount(item))}</td>
             </tr>
           )) : (
             <tr><td className="tinv__td">1</td><td className="tinv__td">Sale</td>
@@ -743,7 +749,7 @@ function InvoicePaper({ tc, color, sale, party, invoiceNumber, received }: {
               <td className="sinv__td sinv__td--r">{item.qty}</td>
               <td className="sinv__td">{item.unit !== "NONE" ? item.unit : "—"}</td>
               <td className="sinv__td sinv__td--r">Rs {fmt(item.rate)}</td>
-              <td className="sinv__td sinv__td--r">Rs {fmt(item.rate * item.qty)}</td>
+              <td className="sinv__td sinv__td--r">Rs {fmt(itemAmount(item))}</td>
             </tr>
           )) : (
             <tr className="sinv__tr">

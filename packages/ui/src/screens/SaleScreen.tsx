@@ -73,7 +73,15 @@ type LineItem = {
   secondaryUnit?: string; conversionRate?: number;
   tertiaryUnit?: string; tertiaryConversionRate?: number;
   baseSalePrice?: number;
+  discount?: number; // percent off qty*rate for this row
 };
+
+// Amount after this row's own discount — the figure the Amount column shows and what
+// feeds the invoice subtotal (on top of which the invoice-level Discount still applies).
+function rowAmount(item: LineItem): number {
+  const base = item.qty * item.rate;
+  return Number((base * (1 - (item.discount || 0) / 100)).toFixed(2));
+}
 
 // Every sellable unit for this row, biggest to smallest: tertiaryUnit (Carton) > unit
 // (Box — the item's normal stocking unit, what its sale price is denominated in) >
@@ -1060,6 +1068,7 @@ function NewSaleForm({
           unit: i.unit ?? "NONE",
           rate: Number(i.rate) || 0,
           mrp: Number(i.mrp) || 0,
+          discount: Number(i.discount) || 0,
         }));
       }
       return [{ id: "init", name: "Invoice Total", mrp: 0, qty: 1, unit: "NONE", rate: Number(initialSale.total) || 0 }];
@@ -1158,7 +1167,7 @@ function NewSaleForm({
     .filter((p) => !customer || p.name.toLowerCase().includes(customer.toLowerCase()));
 
   const validItems = lineItems.filter((i) => i.name.trim() && i.qty > 0);
-  const subtotal = validItems.reduce((s, i) => s + i.qty * i.rate, 0);
+  const subtotal = validItems.reduce((s, i) => s + rowAmount(i), 0);
   const totalQty = validItems.reduce((s, i) => s + i.qty, 0);
   const discountAmt = discountPct
     ? (subtotal * parseFloat(discountPct)) / 100
@@ -1177,6 +1186,20 @@ function NewSaleForm({
 
   function updateItem(id: string, field: keyof LineItem, value: string | number) {
     setLineItems((prev) => prev.map((item) => item.id === id ? { ...item, [field]: value } : item));
+  }
+
+  // Typing directly into Amount keeps qty/rate as-is and back-solves the row's discount%
+  // to match — same "edit the derived value, infer the input" pattern as the invoice-level
+  // Discount Rs/% pair. Clamped to [0, 100]: an amount above qty*rate would need a negative
+  // discount, which isn't meaningful here — raise Rate instead to charge more for a row.
+  function updateAmount(id: string, amountStr: string) {
+    setLineItems((prev) => prev.map((item) => {
+      if (item.id !== id) return item;
+      const amount = parseFloat(amountStr) || 0;
+      const base = item.qty * item.rate;
+      const discount = base > 0 ? Math.min(100, Math.max(0, 100 * (1 - amount / base))) : 0;
+      return { ...item, discount: Number(discount.toFixed(2)) };
+    }));
   }
 
   function addRow() {
@@ -1278,7 +1301,7 @@ function NewSaleForm({
     // Credit sale (nothing received yet) it's recorded as "Credit" rather than whatever
     // the (still-visible, informational) Payment Type dropdown happens to show.
     const notesJson = JSON.stringify({
-      items: validItems.map((i) => ({ name: i.name, qty: i.qty, unit: i.unit, rate: i.rate, mrp: i.mrp })),
+      items: validItems.map((i) => ({ name: i.name, qty: i.qty, unit: i.unit, rate: i.rate, mrp: i.mrp, discount: i.discount || 0 })),
       paymentType: mode === "credit" ? "Credit" : paymentType,
     });
     try {
@@ -1456,6 +1479,7 @@ function NewSaleForm({
                     <th className="lsf-th lsf-th--num">QTY</th>
                     <th className="lsf-th lsf-th--unit">UNIT</th>
                     <th className="lsf-th lsf-th--num">PRICE</th>
+                    <th className="lsf-th lsf-th--num">DISC %</th>
                     <th className="lsf-th lsf-th--num">TOTAL</th>
                     <th className="lsf-th lsf-th--add">
                       <button type="button" className="lsf-add-col-btn" onClick={addRow}>+</button>
@@ -1496,7 +1520,15 @@ function NewSaleForm({
                         <input className="lsf-cell-input lsf-cell-input--num" type="number" min="0" placeholder="0"
                           value={item.rate || ""} onChange={(e) => updateItem(item.id, "rate", parseFloat(e.target.value)||0)} />
                       </td>
-                      <td className="lsf-td lsf-td--num lsf-td--total">{item.qty && item.rate ? item.qty * item.rate : ""}</td>
+                      <td className="lsf-td lsf-td--num">
+                        <input className="lsf-cell-input lsf-cell-input--num" type="number" min="0" max="100" placeholder="0"
+                          value={item.discount || ""} onChange={(e) => updateItem(item.id, "discount", parseFloat(e.target.value)||0)} />
+                      </td>
+                      <td className="lsf-td lsf-td--num lsf-td--total">
+                        <input className="lsf-cell-input lsf-cell-input--num" type="number" min="0" placeholder="0"
+                          value={item.qty && item.rate ? rowAmount(item) : ""}
+                          onChange={(e) => updateAmount(item.id, e.target.value)} />
+                      </td>
                       <td className="lsf-td lsf-td--del">
                         <button type="button" className="lsf-del-btn"
                           onClick={() => setLineItems(p => p.filter(r => r.id !== item.id))}>×</button>
@@ -1913,6 +1945,7 @@ function NewSaleForm({
                 <th className="nsf-th nsf-th--qty">QTY</th>
                 <th className="nsf-th nsf-th--unit">UNIT</th>
                 <th className="nsf-th nsf-th--rate">PRICE/UNIT</th>
+                <th className="nsf-th nsf-th--rate">DISC %</th>
                 <th className="nsf-th nsf-th--amt">AMOUNT</th>
               </tr>
             </thead>
@@ -1984,15 +2017,33 @@ function NewSaleForm({
                       onChange={(e) => updateItem(item.id, "rate", parseFloat(e.target.value) || 0)}
                     />
                   </td>
+                  <td className="nsf-td">
+                    <input
+                      className="nsf-cell-input"
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={item.discount || ""}
+                      placeholder="0"
+                      onChange={(e) => updateItem(item.id, "discount", parseFloat(e.target.value) || 0)}
+                    />
+                  </td>
                   <td className="nsf-td nsf-td--amt">
-                    {item.qty && item.rate ? fmt(item.qty * item.rate) : ""}
+                    <input
+                      className="nsf-cell-input"
+                      type="number"
+                      min="0"
+                      value={item.qty && item.rate ? rowAmount(item) : ""}
+                      placeholder="0"
+                      onChange={(e) => updateAmount(item.id, e.target.value)}
+                    />
                   </td>
                 </tr>
               ))}
               {/* Add Item row */}
               <tr className="nsf-tr-add-row">
                 <td className="nsf-td nsf-td--num" />
-                <td className="nsf-td" colSpan={6}>
+                <td className="nsf-td" colSpan={7}>
                   <button type="button" className="nsf-add-item-row-btn" onClick={addRow}>
                     <span className="nsf-add-item-row-icon">+</span>
                     Add Item
