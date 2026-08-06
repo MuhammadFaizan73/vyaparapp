@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import * as XLSX from "xlsx";
 
 import { api } from "../lib/api";
 import type { Transaction, Party, Item, Company, TeamMember, TaxRate } from "@vyapar/api-client";
@@ -142,6 +143,24 @@ let _pIdx = 0;
 function partyColor(name: string) {
   if (!avatarCache[name]) avatarCache[name] = AVATAR_PALETTES[_pIdx++ % AVATAR_PALETTES.length];
   return avatarCache[name];
+}
+
+// Exports exactly what's on screen — same rows the filters (date range, search, paid/unpaid)
+// have already narrowed down — not the full unfiltered sale history.
+function exportSalesToExcel(rows: SaleRow[], from: string, to: string) {
+  const sheet = XLSX.utils.json_to_sheet(
+    rows.map((s, idx) => ({
+      "Invoice No": s.number ?? `#${idx + 1}`,
+      "Party Name": s.partyName,
+      "Date": formatDate(s.date),
+      "Amount": s.total,
+      "Balance": s.balance,
+      "Status": s.balance === 0 ? "Paid" : "Unpaid",
+    })),
+  );
+  const book = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(book, sheet, "Sale Invoices".slice(0, 31));
+  XLSX.writeFile(book, `SaleInvoices_${from}_to_${to}.xlsx`);
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -556,6 +575,10 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
               }}>📅 {fmtChip(filterFrom)} To {fmtChip(filterTo)}</button>
 
               <div className="sale-filterbar__spacer" />
+
+              <button type="button" className="dc-icon-btn" onClick={() => exportSalesToExcel(filtered, filterFrom, filterTo)}>
+                📊 Excel Report
+              </button>
 
               {/* Search toggle */}
               {showSearch && (
