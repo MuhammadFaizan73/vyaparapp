@@ -63,10 +63,17 @@ export class TransactionsService {
     return rows.map(toRow);
   }
 
+  // A date-only `to` (e.g. "2026-08-06") parses as midnight at the *start* of that
+  // day — used bare as `lte`, it would exclude every transaction from later that same
+  // day. Push it to the end of the day so "to today" actually includes today.
   private dateFilter(from?: string, to?: string) {
-    return from || to
-      ? { ...(from && { gte: new Date(from) }), ...(to && { lte: new Date(to) }) }
-      : undefined;
+    if (!from && !to) return undefined;
+    const toEndOfDay = to ? new Date(to) : undefined;
+    if (toEndOfDay) toEndOfDay.setUTCHours(23, 59, 59, 999);
+    return {
+      ...(from && { gte: new Date(from) }),
+      ...(toEndOfDay && { lte: toEndOfDay }),
+    };
   }
 
   // take/skip/from/to are all optional and additive — omitting them preserves the exact
