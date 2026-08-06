@@ -87,8 +87,13 @@ export class ReportsController {
   }
 
   @Get('all-parties')
-  getAllParties(@Req() req: AuthedRequest, @Query('companyId') companyId?: string) {
-    return this.reports.getAllParties(req.tenantId, companyId);
+  getAllParties(
+    @Req() req: AuthedRequest,
+    @Query('companyId') companyId?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.reports.getAllParties(req.tenantId, companyId, from, to);
   }
 
   @Get('party-report-by-item')

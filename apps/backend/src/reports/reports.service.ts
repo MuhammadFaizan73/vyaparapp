@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { companyIdWhere } from '../common/company-filter.util';
+import { companyIdWhere, parseCompanyIds } from '../common/company-filter.util';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -539,12 +539,26 @@ export class ReportsService {
 
   // ── All Parties ─────────────────────────────────────────────────────────────
 
-  async getAllParties(tenantId: string, companyId?: string) {
+  async getAllParties(tenantId: string, companyId?: string, from?: string, to?: string) {
+    const dateFilter = buildDateFilter(from, to);
     const allParties = await this.prisma.party.findMany({
       where: { tenantId, isSystem: false },
-      include: { transactions: { where: companyIdWhere(companyId) } },
+      include: {
+        transactions: {
+          where: { ...companyIdWhere(companyId), ...(dateFilter ? { date: dateFilter } : {}) },
+        },
+      },
     });
-    const parties = companyId ? allParties.filter((p) => p.transactions.length > 0) : allParties;
+    // Same scoping as parties.service.ts's list(): a party belongs under a company filter
+    // if it's tagged directly (companyId), or has at least one transaction scoped to that
+    // company — a party tagged to the company but with only an opening balance (no
+    // transaction rows) was previously dropped here even though it legitimately belongs.
+    const filterIds = parseCompanyIds(companyId);
+    const parties = filterIds.length
+      ? allParties.filter(
+          (p) => p.transactions.length > 0 || (p.companyId && filterIds.includes(p.companyId)),
+        )
+      : allParties;
 
     let totalReceivable = 0;
     let totalPayable = 0;

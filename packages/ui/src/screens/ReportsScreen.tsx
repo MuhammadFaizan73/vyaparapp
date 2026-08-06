@@ -811,14 +811,29 @@ function PartyStatementReport() {
 
 // ─── ALL PARTIES ──────────────────────────────────────────────────────────────
 
+const PARTY_TYPE_FILTERS: { value: string; label: string }[] = [
+  { value: "all",      label: "All Types" },
+  { value: "customer", label: "Customer" },
+  { value: "supplier", label: "Supplier" },
+  { value: "both",     label: "Both" },
+  { value: "other",    label: "Other" },
+];
+
 function AllPartiesReport() {
+  const [from, setFrom] = useState(monthStart);
+  const [to,   setTo]   = useState(monthEnd);
+  const [partyType, setPartyType] = useState("all");
   const { companyFilter } = useCompany();
-  const { data, loading, error } = useReport("all-parties", { companyId: companyFilter ?? undefined });
+  const { data, loading, error } = useReport("all-parties", { from, to, companyId: companyFilter ?? undefined });
+
+  const parties = (data?.parties ?? []).filter((r: any) => partyType === "all" || r.partyType === partyType);
+  const totalReceivable = parties.reduce((s: number, r: any) => s + (r.receivableBalance || 0), 0);
+  const totalPayable = parties.reduce((s: number, r: any) => s + (r.payableBalance || 0), 0);
 
   function handleExport() {
-    if (!data?.parties?.length) return;
+    if (!parties.length) return;
     exportToExcel(
-      data.parties.map((r: any, i: number) => ({
+      parties.map((r: any, i: number) => ({
         "#": i + 1,
         "Party Name": r.name,
         "Email": r.email || "",
@@ -835,12 +850,16 @@ function AllPartiesReport() {
   return (
     <div className="rpt-content">
       <div className="rpt-filters">
+        <DateRange from={from} to={to} onFrom={setFrom} onTo={setTo} />
+        <select className="rpt-select" value={partyType} onChange={(e) => setPartyType(e.target.value)}>
+          {PARTY_TYPE_FILTERS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+        </select>
         <ExcelPrint onExport={handleExport} />
       </div>
       <ReportWrap loading={loading} error={error}>
         {data && (
           <>
-            {(!data.parties?.length) ? <NoData /> : (
+            {(!parties.length) ? <NoData /> : (
               <table className="rpt-table">
                 <thead><tr>
                   <th>#</th><th>Party Name</th><th>Email</th><th>Phone No.</th>
@@ -849,7 +868,7 @@ function AllPartiesReport() {
                   <th className="rpt-num">Credit Limit</th>
                 </tr></thead>
                 <tbody>
-                  {data.parties.map((r: any, i: number) => (
+                  {parties.map((r: any, i: number) => (
                     <tr key={i}>
                       <td>
                         <input type="checkbox" defaultChecked style={{ marginRight: 8 }} />
@@ -866,8 +885,8 @@ function AllPartiesReport() {
               </table>
             )}
             <div className="rpt-footer-bar">
-              <span className="rpt-green">Total Receivable: {rs(data.totalReceivable ?? 0)}</span>
-              <span className="rpt-red">Total Payable: {rs(data.totalPayable ?? 0)}</span>
+              <span className="rpt-green">Total Receivable: {rs(totalReceivable)}</span>
+              <span className="rpt-red">Total Payable: {rs(totalPayable)}</span>
             </div>
           </>
         )}
