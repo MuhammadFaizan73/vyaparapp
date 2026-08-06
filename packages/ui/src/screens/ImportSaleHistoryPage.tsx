@@ -138,8 +138,20 @@ function buildSummary(saleRows: RawRow[], itemRows: RawRow[]): Summary {
   };
 }
 
-function getSheetHeaders(ws: XLSX.WorkSheet): string[] {
-  const headerRow = (XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1 })[0] ?? []) as unknown[];
+// The app's own report export prefixes each sheet with a "Generated on …" title row and
+// a blank row before the real header — so the header can't be assumed to be row 0. Scan
+// for the first row containing every required header instead of hardcoding an index.
+function findHeaderRowIndex(ws: XLSX.WorkSheet, requiredHeaders: string[]): number {
+  const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1 });
+  for (let i = 0; i < rows.length; i++) {
+    const cells = ((rows[i] ?? []) as unknown[]).map((c) => String(c ?? "").trim());
+    if (requiredHeaders.every((h) => cells.includes(h))) return i;
+  }
+  return 0;
+}
+
+function getSheetHeaders(ws: XLSX.WorkSheet, headerRowIndex: number): string[] {
+  const headerRow = (XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1 })[headerRowIndex] ?? []) as unknown[];
   return headerRow.map((h) => String(h ?? "").trim()).filter(Boolean);
 }
 
@@ -199,8 +211,10 @@ export function ImportSaleHistoryPage({ onGoToParties }: Props) {
 
         const saleWs = wb.Sheets[saleSheetName]!;
         const itemWs = wb.Sheets[itemSheetName]!;
-        const missingSale = REQUIRED_SALE_REPORT_HEADERS.filter((h) => !getSheetHeaders(saleWs).includes(h));
-        const missingItem = REQUIRED_ITEM_DETAILS_HEADERS.filter((h) => !getSheetHeaders(itemWs).includes(h));
+        const saleHeaderRow = findHeaderRowIndex(saleWs, REQUIRED_SALE_REPORT_HEADERS);
+        const itemHeaderRow = findHeaderRowIndex(itemWs, REQUIRED_ITEM_DETAILS_HEADERS);
+        const missingSale = REQUIRED_SALE_REPORT_HEADERS.filter((h) => !getSheetHeaders(saleWs, saleHeaderRow).includes(h));
+        const missingItem = REQUIRED_ITEM_DETAILS_HEADERS.filter((h) => !getSheetHeaders(itemWs, itemHeaderRow).includes(h));
         if (missingSale.length || missingItem.length) {
           const parts: string[] = [];
           if (missingSale.length) parts.push(`"${SALE_REPORT_SHEET}" is missing: ${missingSale.join(", ")}`);
@@ -209,8 +223,8 @@ export function ImportSaleHistoryPage({ onGoToParties }: Props) {
           return;
         }
 
-        const saleRows = XLSX.utils.sheet_to_json<RawRow>(saleWs, { defval: "" });
-        const itemRows = XLSX.utils.sheet_to_json<RawRow>(itemWs, { defval: "" });
+        const saleRows = XLSX.utils.sheet_to_json<RawRow>(saleWs, { defval: "", range: saleHeaderRow });
+        const itemRows = XLSX.utils.sheet_to_json<RawRow>(itemWs, { defval: "", range: itemHeaderRow });
         setSummary(buildSummary(saleRows, itemRows));
         setStage("preview");
       } catch {
