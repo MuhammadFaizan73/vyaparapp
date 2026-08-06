@@ -6554,7 +6554,7 @@ body,
   background: #e0f2fe; border: 1px solid #7dd3fc;
   font-size: 10.5px; font-family: monospace; color: #0369a1;
 }
-.nsf-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.nsf-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 13px; }
 .nsf-th {
   padding: 8px 10px; text-align: left; font-size: 10.5px; font-weight: 700;
   color: #6b7280; text-transform: uppercase; letter-spacing: 0.4px;
@@ -6563,12 +6563,13 @@ body,
 }
 .nsf-th:last-child { border-right: none; }
 .nsf-th--num { width: 64px; text-align: center; }
-.nsf-th--name { width: 32%; min-width: 180px; }
+.nsf-th--name { min-width: 180px; }
 .nsf-th--mrp { width: 90px; }
 .nsf-th--qty { width: 72px; }
 .nsf-th--unit { width: 88px; }
 .nsf-th--rate { width: 110px; }
-.nsf-th--amt { text-align: right; min-width: 100px; }
+.nsf-th--disc { width: 80px; }
+.nsf-th--amt { width: 96px; text-align: right; }
 .nsf-tr { border-bottom: 1px solid #f0f0f0; background: #fff; }
 .nsf-tr:hover { background: #f8faff; }
 .nsf-td { padding: 4px 8px; vertical-align: middle; border-right: 1px solid #f0f0f0; }

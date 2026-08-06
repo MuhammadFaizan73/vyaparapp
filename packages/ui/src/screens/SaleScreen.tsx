@@ -74,6 +74,11 @@ type LineItem = {
   tertiaryUnit?: string; tertiaryConversionRate?: number;
   baseSalePrice?: number;
   discount?: number; // percent off qty*rate for this row
+  // Raw text of an in-progress edit to the Amount field, kept verbatim while focused so
+  // typing isn't fought by the derived/rounded value re-rendering on every keystroke
+  // (mirrors why the invoice-level Discount Rs/% pair uses its own plain string state
+  // instead of a value computed fresh each render). Cleared on blur.
+  amountText?: string;
 };
 
 // Amount after this row's own discount — the figure the Amount column shows and what
@@ -245,6 +250,7 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
         total,
         balance: total,
         notes: JSON.stringify({ ...notes, items: convertedItems }),
+        companyId: (returnGoodsRow as any).companyId ?? undefined,
       });
 
       await api.updateTransaction(returnGoodsRow.id, {
@@ -334,6 +340,7 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
         partyId: sale.partyId, type: "sale",
         date: new Date().toISOString(),
         total: sale.total, balance: sale.total,
+        companyId: sale.companyId ?? undefined,
       });
       await loadSales();
     } catch { /* ignore */ }
@@ -1188,18 +1195,31 @@ function NewSaleForm({
     setLineItems((prev) => prev.map((item) => item.id === id ? { ...item, [field]: value } : item));
   }
 
-  // Typing directly into Amount keeps qty/rate as-is and back-solves the row's discount%
-  // to match — same "edit the derived value, infer the input" pattern as the invoice-level
-  // Discount Rs/% pair. Clamped to [0, 100]: an amount above qty*rate would need a negative
-  // discount, which isn't meaningful here — raise Rate instead to charge more for a row.
-  function updateAmount(id: string, amountStr: string) {
+  // Typing directly into Amount keeps Qty as-is and back-solves Price/Unit to match
+  // (rate = amount / qty) — the row's discount%, if any, resets to 0 since Amount now
+  // directly determines the per-unit price with no separate discount layer on top.
+  // `amountText` holds the raw keystrokes verbatim until blur, same reason the Discount
+  // Rs/% pair binds each input to its own plain string instead of a recomputed value —
+  // a controlled input whose value is reformatted on every keystroke fights typing (most
+  // visibly when qty/rate are still 0, where the derived Amount is "" and every keystroke
+  // was getting silently discarded).
+  function handleAmountChange(id: string, amountStr: string) {
     setLineItems((prev) => prev.map((item) => {
       if (item.id !== id) return item;
       const amount = parseFloat(amountStr) || 0;
-      const base = item.qty * item.rate;
-      const discount = base > 0 ? Math.min(100, Math.max(0, 100 * (1 - amount / base))) : 0;
-      return { ...item, discount: Number(discount.toFixed(2)) };
+      if (!item.qty) return { ...item, amountText: amountStr };
+      const rate = Number((amount / item.qty).toFixed(2));
+      return { ...item, amountText: amountStr, rate, discount: 0 };
     }));
+  }
+
+  function handleAmountBlur(id: string) {
+    setLineItems((prev) => prev.map((item) => item.id === id ? { ...item, amountText: undefined } : item));
+  }
+
+  function displayAmount(item: LineItem): string {
+    if (item.amountText !== undefined) return item.amountText;
+    return item.qty && item.rate ? String(rowAmount(item)) : "";
   }
 
   function addRow() {
@@ -1284,6 +1304,7 @@ function NewSaleForm({
     setError("");
     if (mode === "credit" && !selectedParty) { setError("Select a customer from the dropdown."); return; }
     if (validItems.length === 0) { setError("Add at least one item with quantity."); return; }
+    if (!selectedCompanyId) { setError("Select a specific Company from the company switcher before saving — invoices can't be saved under \"All Companies\"."); return; }
     const lowStock = validItems
       .filter((i) => i.stock !== undefined && i.qty > i.stock)
       .map((i) => i.name);
@@ -1526,8 +1547,9 @@ function NewSaleForm({
                       </td>
                       <td className="lsf-td lsf-td--num lsf-td--total">
                         <input className="lsf-cell-input lsf-cell-input--num" type="number" min="0" placeholder="0"
-                          value={item.qty && item.rate ? rowAmount(item) : ""}
-                          onChange={(e) => updateAmount(item.id, e.target.value)} />
+                          value={displayAmount(item)}
+                          onChange={(e) => handleAmountChange(item.id, e.target.value)}
+                          onBlur={() => handleAmountBlur(item.id)} />
                       </td>
                       <td className="lsf-td lsf-td--del">
                         <button type="button" className="lsf-del-btn"
@@ -1945,7 +1967,7 @@ function NewSaleForm({
                 <th className="nsf-th nsf-th--qty">QTY</th>
                 <th className="nsf-th nsf-th--unit">UNIT</th>
                 <th className="nsf-th nsf-th--rate">PRICE/UNIT</th>
-                <th className="nsf-th nsf-th--rate">DISC %</th>
+                <th className="nsf-th nsf-th--disc">DISC %</th>
                 <th className="nsf-th nsf-th--amt">AMOUNT</th>
               </tr>
             </thead>
@@ -2033,9 +2055,10 @@ function NewSaleForm({
                       className="nsf-cell-input"
                       type="number"
                       min="0"
-                      value={item.qty && item.rate ? rowAmount(item) : ""}
+                      value={displayAmount(item)}
                       placeholder="0"
-                      onChange={(e) => updateAmount(item.id, e.target.value)}
+                      onChange={(e) => handleAmountChange(item.id, e.target.value)}
+                      onBlur={() => handleAmountBlur(item.id)}
                     />
                   </td>
                 </tr>
@@ -2056,7 +2079,7 @@ function NewSaleForm({
                 <td className="nsf-total-lbl" colSpan={2}>TOTAL</td>
                 <td />
                 <td className="nsf-total-qty">{totalQty > 0 ? totalQty : "0"}</td>
-                <td /><td />
+                <td /><td /><td />
                 <td className="nsf-total-amt">{fmt(subtotal)}</td>
               </tr>
             </tfoot>

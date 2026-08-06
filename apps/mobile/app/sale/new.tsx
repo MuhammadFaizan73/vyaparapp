@@ -263,6 +263,10 @@ export default function NewSaleScreen() {
   async function handleSave(andNew = false) {
     if (!customer.trim()) { Alert.alert("Missing customer", "Please select a customer."); return; }
     if (!selectedParty) { Alert.alert("Unknown customer", "Select a customer from the list."); return; }
+    if (!selectedCompanyId) {
+      Alert.alert("Select a Company", "Pick a specific Company from the company switcher before saving an invoice — invoices can't be saved under \"All Companies\".");
+      return;
+    }
     setSaving(true);
     try {
       const sale: any = await api.createTransaction({
