@@ -31,6 +31,55 @@ function parseNoteObj(notes: string | null): Record<string, any> {
   }
 }
 
+type ItemUnitInfo = {
+  unit?: string | null; secondaryUnit?: string | null; conversionRate?: string | null;
+  tertiaryUnit?: string | null; tertiaryConversionRate?: string | null;
+};
+
+// Converts a recorded line-item quantity (in whatever unit it was actually sold/bought in)
+// into the item's base-unit (Item.unit) equivalent — so "2 Carton" and "40 Piece" of the
+// same item can be summed correctly instead of blended into a meaningless raw total.
+function toBaseQty(qty: number, unit: string | undefined, item: ItemUnitInfo): number {
+  const u = (unit ?? '').trim().toLowerCase();
+  if (item.tertiaryUnit && u === item.tertiaryUnit.trim().toLowerCase()) {
+    return qty * (parseFloat(item.tertiaryConversionRate ?? '') || 1);
+  }
+  if (item.secondaryUnit && u === item.secondaryUnit.trim().toLowerCase()) {
+    const rate = parseFloat(item.conversionRate ?? '') || 1;
+    return rate ? qty / rate : qty;
+  }
+  return qty;
+}
+
+// Decomposes a base-unit quantity back into the item's largest-to-smallest units for
+// display — 8.15 Box (conversionRate 20) becomes "8 Box 3 Piece" instead of a bare decimal
+// that hides what a fractional box even means.
+function formatQty(baseQty: number, item: ItemUnitInfo): string {
+  const unit = item.unit || 'pcs';
+  let remaining = baseQty;
+  const parts: string[] = [];
+
+  const tertiaryRate = parseFloat(item.tertiaryConversionRate ?? '') || 0;
+  if (item.tertiaryUnit && tertiaryRate > 0) {
+    const count = Math.floor(remaining / tertiaryRate + 1e-9);
+    if (count > 0) { parts.push(`${count} ${item.tertiaryUnit}`); remaining -= count * tertiaryRate; }
+  }
+
+  const wholeBase = Math.floor(remaining + 1e-9);
+  const fracBase = remaining - wholeBase;
+  const secondaryRate = parseFloat(item.conversionRate ?? '') || 0;
+
+  if (item.secondaryUnit && secondaryRate > 0) {
+    if (wholeBase > 0) parts.push(`${wholeBase} ${unit}`);
+    const secCount = Math.round(fracBase * secondaryRate);
+    if (secCount > 0) parts.push(`${secCount} ${item.secondaryUnit}`);
+  } else if (remaining !== 0 || parts.length === 0) {
+    parts.push(`${Math.round(remaining * 100) / 100} ${unit}`);
+  }
+
+  return parts.length ? parts.join(' ') : `0 ${unit}`;
+}
+
 function txnStatus(total: number, balance: number): string {
   if (balance <= 0) return 'paid';
   if (balance < total) return 'partial';
@@ -612,58 +661,85 @@ export class ReportsService {
   }
 
   // ── Party Report By Item ────────────────────────────────────────────────────
+  // Broken down per item within each party, not a single blended quantity — summing
+  // "2 Carton" of one item with "40 Piece" of another into one raw number is meaningless
+  // once items have different units, so each item gets its own qty (in its own units).
 
   async getPartyReportByItem(tenantId: string, from?: string, to?: string, companyId?: string) {
     const dateFilter = buildDateFilter(from, to);
 
-    const txns = await this.prisma.transaction.findMany({
-      where: {
-        tenantId,
-        type: { in: ['sale', 'purchase', 'credit_note', 'debit_note'] },
-        ...(dateFilter ? { date: dateFilter } : {}),
-        ...companyIdWhere(companyId),
-      },
-      include: { party: true },
-    });
+    const [txns, items] = await Promise.all([
+      this.prisma.transaction.findMany({
+        where: {
+          tenantId,
+          type: { in: ['sale', 'purchase', 'credit_note', 'debit_note'] },
+          ...(dateFilter ? { date: dateFilter } : {}),
+          ...companyIdWhere(companyId),
+        },
+        include: { party: true },
+      }),
+      this.prisma.item.findMany({ where: { tenantId, ...companyIdWhere(companyId) } }),
+    ]);
 
-    const partyMap = new Map<
-      string,
-      { partyName: string; saleQty: number; saleAmount: number; purchaseQty: number; purchaseAmount: number }
-    >();
+    const itemByName = new Map<string, ItemUnitInfo>();
+    for (const it of items) itemByName.set(it.name.trim().toLowerCase(), it);
+
+    type ItemBucket = {
+      itemName: string; unitLabel: string; matchedItem?: ItemUnitInfo;
+      saleQty: number; saleAmount: number; purchaseQty: number; purchaseAmount: number;
+    };
+    const partyMap = new Map<string, { partyName: string; items: Map<string, ItemBucket> }>();
 
     for (const t of txns) {
-      const name = t.party.name;
-      if (!partyMap.has(name)) {
-        partyMap.set(name, { partyName: name, saleQty: 0, saleAmount: 0, purchaseQty: 0, purchaseAmount: 0 });
-      }
-      const entry = partyMap.get(name)!;
-      const items = parseItems(t.notes);
-      const totalQty = items.reduce((s, li) => s + (li.qty ?? 0), 0);
+      const partyName = t.party.name;
+      if (!partyMap.has(partyName)) partyMap.set(partyName, { partyName, items: new Map() });
+      const partyEntry = partyMap.get(partyName)!;
 
-      if (t.type === 'sale') {
-        entry.saleQty += totalQty;
-        entry.saleAmount += t.total;
-      } else if (t.type === 'purchase') {
-        entry.purchaseQty += totalQty;
-        entry.purchaseAmount += t.total;
-      } else if (t.type === 'credit_note') {
-        entry.saleQty -= totalQty;
-        entry.saleAmount -= t.total;
-      } else if (t.type === 'debit_note') {
-        entry.purchaseQty -= totalQty;
-        entry.purchaseAmount -= t.total;
+      for (const li of parseItems(t.notes)) {
+        const itemName = (li.name ?? '').trim();
+        if (!itemName) continue;
+        const matched = itemByName.get(itemName.toLowerCase());
+        // Unmatched items (no catalog entry) can't be unit-converted, so they're kept
+        // separate per raw unit rather than silently summed across incompatible units.
+        const bucketKey = matched ? itemName.toLowerCase() : `${itemName.toLowerCase()}__${(li.unit ?? '').trim().toLowerCase()}`;
+
+        if (!partyEntry.items.has(bucketKey)) {
+          partyEntry.items.set(bucketKey, {
+            itemName, unitLabel: li.unit ?? '', matchedItem: matched,
+            saleQty: 0, saleAmount: 0, purchaseQty: 0, purchaseAmount: 0,
+          });
+        }
+        const bucket = partyEntry.items.get(bucketKey)!;
+        const qty = li.qty ?? 0;
+        const baseQty = matched ? toBaseQty(qty, li.unit, matched) : qty;
+        const amount = qty * (li.rate ?? 0);
+
+        if (t.type === 'sale') { bucket.saleQty += baseQty; bucket.saleAmount += amount; }
+        else if (t.type === 'purchase') { bucket.purchaseQty += baseQty; bucket.purchaseAmount += amount; }
+        else if (t.type === 'credit_note') { bucket.saleQty -= baseQty; bucket.saleAmount -= amount; }
+        else if (t.type === 'debit_note') { bucket.purchaseQty -= baseQty; bucket.purchaseAmount -= amount; }
       }
     }
 
-    const parties = Array.from(partyMap.values());
+    const parties = Array.from(partyMap.values()).map((p) => {
+      const itemRows = Array.from(p.items.values()).map((b) => ({
+        itemName: b.itemName,
+        saleQty: b.matchedItem ? formatQty(b.saleQty, b.matchedItem) : `${Math.round(b.saleQty * 100) / 100} ${b.unitLabel || 'pcs'}`,
+        saleAmount: b.saleAmount,
+        purchaseQty: b.matchedItem ? formatQty(b.purchaseQty, b.matchedItem) : `${Math.round(b.purchaseQty * 100) / 100} ${b.unitLabel || 'pcs'}`,
+        purchaseAmount: b.purchaseAmount,
+      }));
+      return {
+        partyName: p.partyName,
+        items: itemRows,
+        saleAmount: itemRows.reduce((s, r) => s + r.saleAmount, 0),
+        purchaseAmount: itemRows.reduce((s, r) => s + r.purchaseAmount, 0),
+      };
+    });
+
     const total = parties.reduce(
-      (acc, p) => ({
-        saleQty: acc.saleQty + p.saleQty,
-        saleAmount: acc.saleAmount + p.saleAmount,
-        purchaseQty: acc.purchaseQty + p.purchaseQty,
-        purchaseAmount: acc.purchaseAmount + p.purchaseAmount,
-      }),
-      { saleQty: 0, saleAmount: 0, purchaseQty: 0, purchaseAmount: 0 },
+      (acc, p) => ({ saleAmount: acc.saleAmount + p.saleAmount, purchaseAmount: acc.purchaseAmount + p.purchaseAmount }),
+      { saleAmount: 0, purchaseAmount: 0 },
     );
 
     return { parties, total };

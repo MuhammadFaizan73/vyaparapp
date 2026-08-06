@@ -905,14 +905,23 @@ function PartyReportByItemReport() {
 
   function handleExport() {
     if (!data?.parties?.length) return;
-    exportToExcel(
-      data.parties.map((r: any, i: number) => ({
-        "#": i + 1, "Party Name": r.partyName,
-        "Sale Quantity": r.saleQty, "Sale Amount": r.saleAmount,
-        "Purchase Quantity": r.purchaseQty, "Purchase Amount": r.purchaseAmount,
-      })),
-      "Party Report By Item", "By Item",
-    );
+    const rows: Record<string, unknown>[] = [];
+    data.parties.forEach((p: any, i: number) => {
+      if (!p.items?.length) {
+        rows.push({ "#": i + 1, "Party Name": p.partyName, "Item": "", "Sale Quantity": "", "Sale Amount": p.saleAmount, "Purchase Quantity": "", "Purchase Amount": p.purchaseAmount });
+        return;
+      }
+      p.items.forEach((it: any, j: number) => {
+        rows.push({
+          "#": j === 0 ? i + 1 : "",
+          "Party Name": j === 0 ? p.partyName : "",
+          "Item": it.itemName,
+          "Sale Quantity": it.saleQty, "Sale Amount": it.saleAmount,
+          "Purchase Quantity": it.purchaseQty, "Purchase Amount": it.purchaseAmount,
+        });
+      });
+    });
+    exportToExcel(rows, "Party Report By Item", "By Item");
   }
 
   return (
@@ -935,9 +944,17 @@ function PartyReportByItemReport() {
                   {data.parties.map((r: any, i: number) => (
                     <tr key={i}>
                       <td>{i + 1}</td><td style={{ fontWeight: i === 0 ? 700 : 400 }}>{r.partyName}</td>
-                      <td className="rpt-num">{r.saleQty}</td>
+                      <td className="rpt-num">
+                        {(r.items ?? []).filter((it: any) => it.saleAmount !== 0).map((it: any, k: number) => (
+                          <div key={k}>{it.itemName}: {it.saleQty}</div>
+                        ))}
+                      </td>
                       <td className="rpt-num rpt-green">{rs(r.saleAmount)}</td>
-                      <td className="rpt-num">{r.purchaseQty}</td>
+                      <td className="rpt-num">
+                        {(r.items ?? []).filter((it: any) => it.purchaseAmount !== 0).map((it: any, k: number) => (
+                          <div key={k}>{it.itemName}: {it.purchaseQty}</div>
+                        ))}
+                      </td>
                       <td className="rpt-num rpt-red">{rs(r.purchaseAmount)}</td>
                     </tr>
                   ))}
@@ -945,9 +962,9 @@ function PartyReportByItemReport() {
                 {data.total && (
                   <tfoot><tr>
                     <td colSpan={2}>Total</td>
-                    <td className="rpt-num">{data.total.saleQty}</td>
+                    <td className="rpt-num" />
                     <td className="rpt-num rpt-green">{rs(data.total.saleAmount)}</td>
-                    <td className="rpt-num">{data.total.purchaseQty}</td>
+                    <td className="rpt-num" />
                     <td className="rpt-num rpt-red">{rs(data.total.purchaseAmount)}</td>
                   </tr></tfoot>
                 )}
