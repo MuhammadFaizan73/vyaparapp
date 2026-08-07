@@ -9107,6 +9107,7 @@ body,
   transition: background 120ms;
 }
 .pi-share-arrow:hover { background: #e2e8f0; }
+.pi-share-notice { font-size: 12px; color: #16a34a; font-weight: 500; }
 .pi-save-btn {
   background: #3b82f6;
   color: #fff;

@@ -397,6 +397,11 @@ export function PaymentInForm({
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [linkedInvoiceIds, setLinkedInvoiceIds] = useState<Set<string>>(new Set());
 
+  /* Share/Print/Save & New menu */
+  const [showShareMenu, setShowShareMenu] = useState(false);
+  const [shareMenuPos, setShareMenuPos] = useState({ top: 0, left: 0 });
+  const [shareNotice, setShareNotice] = useState("");
+
   const selectedParty = parties.find((p) => p.id === selectedPartyId);
   const filteredParties = customer
     ? parties.filter((p) => p.name.toLowerCase().includes(customer.toLowerCase()))
@@ -420,13 +425,20 @@ export function PaymentInForm({
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  useEffect(() => {
+    if (!showShareMenu) return;
+    const close = () => setShowShareMenu(false);
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, [showShareMenu]);
+
   const receivedAmt = parseFloat(amount) || 0;
   const linkedTotal = partyInvoices
     .filter((t) => linkedInvoiceIds.has(t.id))
     .reduce((s, t) => s + Math.min(t.balance, receivedAmt), 0);
   const unusedAmt = Math.max(0, receivedAmt - linkedTotal);
 
-  async function save() {
+  async function save(mode: "close" | "new" = "close") {
     setError("");
     if (!selectedPartyId) { setError("Select a party."); return; }
     if (receivedAmt <= 0) { setError("Enter a valid amount."); return; }
@@ -466,12 +478,54 @@ export function PaymentInForm({
         remaining -= deduct;
       }
 
-      onSaved();
+      if (mode === "new") {
+        setCustomer("");
+        setSelectedPartyId("");
+        setAmount("");
+        setReceiptNo(String((parseInt(receiptNo, 10) || existingCount + 1) + 1));
+        setPartyInvoices([]);
+        setLinkedInvoiceIds(new Set());
+      } else {
+        onSaved();
+      }
     } catch (e: any) {
       setError(e?.response?.data?.message || "Could not save. Check connection.");
     } finally {
       setSaving(false);
     }
+  }
+
+  function shareText() {
+    return [
+      `Payment Receipt #${receiptNo}`,
+      `Party: ${selectedParty?.name ?? customer}`,
+      `Amount: Rs ${receivedAmt.toFixed(2)}`,
+      `Date: ${date}`,
+      `Payment Type: ${paymentType}`,
+    ].join("\n");
+  }
+
+  async function handleShare() {
+    const text = shareText();
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "Payment Receipt", text });
+        return;
+      } catch (e: any) {
+        if (e?.name === "AbortError") return;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      setShareNotice("Copied to clipboard");
+    } catch {
+      setShareNotice("Could not share");
+    }
+    setTimeout(() => setShareNotice(""), 2000);
+  }
+
+  function handlePrint() {
+    window.print();
   }
 
   return (
@@ -616,15 +670,39 @@ export function PaymentInForm({
             )}
           </div>
           <div className="pi-form-actionbar__right">
+            {shareNotice && <span className="pi-share-notice">{shareNotice}</span>}
             <div className="pi-share-wrap">
-              <button type="button" className="pi-share-btn">Share</button>
-              <button type="button" className="pi-share-arrow">▼</button>
+              <button type="button" className="pi-share-btn" onClick={handleShare}>Share</button>
+              <button
+                type="button"
+                className="pi-share-arrow"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                  setShareMenuPos({ top: r.top - 8, left: r.right - 160 });
+                  setShowShareMenu((v) => !v);
+                }}
+              >
+                ▼
+              </button>
             </div>
-            <button type="button" className="pi-save-btn" onClick={save} disabled={saving}>
+            <button type="button" className="pi-save-btn" onClick={() => save()} disabled={saving}>
               {saving ? "Saving…" : isEdit ? "Update" : "Save"}
             </button>
           </div>
         </div>
+
+        {showShareMenu && (
+          <div
+            className="pi-row-menu"
+            style={{ position: "fixed", top: shareMenuPos.top, left: shareMenuPos.left, transform: "translateY(-100%)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button type="button" className="pi-row-menu__item" onClick={() => { setShowShareMenu(false); void handleShare(); }}>Share</button>
+            <button type="button" className="pi-row-menu__item" onClick={() => { setShowShareMenu(false); handlePrint(); }}>Print</button>
+            <button type="button" className="pi-row-menu__item" onClick={() => { setShowShareMenu(false); void save("new"); }}>Save &amp; New</button>
+          </div>
+        )}
       </div>
 
       {/* ── Link Payment to Invoices Modal ── */}
