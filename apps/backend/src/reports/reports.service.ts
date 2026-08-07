@@ -753,57 +753,71 @@ export class ReportsService {
   async getItemReportByParty(tenantId: string, from?: string, to?: string, companyId?: string) {
     const dateFilter = buildDateFilter(from, to);
 
-    const txns = await this.prisma.transaction.findMany({
-      where: {
-        tenantId,
-        type: { in: ['sale', 'purchase', 'credit_note', 'debit_note'] },
-        ...(dateFilter ? { date: dateFilter } : {}),
-        ...companyIdWhere(companyId),
-      },
-    });
+    const [txns, items] = await Promise.all([
+      this.prisma.transaction.findMany({
+        where: {
+          tenantId,
+          type: { in: ['sale', 'purchase', 'credit_note', 'debit_note'] },
+          ...(dateFilter ? { date: dateFilter } : {}),
+          ...companyIdWhere(companyId),
+        },
+      }),
+      this.prisma.item.findMany({ where: { tenantId, ...companyIdWhere(companyId) } }),
+    ]);
 
-    const itemMap = new Map<
-      string,
-      { itemName: string; saleQty: number; saleAmount: number; purchaseQty: number; purchaseAmount: number }
-    >();
+    const itemByName = new Map<string, ItemUnitInfo>();
+    for (const it of items) itemByName.set(it.name.trim().toLowerCase(), it);
+
+    type ItemBucket = {
+      itemName: string; unitLabel: string; matchedItem?: ItemUnitInfo;
+      saleQty: number; saleAmount: number; purchaseQty: number; purchaseAmount: number;
+    };
+    const itemMap = new Map<string, ItemBucket>();
 
     for (const t of txns) {
       for (const li of parseItems(t.notes)) {
-        if (!itemMap.has(li.name)) {
-          itemMap.set(li.name, { itemName: li.name, saleQty: 0, saleAmount: 0, purchaseQty: 0, purchaseAmount: 0 });
+        const itemName = (li.name ?? '').trim();
+        if (!itemName) continue;
+        const matched = itemByName.get(itemName.toLowerCase());
+        // Unmatched items (no catalog entry) can't be unit-converted, so they're kept
+        // separate per raw unit rather than silently summed across incompatible units.
+        const bucketKey = matched ? itemName.toLowerCase() : `${itemName.toLowerCase()}__${(li.unit ?? '').trim().toLowerCase()}`;
+
+        if (!itemMap.has(bucketKey)) {
+          itemMap.set(bucketKey, {
+            itemName, unitLabel: li.unit ?? '', matchedItem: matched,
+            saleQty: 0, saleAmount: 0, purchaseQty: 0, purchaseAmount: 0,
+          });
         }
-        const entry = itemMap.get(li.name)!;
+        const bucket = itemMap.get(bucketKey)!;
         const qty = li.qty ?? 0;
+        const baseQty = matched ? toBaseQty(qty, li.unit, matched) : qty;
         const amount = qty * (li.rate ?? 0);
 
-        if (t.type === 'sale') {
-          entry.saleQty += qty;
-          entry.saleAmount += amount;
-        } else if (t.type === 'purchase') {
-          entry.purchaseQty += qty;
-          entry.purchaseAmount += amount;
-        } else if (t.type === 'credit_note') {
-          entry.saleQty -= qty;
-          entry.saleAmount -= amount;
-        } else if (t.type === 'debit_note') {
-          entry.purchaseQty -= qty;
-          entry.purchaseAmount -= amount;
-        }
+        if (t.type === 'sale') { bucket.saleQty += baseQty; bucket.saleAmount += amount; }
+        else if (t.type === 'purchase') { bucket.purchaseQty += baseQty; bucket.purchaseAmount += amount; }
+        else if (t.type === 'credit_note') { bucket.saleQty -= baseQty; bucket.saleAmount -= amount; }
+        else if (t.type === 'debit_note') { bucket.purchaseQty -= baseQty; bucket.purchaseAmount -= amount; }
       }
     }
 
-    const items = Array.from(itemMap.values());
-    const total = items.reduce(
+    const itemRows = Array.from(itemMap.values()).map((b) => ({
+      itemName: b.itemName,
+      saleQty: b.matchedItem ? formatQty(b.saleQty, b.matchedItem) : `${Math.round(b.saleQty * 100) / 100} ${b.unitLabel || 'pcs'}`,
+      saleAmount: b.saleAmount,
+      purchaseQty: b.matchedItem ? formatQty(b.purchaseQty, b.matchedItem) : `${Math.round(b.purchaseQty * 100) / 100} ${b.unitLabel || 'pcs'}`,
+      purchaseAmount: b.purchaseAmount,
+    }));
+
+    const total = itemRows.reduce(
       (acc, i) => ({
-        saleQty: acc.saleQty + i.saleQty,
         saleAmount: acc.saleAmount + i.saleAmount,
-        purchaseQty: acc.purchaseQty + i.purchaseQty,
         purchaseAmount: acc.purchaseAmount + i.purchaseAmount,
       }),
-      { saleQty: 0, saleAmount: 0, purchaseQty: 0, purchaseAmount: 0 },
+      { saleAmount: 0, purchaseAmount: 0 },
     );
 
-    return { items, total };
+    return { items: itemRows, total };
   }
 
   // ── Sale/Purchase By Party ──────────────────────────────────────────────────

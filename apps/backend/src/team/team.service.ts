@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException, UnauthorizedException } from "@nestjs/common";
+import { Injectable, NotFoundException, ForbiddenException, UnauthorizedException, BadRequestException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateTeamMemberDto, UpdateRoleDto, UpdatePermissionsDto, StaffLoginDto } from "./team.dto";
@@ -23,6 +23,9 @@ export class TeamService {
   }
 
   async create(tenantId: string, dto: CreateTeamMemberDto) {
+    if (!dto.email && !dto.contact) {
+      throw new BadRequestException("Provide an email or a phone number.");
+    }
     const passwordHash = await bcrypt.hash(dto.password, 10);
     const member = await this.prisma.teamMember.create({
       data: {
@@ -48,16 +51,25 @@ export class TeamService {
   }
 
   async staffLogin(dto: StaffLoginDto) {
-    const member = await this.prisma.teamMember.findUnique({
-      where: { email: dto.email },
+    if (!dto.identifier) {
+      throw new UnauthorizedException("Invalid email/phone or password.");
+    }
+    // Phone (contact) has no uniqueness constraint, so a lookup can return several
+    // members across tenants sharing the same number — the password decides which one.
+    const candidates = await this.prisma.teamMember.findMany({
+      where: { OR: [{ email: dto.identifier }, { contact: dto.identifier }] },
       include: { tenant: true },
     });
-    if (!member || !member.passwordHash) {
-      throw new UnauthorizedException("Invalid email or password.");
+
+    let member: (typeof candidates)[number] | undefined;
+    for (const candidate of candidates) {
+      if (candidate.passwordHash && (await bcrypt.compare(dto.password, candidate.passwordHash))) {
+        member = candidate;
+        break;
+      }
     }
-    const valid = await bcrypt.compare(dto.password, member.passwordHash);
-    if (!valid) {
-      throw new UnauthorizedException("Invalid email or password.");
+    if (!member) {
+      throw new UnauthorizedException("Invalid email/phone or password.");
     }
 
     const permissions = (() => {

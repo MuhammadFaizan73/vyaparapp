@@ -1238,9 +1238,9 @@ function ItemReportByPartyReport() {
                 {data.total && (
                   <tfoot><tr>
                     <td>Total</td>
-                    <td className="rpt-num">{data.total.saleQty}</td>
+                    <td className="rpt-num" />
                     <td className="rpt-num">{rs(data.total.saleAmount)}</td>
-                    <td className="rpt-num">{data.total.purchaseQty}</td>
+                    <td className="rpt-num" />
                     <td className="rpt-num">{rs(data.total.purchaseAmount)}</td>
                   </tr></tfoot>
                 )}

@@ -158,6 +158,7 @@ export default function AddUserScreen() {
   const insets = useSafeAreaInsets();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [contact, setContact] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [role, setRole] = useState("salesman");
@@ -198,7 +199,12 @@ export default function AddUserScreen() {
       return;
     }
     const emailTrimmed = email.trim().toLowerCase();
-    if (!emailTrimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrimmed)) {
+    const contactTrimmed = contact.trim();
+    if (!emailTrimmed && !contactTrimmed) {
+      Alert.alert("Validation", "Please enter an email address or phone number.");
+      return;
+    }
+    if (emailTrimmed && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrimmed)) {
       Alert.alert("Validation", "Please enter a valid email address.");
       return;
     }
@@ -210,7 +216,8 @@ export default function AddUserScreen() {
     try {
       await api.createTeamMember({
         name: name.trim(),
-        email: emailTrimmed,
+        email: emailTrimmed || undefined,
+        contact: contactTrimmed || undefined,
         password,
         role,
         permissions,
@@ -255,7 +262,7 @@ export default function AddUserScreen() {
           <View style={styles.inputRow}>
             <TextInput
               style={styles.input}
-              placeholder="Email Address *"
+              placeholder="Email Address"
               placeholderTextColor={colors.textLight}
               value={email}
               onChangeText={setEmail}
@@ -263,7 +270,18 @@ export default function AddUserScreen() {
               autoCapitalize="none"
               autoCorrect={false}
             />
-            <Text style={styles.inputSub}>Staff member will use this email to log in.</Text>
+          </View>
+          <View style={styles.divider} />
+          <View style={styles.inputRow}>
+            <TextInput
+              style={styles.input}
+              placeholder="Phone Number"
+              placeholderTextColor={colors.textLight}
+              value={contact}
+              onChangeText={setContact}
+              keyboardType="phone-pad"
+            />
+            <Text style={styles.inputSub}>Staff member will use their email or phone to log in.</Text>
           </View>
           <View style={styles.divider} />
           <View style={[styles.inputRow, { flexDirection: "row", alignItems: "center" }]}>
@@ -391,11 +409,11 @@ export default function AddUserScreen() {
             </View>
             <Text style={styles.inviteTitle}>User Added!</Text>
             <Text style={styles.inviteSub}>
-              <Text style={{ fontWeight: "700" }}>{name}</Text> can now log in using their email and password in the Staff Login screen.
+              <Text style={{ fontWeight: "700" }}>{name}</Text> can now log in using {email && contact ? "either of these" : "this"} and their password in the Staff Login screen.
             </Text>
             <View style={styles.codeBox}>
               <Ionicons name="mail-outline" size={16} color="#166534" />
-              <Text style={[styles.codeText, { flex: 1 }]} selectable>{email}</Text>
+              <Text style={[styles.codeText, { flex: 1 }]} selectable>{[email, contact].filter(Boolean).join(" / ")}</Text>
             </View>
             <Text style={styles.codeTap}>They log in at: Login → Staff / Salesman Login</Text>
             <TouchableOpacity

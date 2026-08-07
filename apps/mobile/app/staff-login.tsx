@@ -13,23 +13,23 @@ export default function StaffLoginScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  const emailRef   = useRef<TextInput>(null);
+  const identifierRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
 
-  const [email,        setEmail]        = useState("");
+  const [identifier,   setIdentifier]   = useState("");
   const [password,     setPassword]     = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading,      setLoading]      = useState(false);
   const [error,        setError]        = useState("");
 
   async function handleLogin() {
-    const emailTrimmed = email.trim().toLowerCase();
-    if (!emailTrimmed) { setError("Please enter your email."); return; }
+    const identifierTrimmed = identifier.trim().toLowerCase();
+    if (!identifierTrimmed) { setError("Please enter your email or phone number."); return; }
     if (!password)     { setError("Please enter your password."); return; }
     setError("");
     setLoading(true);
     try {
-      const result = await api.staffLogin(emailTrimmed, password);
+      const result = await api.staffLogin(identifierTrimmed, password);
       await saveToken(result.token);
       router.replace("/(tabs)/dashboard" as never);
     } catch (err: any) {
@@ -62,24 +62,23 @@ export default function StaffLoginScreen() {
 
         <Text style={s.heading}>Staff Login</Text>
         <Text style={s.sub}>
-          Login with the email and password your employer set for your account.
+          Login with the email or phone and password your employer set for your account.
         </Text>
 
-        {/* Email field */}
+        {/* Identifier field */}
         <TouchableOpacity
           style={s.inputCard}
-          onPress={() => emailRef.current?.focus()}
+          onPress={() => identifierRef.current?.focus()}
           activeOpacity={1}
         >
-          <Ionicons name="mail-outline" size={20} color={colors.textLight} style={s.inputIcon} />
+          <Ionicons name="person-outline" size={20} color={colors.textLight} style={s.inputIcon} />
           <TextInput
-            ref={emailRef}
+            ref={identifierRef}
             style={s.input}
-            value={email}
-            onChangeText={v => { setEmail(v); setError(""); }}
-            placeholder="Email address"
+            value={identifier}
+            onChangeText={v => { setIdentifier(v); setError(""); }}
+            placeholder="Email or phone number"
             placeholderTextColor={colors.textLight}
-            keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
             returnKeyType="next"
@@ -130,9 +129,9 @@ export default function StaffLoginScreen() {
 
         {/* Login button */}
         <TouchableOpacity
-          style={[s.btn, (!email.trim() || !password || loading) && s.btnDisabled]}
+          style={[s.btn, (!identifier.trim() || !password || loading) && s.btnDisabled]}
           onPress={handleLogin}
-          disabled={!email.trim() || !password || loading}
+          disabled={!identifier.trim() || !password || loading}
           activeOpacity={0.85}
         >
           {loading ? (

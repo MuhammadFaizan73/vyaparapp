@@ -12,7 +12,7 @@ export const VALID_ROLES = [
 
 export class CreateTeamMemberDto {
   @IsString() @IsNotEmpty() name!: string;
-  @IsEmail() email!: string;
+  @IsOptional() @IsEmail() email?: string;
   @IsString() @IsNotEmpty() password!: string;
   @IsOptional() @IsString() contact?: string;
   @IsString() @IsIn(VALID_ROLES) role!: string;
@@ -32,6 +32,6 @@ export class AcceptInviteDto {
 }
 
 export class StaffLoginDto {
-  @IsEmail() email!: string;
+  @IsOptional() @IsString() identifier?: string; // email or phone
   @IsString() @IsNotEmpty() password!: string;
 }

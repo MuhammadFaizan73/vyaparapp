@@ -12,6 +12,7 @@ type Props = {
 export function AddUserModal({ onClose, onSaved }: Props) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [contact, setContact] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [role, setRole] = useState<TeamRole>("salesman");
@@ -28,7 +29,12 @@ export function AddUserModal({ onClose, onSaved }: Props) {
   async function save() {
     if (!name.trim()) { setError("Please enter full name."); return; }
     const emailTrimmed = email.trim().toLowerCase();
-    if (!emailTrimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrimmed)) {
+    const contactTrimmed = contact.trim();
+    if (!emailTrimmed && !contactTrimmed) {
+      setError("Please enter an email address or phone number.");
+      return;
+    }
+    if (emailTrimmed && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrimmed)) {
       setError("Please enter a valid email address.");
       return;
     }
@@ -36,7 +42,14 @@ export function AddUserModal({ onClose, onSaved }: Props) {
     setError(null);
     setBusy(true);
     try {
-      await api.createTeamMember({ name: name.trim(), email: emailTrimmed, password, role, permissions });
+      await api.createTeamMember({
+        name: name.trim(),
+        email: emailTrimmed || undefined,
+        contact: contactTrimmed || undefined,
+        password,
+        role,
+        permissions,
+      });
       setSuccess(true);
     } catch (err) {
       const msg = (err as { response?: { data?: { message?: string | string[] } } }).response?.data?.message ?? "Could not save user.";
@@ -54,10 +67,10 @@ export function AddUserModal({ onClose, onSaved }: Props) {
             <div style={{ fontSize: 40, marginBottom: 8 }}>✅</div>
             <h3 style={{ margin: "0 0 8px" }}>User Added!</h3>
             <p style={{ color: "#6b7280", fontSize: 13, marginBottom: 16 }}>
-              <strong>{name}</strong> can now log in with this email and password from Staff Login.
+              <strong>{name}</strong> can now log in with {email && contact ? "either of these" : "this"} and their password from Staff Login.
             </p>
             <div style={{ background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 10, padding: 12, fontFamily: "monospace", fontSize: 13, color: "#166534" }}>
-              {email}
+              {[email, contact].filter(Boolean).join(" / ")}
             </div>
           </div>
           <div className="party-modal__footer">
@@ -89,10 +102,13 @@ export function AddUserModal({ onClose, onSaved }: Props) {
               <input className="party-modal__input party-modal__input--focus" placeholder="Full Name *" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
             </div>
             <div className="party-modal__field">
-              <input className="party-modal__input" placeholder="Email Address *" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="off" />
+              <input className="party-modal__input" placeholder="Email Address" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="off" />
             </div>
           </div>
           <div className="party-modal__row">
+            <div className="party-modal__field">
+              <input className="party-modal__input" placeholder="Phone Number" value={contact} onChange={(e) => setContact(e.target.value)} autoComplete="off" />
+            </div>
             <div className="party-modal__field" style={{ position: "relative" }}>
               <input
                 className="party-modal__input"
@@ -106,6 +122,8 @@ export function AddUserModal({ onClose, onSaved }: Props) {
                 {showPassword ? "Hide" : "Show"}
               </button>
             </div>
+          </div>
+          <div className="party-modal__row">
             <div className="party-modal__field">
               <select className="party-modal__input" value={role} onChange={(e) => selectRole(e.target.value as TeamRole)} style={{ cursor: "pointer" }}>
                 {TEAM_ROLES.map((r) => (
