@@ -244,7 +244,12 @@ export function PaymentInScreen({ isLocked = false, onLockedAction }: Props) {
                         e.stopPropagation();
                         if (menuId === row.id) { setMenuId(null); return; }
                         const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                        setMenuPos({ top: r.bottom + 4, left: r.right - 160 });
+                        const menuHeight = 6 * 38; // 6 menu items
+                        const openUpward = window.innerHeight - r.bottom < menuHeight + 12;
+                        setMenuPos({
+                          top: openUpward ? r.top - menuHeight - 4 : r.bottom + 4,
+                          left: r.right - 160,
+                        });
                         setMenuId(row.id);
                       }}
                     >⋯</button>
