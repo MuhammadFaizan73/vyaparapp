@@ -750,7 +750,7 @@ export class ReportsService {
   // qty and amount attributed from each transaction's own line items (not the whole
   // transaction total, since one invoice can cover several items).
 
-  async getItemReportByParty(tenantId: string, from?: string, to?: string, companyId?: string) {
+  async getItemReportByParty(tenantId: string, from?: string, to?: string, companyId?: string, bookerId?: string) {
     const dateFilter = buildDateFilter(from, to);
 
     const [txns, items] = await Promise.all([
@@ -759,6 +759,7 @@ export class ReportsService {
           tenantId,
           type: { in: ['sale', 'purchase', 'credit_note', 'debit_note'] },
           ...(dateFilter ? { date: dateFilter } : {}),
+          ...(bookerId ? { bookerId } : {}),
           ...companyIdWhere(companyId),
         },
       }),

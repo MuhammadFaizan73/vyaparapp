@@ -1193,8 +1193,14 @@ function StockSummaryReport() {
 function ItemReportByPartyReport() {
   const [from, setFrom] = useState(monthStart);
   const [to,   setTo]   = useState(todayStr);
+  const [bookerId, setBookerId] = useState("");
+  const [teamMembers, setTeamMembers] = useState<{ id: string; name: string }[]>([]);
   const { companyFilter } = useCompany();
-  const { data, loading, error } = useReport("item-report-by-party", { from, to, companyId: companyFilter ?? undefined });
+  const { data, loading, error } = useReport("item-report-by-party", { from, to, companyId: companyFilter ?? undefined, bookerId: bookerId || undefined });
+
+  useEffect(() => {
+    api.listTeamMembers().then(setTeamMembers).catch(() => {});
+  }, []);
 
   function handleExport() {
     if (!data?.items?.length) return;
@@ -1211,6 +1217,12 @@ function ItemReportByPartyReport() {
     <div className="rpt-content">
       <div className="rpt-filters">
         <DateRange from={from} to={to} onFrom={setFrom} onTo={setTo} />
+        <select className="rpt-select" value={bookerId} onChange={(e) => setBookerId(e.target.value)}>
+          <option value="">All Salesmen</option>
+          {teamMembers.map((m) => (
+            <option key={m.id} value={m.id}>{m.name}</option>
+          ))}
+        </select>
         <ExcelPrint onExport={handleExport} />
       </div>
       <h3 className="rpt-section-title">DETAILS</h3>
