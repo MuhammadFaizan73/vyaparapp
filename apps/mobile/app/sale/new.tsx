@@ -204,15 +204,27 @@ export default function NewSaleScreen() {
       p.name.toLowerCase().includes(customer.toLowerCase()) ||
       (p.phone && p.phone.includes(customer))
     );
-  const filteredCatalog = catalog.filter((c) => {
-    const matchesSearch =
-      c.name.toLowerCase().includes(itemSearch.toLowerCase()) ||
-      (c.sku ?? "").toLowerCase().includes(itemSearch.toLowerCase());
-    const matchesCompany =
-      selectedCompanyFilters.length === 0 ||
-      selectedCompanyFilters.some((id) => (c as any).companyId === id);
-    return matchesSearch && matchesCompany;
-  });
+  const itemSearchQuery = itemSearch.trim().toLowerCase();
+  const filteredCatalog = catalog
+    .filter((c) => {
+      const matchesCompany =
+        selectedCompanyFilters.length === 0 ||
+        selectedCompanyFilters.some((id) => (c as any).companyId === id);
+      if (!matchesCompany) return false;
+      if (!itemSearchQuery) return true;
+      // Match on word start rather than "contains anywhere" — a query like "b" would
+      // otherwise surface unrelated items such as "Vegetable Masala" just because a
+      // "b" appears mid-word.
+      const matchesName = c.name.toLowerCase().split(/\s+/).some((w) => w.startsWith(itemSearchQuery));
+      const matchesSku = (c.sku ?? "").toLowerCase().startsWith(itemSearchQuery);
+      return matchesName || matchesSku;
+    })
+    .sort((a, b) => {
+      if (!itemSearchQuery) return 0;
+      const aStarts = a.name.toLowerCase().startsWith(itemSearchQuery) ? 0 : 1;
+      const bStarts = b.name.toLowerCase().startsWith(itemSearchQuery) ? 0 : 1;
+      return aStarts - bStarts;
+    });
 
   const subtotal = items.reduce((s, i) => s + rowAmount(i), 0);
   const totalQty = items.reduce((s, i) => s + i.qty, 0);
