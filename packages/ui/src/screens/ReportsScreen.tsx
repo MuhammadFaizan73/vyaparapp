@@ -908,7 +908,11 @@ function PartyReportByItemReport() {
     const rows: Record<string, unknown>[] = [];
     data.parties.forEach((p: any, i: number) => {
       if (!p.items?.length) {
-        rows.push({ "#": i + 1, "Party Name": p.partyName, "Item": "", "Sale Quantity": "", "Sale Amount": p.saleAmount, "Purchase Quantity": "", "Purchase Amount": p.purchaseAmount });
+        rows.push({
+          "#": i + 1, "Party Name": p.partyName, "Item": "",
+          "Sale Qty (Larger Unit)": "", "Sale Qty (Smaller Unit)": "", "Sale Amount": p.saleAmount,
+          "Purchase Qty (Larger Unit)": "", "Purchase Qty (Smaller Unit)": "", "Purchase Amount": p.purchaseAmount,
+        });
         return;
       }
       p.items.forEach((it: any, j: number) => {
@@ -916,8 +920,8 @@ function PartyReportByItemReport() {
           "#": j === 0 ? i + 1 : "",
           "Party Name": j === 0 ? p.partyName : "",
           "Item": it.itemName,
-          "Sale Quantity": it.saleQty, "Sale Amount": it.saleAmount,
-          "Purchase Quantity": it.purchaseQty, "Purchase Amount": it.purchaseAmount,
+          "Sale Qty (Larger Unit)": it.saleQtyLarger, "Sale Qty (Smaller Unit)": it.saleQtySmaller, "Sale Amount": it.saleAmount,
+          "Purchase Qty (Larger Unit)": it.purchaseQtyLarger, "Purchase Qty (Smaller Unit)": it.purchaseQtySmaller, "Purchase Amount": it.purchaseAmount,
         });
       });
     });
@@ -937,8 +941,8 @@ function PartyReportByItemReport() {
               <table className="rpt-table">
                 <thead><tr>
                   <th>#</th><th>Party Name</th>
-                  <th className="rpt-num">Sale Quantity</th><th className="rpt-num">Sale Amount</th>
-                  <th className="rpt-num">Purchase Quantity</th><th className="rpt-num">Purchase Amount</th>
+                  <th className="rpt-num">Sale Qty (Larger Unit)</th><th className="rpt-num">Sale Qty (Smaller Unit)</th><th className="rpt-num">Sale Amount</th>
+                  <th className="rpt-num">Purchase Qty (Larger Unit)</th><th className="rpt-num">Purchase Qty (Smaller Unit)</th><th className="rpt-num">Purchase Amount</th>
                 </tr></thead>
                 <tbody>
                   {data.parties.map((r: any, i: number) => (
@@ -946,13 +950,23 @@ function PartyReportByItemReport() {
                       <td>{i + 1}</td><td style={{ fontWeight: i === 0 ? 700 : 400 }}>{r.partyName}</td>
                       <td className="rpt-num">
                         {(r.items ?? []).filter((it: any) => it.saleAmount !== 0).map((it: any, k: number) => (
-                          <div key={k}>{it.itemName}: {it.saleQty}</div>
+                          <div key={k}>{it.itemName}: {it.saleQtyLarger}</div>
+                        ))}
+                      </td>
+                      <td className="rpt-num">
+                        {(r.items ?? []).filter((it: any) => it.saleAmount !== 0).map((it: any, k: number) => (
+                          <div key={k}>{it.saleQtySmaller}</div>
                         ))}
                       </td>
                       <td className="rpt-num rpt-green">{rs(r.saleAmount)}</td>
                       <td className="rpt-num">
                         {(r.items ?? []).filter((it: any) => it.purchaseAmount !== 0).map((it: any, k: number) => (
-                          <div key={k}>{it.itemName}: {it.purchaseQty}</div>
+                          <div key={k}>{it.itemName}: {it.purchaseQtyLarger}</div>
+                        ))}
+                      </td>
+                      <td className="rpt-num">
+                        {(r.items ?? []).filter((it: any) => it.purchaseAmount !== 0).map((it: any, k: number) => (
+                          <div key={k}>{it.purchaseQtySmaller}</div>
                         ))}
                       </td>
                       <td className="rpt-num rpt-red">{rs(r.purchaseAmount)}</td>
@@ -963,7 +977,9 @@ function PartyReportByItemReport() {
                   <tfoot><tr>
                     <td colSpan={2}>Total</td>
                     <td className="rpt-num" />
+                    <td className="rpt-num" />
                     <td className="rpt-num rpt-green">{rs(data.total.saleAmount)}</td>
+                    <td className="rpt-num" />
                     <td className="rpt-num" />
                     <td className="rpt-num rpt-red">{rs(data.total.purchaseAmount)}</td>
                   </tr></tfoot>
@@ -1206,8 +1222,9 @@ function ItemReportByPartyReport() {
     if (!data?.items?.length) return;
     exportToExcel(
       data.items.map((r: any) => ({
-        "Item Name": r.itemName, "Sale Quantity": r.saleQty, "Sale Amount": r.saleAmount,
-        "Purchase Quantity": r.purchaseQty, "Purchase Amount": r.purchaseAmount,
+        "Item Name": r.itemName,
+        "Sale Qty (Larger Unit)": r.saleQtyLarger, "Sale Qty (Smaller Unit)": r.saleQtySmaller, "Sale Amount": r.saleAmount,
+        "Purchase Qty (Larger Unit)": r.purchaseQtyLarger, "Purchase Qty (Smaller Unit)": r.purchaseQtySmaller, "Purchase Amount": r.purchaseAmount,
       })),
       "Item Report By Party", "Details",
     );
@@ -1233,16 +1250,18 @@ function ItemReportByPartyReport() {
               <table className="rpt-table">
                 <thead><tr>
                   <th>Item Name</th>
-                  <th className="rpt-num">Sale Quantity</th><th className="rpt-num">Sale Amount</th>
-                  <th className="rpt-num">Purchase Quantity</th><th className="rpt-num">Purchase Amount</th>
+                  <th className="rpt-num">Sale Qty (Larger Unit)</th><th className="rpt-num">Sale Qty (Smaller Unit)</th><th className="rpt-num">Sale Amount</th>
+                  <th className="rpt-num">Purchase Qty (Larger Unit)</th><th className="rpt-num">Purchase Qty (Smaller Unit)</th><th className="rpt-num">Purchase Amount</th>
                 </tr></thead>
                 <tbody>
                   {data.items.map((r: any, i: number) => (
                     <tr key={i}>
                       <td>{r.itemName}</td>
-                      <td className="rpt-num">{r.saleQty}</td>
+                      <td className="rpt-num">{r.saleQtyLarger}</td>
+                      <td className="rpt-num">{r.saleQtySmaller}</td>
                       <td className="rpt-num">{rs(r.saleAmount)}</td>
-                      <td className="rpt-num">{r.purchaseQty}</td>
+                      <td className="rpt-num">{r.purchaseQtyLarger}</td>
+                      <td className="rpt-num">{r.purchaseQtySmaller}</td>
                       <td className="rpt-num">{rs(r.purchaseAmount)}</td>
                     </tr>
                   ))}
@@ -1251,7 +1270,9 @@ function ItemReportByPartyReport() {
                   <tfoot><tr>
                     <td>Total</td>
                     <td className="rpt-num" />
+                    <td className="rpt-num" />
                     <td className="rpt-num">{rs(data.total.saleAmount)}</td>
+                    <td className="rpt-num" />
                     <td className="rpt-num" />
                     <td className="rpt-num">{rs(data.total.purchaseAmount)}</td>
                   </tr></tfoot>

@@ -127,7 +127,7 @@ const REPORT_LABELS: Record<string, string> = {
   "sale-purchase-by-party": "Sale Purchase By Party",
   "party-report-by-item": "Party Report By Item",
   "sale-purchase-by-party-group": "Sale Purchase By Party Group",
-  "stock-summary": "Stock Summary", "low-stock": "Low Stock Summary",
+  "stock-summary": "Stock Summary", "item-report-by-party": "Item Report By Party", "low-stock": "Low Stock Summary",
   "stock-detail": "Stock Detail", "item-detail": "Item Detail",
   "item-wise-pnl": "Item Wise Profit & Loss", "item-wise-discount": "Item Wise Discount",
   "discount-report": "Discount Report", "expense-category": "Expense Category",
@@ -588,7 +588,9 @@ function ItemRow({ item }: { item: any }) {
         {item.contact && <Text style={ir.sub}>{item.contact}</Text>}
       </View>
       <View style={ir.right}>
+        {item.saleQtyLarger  && <Text style={ir.sub}>Sale Qty: {item.saleQtyLarger} {item.saleQtySmaller}</Text>}
         {item.saleAmount   !== undefined && <Text style={ir.green}>Sale: {rs(item.saleAmount)}</Text>}
+        {item.purchaseQtyLarger && <Text style={ir.sub}>Purchase Qty: {item.purchaseQtyLarger} {item.purchaseQtySmaller}</Text>}
         {item.purchaseAmount !== undefined && <Text style={ir.red}>Purchase: {rs(item.purchaseAmount)}</Text>}
         {item.stockQty    !== undefined && <Text style={[ir.qty, item.stockQty < 0 ? { color: "#dc2626" } : {}]}>Qty: {item.stockQty}</Text>}
         {item.stockValue  !== undefined && <Text style={ir.sub}>Val: {rs(item.stockValue)}</Text>}
@@ -1190,6 +1192,93 @@ function LowStockReport({ onDataLoaded }: { onDataLoaded?: (rows: ExportRow[]) =
   );
 }
 
+function ItemReportByPartyReport({ onDataLoaded }: { onDataLoaded?: (rows: ExportRow[]) => void }) {
+  const [range, setRange] = useState<DateRange>(() => getRange("month"));
+  const [showPeriod, setShowPeriod] = useState(false);
+  const { data, loading, error, reload } = useReport("item-report-by-party", { from: range.from, to: range.to });
+
+  useEffect(() => {
+    if (!onDataLoaded) return;
+    onDataLoaded((data?.items ?? []).map((r: any) => ({
+      "Item Name": r.itemName,
+      "Sale Qty (Larger Unit)": r.saleQtyLarger, "Sale Qty (Smaller Unit)": r.saleQtySmaller, "Sale Amount": r.saleAmount,
+      "Purchase Qty (Larger Unit)": r.purchaseQtyLarger, "Purchase Qty (Smaller Unit)": r.purchaseQtySmaller, "Purchase Amount": r.purchaseAmount,
+    })));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
+
+  return (
+    <>
+      <PeriodBar range={range} onPress={() => setShowPeriod(true)} />
+      {loading
+        ? <ActivityIndicator style={{ marginTop: 48 }} color={colors.primary} size="large" />
+        : error
+          ? <LoadError error={error} onRetry={reload} />
+          : <ScrollView>
+              {data?.total && (
+                <View style={{ flexDirection: "row", gap: 8, marginHorizontal: 16, marginTop: 14, marginBottom: 4 }}>
+                  <SummaryCard label="Total Sale"     value={rs(data.total.saleAmount ?? 0)}     color={colors.green} tint={colors.greenLight} />
+                  <SummaryCard label="Total Purchase" value={rs(data.total.purchaseAmount ?? 0)} color={colors.red}   tint={colors.redLight} />
+                </View>
+              )}
+              {!data?.items?.length ? <NoData /> : data.items.map((item: any, i: number) => <ItemRow key={i} item={item} />)}
+            </ScrollView>
+      }
+      <PeriodModal visible={showPeriod} range={range} onClose={() => setShowPeriod(false)} onChange={setRange} />
+    </>
+  );
+}
+
+function PartyReportByItemReport({ onDataLoaded }: { onDataLoaded?: (rows: ExportRow[]) => void }) {
+  const [range, setRange] = useState<DateRange>(() => getRange("month"));
+  const [showPeriod, setShowPeriod] = useState(false);
+  const { data, loading, error, reload } = useReport("party-report-by-item", { from: range.from, to: range.to });
+
+  useEffect(() => {
+    if (!onDataLoaded) return;
+    const rows: ExportRow[] = [];
+    (data?.parties ?? []).forEach((p: any) => {
+      (p.items ?? []).forEach((it: any) => {
+        rows.push({
+          "Party Name": p.partyName, "Item": it.itemName,
+          "Sale Qty (Larger Unit)": it.saleQtyLarger, "Sale Qty (Smaller Unit)": it.saleQtySmaller, "Sale Amount": it.saleAmount,
+          "Purchase Qty (Larger Unit)": it.purchaseQtyLarger, "Purchase Qty (Smaller Unit)": it.purchaseQtySmaller, "Purchase Amount": it.purchaseAmount,
+        });
+      });
+    });
+    onDataLoaded(rows);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
+
+  return (
+    <>
+      <PeriodBar range={range} onPress={() => setShowPeriod(true)} />
+      {loading
+        ? <ActivityIndicator style={{ marginTop: 48 }} color={colors.primary} size="large" />
+        : error
+          ? <LoadError error={error} onRetry={reload} />
+          : <ScrollView>
+              {data?.total && (
+                <View style={{ flexDirection: "row", gap: 8, marginHorizontal: 16, marginTop: 14, marginBottom: 4 }}>
+                  <SummaryCard label="Total Sale"     value={rs(data.total.saleAmount ?? 0)}     color={colors.green} tint={colors.greenLight} />
+                  <SummaryCard label="Total Purchase" value={rs(data.total.purchaseAmount ?? 0)} color={colors.red}   tint={colors.redLight} />
+                </View>
+              )}
+              {!data?.parties?.length ? <NoData /> : data.parties.map((p: any, i: number) => (
+                <View key={i}>
+                  <View style={{ backgroundColor: "#f1f5f9", paddingHorizontal: 16, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.borderLight }}>
+                    <Text style={{ fontSize: 13, fontWeight: "700", color: colors.text }}>{p.partyName}</Text>
+                  </View>
+                  {(p.items ?? []).map((it: any, j: number) => <ItemRow key={j} item={it} />)}
+                </View>
+              ))}
+            </ScrollView>
+      }
+      <PeriodModal visible={showPeriod} range={range} onClose={() => setShowPeriod(false)} onChange={setRange} />
+    </>
+  );
+}
+
 function GenericDateReport({ type, onDataLoaded }: { type: string; onDataLoaded?: (rows: ExportRow[]) => void }) {
   const [range, setRange] = useState<DateRange>(() => getRange("month"));
   const [showPeriod, setShowPeriod] = useState(false);
@@ -1249,6 +1338,8 @@ function ReportBody({ type, onDataLoaded }: { type: string; onDataLoaded: (rows:
     case "all-parties":      return <AllPartiesReport onDataLoaded={onDataLoaded} />;
     case "stock-summary":    return <StockSummaryReport onDataLoaded={onDataLoaded} />;
     case "low-stock":        return <LowStockReport onDataLoaded={onDataLoaded} />;
+    case "item-report-by-party": return <ItemReportByPartyReport onDataLoaded={onDataLoaded} />;
+    case "party-report-by-item": return <PartyReportByItemReport onDataLoaded={onDataLoaded} />;
     default:                 return <GenericDateReport type={type} onDataLoaded={onDataLoaded} />;
   }
 }

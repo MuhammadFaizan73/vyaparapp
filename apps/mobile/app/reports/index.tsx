@@ -41,6 +41,7 @@ const REPORT_GROUPS: ReportGroup[] = [
     groupColor: "#b45309",
     data: [
       { key: "stock-summary",      label: "Stock Summary",           icon: "cube-outline" },
+      { key: "item-report-by-party", label: "Item Report By Party",  icon: "grid-outline" },
       { key: "low-stock",          label: "Low Stock Summary",       icon: "alert-circle-outline" },
       { key: "stock-detail",       label: "Stock Detail",            icon: "search-outline" },
       { key: "item-detail",        label: "Item Detail",             icon: "document-text-outline" },

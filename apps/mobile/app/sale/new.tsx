@@ -196,6 +196,19 @@ export default function NewSaleScreen() {
     ? (subtotal * discountPctVal) / 100
     : parseFloat(discountRs) || 0;
   const afterDiscount = subtotal - discountRsVal;
+
+  function handleDiscountPct(val: string) {
+    setDiscountPct(val);
+    const pct = parseFloat(val) || 0;
+    setDiscountRs(val && subtotal ? ((subtotal * pct) / 100).toFixed(2) : "");
+  }
+
+  function handleDiscountRs(val: string) {
+    setDiscountRs(val);
+    const rs = parseFloat(val) || 0;
+    setDiscountPct(val && subtotal ? ((rs / subtotal) * 100).toFixed(2) : "");
+  }
+
   const roundOffAmt = roundOff ? Math.round(afterDiscount) - afterDiscount : 0;
   const total = afterDiscount + roundOffAmt;
   const receivedAmtVal = parseFloat(receivedAmt) || 0;
@@ -502,11 +515,7 @@ export default function NewSaleScreen() {
                   <TextInput
                     style={styles.discountInput}
                     value={discountPct}
-                    onChangeText={(v) => {
-                      setDiscountPct(v);
-                      const pct = parseFloat(v) || 0;
-                      setDiscountRs(pct ? ((subtotal * pct) / 100).toFixed(4) : "");
-                    }}
+                    onChangeText={handleDiscountPct}
                     keyboardType="numeric"
                     placeholder=""
                   />
@@ -517,11 +526,10 @@ export default function NewSaleScreen() {
                   <TextInput
                     style={[styles.discountInput, { flex: 1 }]}
                     value={discountRs}
-                    onChangeText={setDiscountRs}
+                    onChangeText={handleDiscountRs}
                     keyboardType="numeric"
                     placeholder="0.0000"
                     placeholderTextColor={colors.textLight}
-                    editable={!discountPct}
                   />
                 </View>
               </View>

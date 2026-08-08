@@ -52,9 +52,9 @@ function toBaseQty(qty: number, unit: string | undefined, item: ItemUnitInfo): n
 }
 
 // Decomposes a base-unit quantity back into the item's largest-to-smallest units for
-// display — 8.15 Box (conversionRate 20) becomes "8 Box 3 Piece" instead of a bare decimal
-// that hides what a fractional box even means.
-function formatQty(baseQty: number, item: ItemUnitInfo): string {
+// display — 8.15 Box (conversionRate 20) becomes ["8 Box", "3 Piece"] instead of a bare
+// decimal that hides what a fractional box even means.
+function formatQtyParts(baseQty: number, item: ItemUnitInfo): string[] {
   const unit = item.unit || 'pcs';
   let remaining = baseQty;
   const parts: string[] = [];
@@ -77,7 +77,15 @@ function formatQty(baseQty: number, item: ItemUnitInfo): string {
     parts.push(`${Math.round(remaining * 100) / 100} ${unit}`);
   }
 
-  return parts.length ? parts.join(' ') : `0 ${unit}`;
+  return parts.length ? parts : [`0 ${unit}`];
+}
+
+// Report tables show at most two quantity columns — larger unit and smaller unit — rather
+// than one combined string, since a fixed table can't grow a column per distinct unit name.
+// A rare 3rd tier (tertiary + base + secondary all present) folds into the second column.
+function formatQtySplit(baseQty: number, item: ItemUnitInfo): { qtyLarger: string; qtySmaller: string } {
+  const [first, ...rest] = formatQtyParts(baseQty, item);
+  return { qtyLarger: first, qtySmaller: rest.join(' ') };
 }
 
 function txnStatus(total: number, balance: number): string {
@@ -722,13 +730,23 @@ export class ReportsService {
     }
 
     const parties = Array.from(partyMap.values()).map((p) => {
-      const itemRows = Array.from(p.items.values()).map((b) => ({
-        itemName: b.itemName,
-        saleQty: b.matchedItem ? formatQty(b.saleQty, b.matchedItem) : `${Math.round(b.saleQty * 100) / 100} ${b.unitLabel || 'pcs'}`,
-        saleAmount: b.saleAmount,
-        purchaseQty: b.matchedItem ? formatQty(b.purchaseQty, b.matchedItem) : `${Math.round(b.purchaseQty * 100) / 100} ${b.unitLabel || 'pcs'}`,
-        purchaseAmount: b.purchaseAmount,
-      }));
+      const itemRows = Array.from(p.items.values()).map((b) => {
+        const sale = b.matchedItem
+          ? formatQtySplit(b.saleQty, b.matchedItem)
+          : { qtyLarger: `${Math.round(b.saleQty * 100) / 100} ${b.unitLabel || 'pcs'}`, qtySmaller: '' };
+        const purchase = b.matchedItem
+          ? formatQtySplit(b.purchaseQty, b.matchedItem)
+          : { qtyLarger: `${Math.round(b.purchaseQty * 100) / 100} ${b.unitLabel || 'pcs'}`, qtySmaller: '' };
+        return {
+          itemName: b.itemName,
+          saleQtyLarger: sale.qtyLarger,
+          saleQtySmaller: sale.qtySmaller,
+          saleAmount: b.saleAmount,
+          purchaseQtyLarger: purchase.qtyLarger,
+          purchaseQtySmaller: purchase.qtySmaller,
+          purchaseAmount: b.purchaseAmount,
+        };
+      });
       return {
         partyName: p.partyName,
         items: itemRows,
@@ -802,13 +820,23 @@ export class ReportsService {
       }
     }
 
-    const itemRows = Array.from(itemMap.values()).map((b) => ({
-      itemName: b.itemName,
-      saleQty: b.matchedItem ? formatQty(b.saleQty, b.matchedItem) : `${Math.round(b.saleQty * 100) / 100} ${b.unitLabel || 'pcs'}`,
-      saleAmount: b.saleAmount,
-      purchaseQty: b.matchedItem ? formatQty(b.purchaseQty, b.matchedItem) : `${Math.round(b.purchaseQty * 100) / 100} ${b.unitLabel || 'pcs'}`,
-      purchaseAmount: b.purchaseAmount,
-    }));
+    const itemRows = Array.from(itemMap.values()).map((b) => {
+      const sale = b.matchedItem
+        ? formatQtySplit(b.saleQty, b.matchedItem)
+        : { qtyLarger: `${Math.round(b.saleQty * 100) / 100} ${b.unitLabel || 'pcs'}`, qtySmaller: '' };
+      const purchase = b.matchedItem
+        ? formatQtySplit(b.purchaseQty, b.matchedItem)
+        : { qtyLarger: `${Math.round(b.purchaseQty * 100) / 100} ${b.unitLabel || 'pcs'}`, qtySmaller: '' };
+      return {
+        itemName: b.itemName,
+        saleQtyLarger: sale.qtyLarger,
+        saleQtySmaller: sale.qtySmaller,
+        saleAmount: b.saleAmount,
+        purchaseQtyLarger: purchase.qtyLarger,
+        purchaseQtySmaller: purchase.qtySmaller,
+        purchaseAmount: b.purchaseAmount,
+      };
+    });
 
     const total = itemRows.reduce(
       (acc, i) => ({
