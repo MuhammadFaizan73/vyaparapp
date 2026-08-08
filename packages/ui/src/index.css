@@ -5402,6 +5402,30 @@ body,
   margin-bottom: 4px;
 }
 
+/* ─── Print ───────────────────────────────────────────────────────
+   Reports had no print-specific layout at all: clicking "Print" ran a bare
+   window.print() against the live app shell, which (a) printed the sidebar,
+   the report-list panel, and the filter/export toolbar along with the
+   report, and (b) clipped most of the table, because every ancestor from
+   .app down to .rpt-body is a fixed-height flex box with overflow set to
+   hidden/auto for on-screen scrolling — exactly what a paginated print
+   needs to NOT have. This scopes printing to just the active report's
+   table/content and lets it flow across as many pages as it needs. */
+@media print {
+  .sidebar, .topbar, .expired-banner, .readonly-banner,
+  .rpt-panel, .rpt-page-header .rpt-add-btn, .rpt-filters {
+    display: none !important;
+  }
+  .app, .main, .main__scroll-area, .rpt-layout, .rpt-main, .rpt-content, .rpt-body, .rpt-table-wrap {
+    display: block !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+  .rpt-table thead { display: table-header-group; }
+  .rpt-table tbody tr { page-break-inside: avoid; }
+}
+
 /* ══════════════════════════════════════════════════════════════
    LOAN ACCOUNTS SCREEN
 ══════════════════════════════════════════════════════════════ */
