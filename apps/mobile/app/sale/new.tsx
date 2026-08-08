@@ -15,6 +15,7 @@ import { getItems, loadItems, subscribeItems, type Item } from "../../src/itemsS
 import { useSelectedCompany } from "../../src/useSelectedCompany";
 import { takeHandoffTxn } from "../../src/txnHandoff";
 import { parseNoteItems } from "../../src/invoiceHtml";
+import { useTransactionSettings } from "../../src/useTransactionSettings";
 import type { TeamMember } from "@vyapar/api-client";
 
 type LineItem = {
@@ -31,9 +32,16 @@ type LineItem = {
   tertiaryUnit?: string;
   tertiaryConversionRate?: number;
   baseSalePrice?: number;
+  discount?: number; // percent off qty*rate for this row
 };
 
 const UNITS = ["NONE", "PCS", "KG", "LTR", "MTR", "BOX", "BAG", "DOZ"];
+
+// Amount after this row's own discount — mirrors desktop's identical helper.
+function rowAmount(item: Pick<LineItem, "qty" | "rate" | "discount">): number {
+  const base = item.qty * item.rate;
+  return Number((base * (1 - (item.discount || 0) / 100)).toFixed(2));
+}
 
 // Every sellable unit for this item, biggest to smallest: tertiaryUnit (Carton) > unit
 // (Box — the item's normal stocking unit, what its sale price is denominated in) >
@@ -84,6 +92,7 @@ export default function NewSaleScreen() {
 
   const [catalog, setCatalog] = useState<Item[]>(getItems());
   const { companies, selectedCompanyId } = useSelectedCompany();
+  const { settings: txnSettings } = useTransactionSettings();
   const [selectedCompanyFilters, setSelectedCompanyFilters] = useState<string[]>(
     () => (selectedCompanyId ? [selectedCompanyId] : []),
   );
@@ -162,9 +171,20 @@ export default function NewSaleScreen() {
   const [newItemTertiaryUnit, setNewItemTertiaryUnit] = useState("");
   const [newItemTertiaryConversionRate, setNewItemTertiaryConversionRate] = useState(0);
   const [newItemBaseSalePrice, setNewItemBaseSalePrice] = useState(0);
+  // Percent is the single persisted source of truth (matches the LineItem.discount field
+  // it's saved into) — Rs and Total Amount are always derived from it fresh each render,
+  // so a later qty/rate edit can't leave a stale Rs figure behind. `*Text` fields hold raw
+  // keystrokes verbatim while their input is focused, same reason as the invoice-level
+  // Discount Rs/% pair on desktop (SaleScreen.tsx) — a controlled input whose value is
+  // recomputed every render fights typing.
+  const [newItemDiscountPct, setNewItemDiscountPct] = useState("");
+  const [newItemDiscountRsText, setNewItemDiscountRsText] = useState<string | undefined>(undefined);
+  const [newItemTotalText, setNewItemTotalText] = useState<string | undefined>(undefined);
   const [showUnitPicker, setShowUnitPicker] = useState(false);
   const [itemSearch, setItemSearch] = useState("");
   const [showCatalog, setShowCatalog] = useState(false);
+  const [showLast5Prices, setShowLast5Prices] = useState(false);
+  const [last5Prices, setLast5Prices] = useState<{ rate: number; date: string }[]>([]);
 
   // Summary state
   const [discountPct, setDiscountPct] = useState("");
@@ -193,7 +213,7 @@ export default function NewSaleScreen() {
     return matchesSearch && matchesCompany;
   });
 
-  const subtotal = items.reduce((s, i) => s + i.qty * i.rate, 0);
+  const subtotal = items.reduce((s, i) => s + rowAmount(i), 0);
   const totalQty = items.reduce((s, i) => s + i.qty, 0);
   const discountPctVal = parseFloat(discountPct) || 0;
   const discountRsVal = discountPct
@@ -260,6 +280,7 @@ export default function NewSaleScreen() {
           tertiaryUnit: (match as any)?.tertiaryUnit ?? undefined,
           tertiaryConversionRate: (match as any)?.tertiaryConversionRate ? Number((match as any).tertiaryConversionRate) : undefined,
           baseSalePrice: match?.salePrice ?? undefined,
+          discount: it.discount || 0,
         };
       });
       setItems(loadedItems);
@@ -267,7 +288,7 @@ export default function NewSaleScreen() {
       // Only the discount Rs amount is persisted (see handleSave's notes payload below) —
       // re-derive the % against the reloaded items' own subtotal, same math as
       // handleDiscountRs, just computed from freshly-parsed data instead of live state.
-      const itemsSubtotal = loadedItems.reduce((s, i) => s + i.qty * i.rate, 0);
+      const itemsSubtotal = loadedItems.reduce((s, i) => s + rowAmount(i), 0);
       const savedDiscountRs = Number(parsedNotes.discount) || 0;
       setDiscountRs(savedDiscountRs ? String(savedDiscountRs) : "");
       setDiscountPct(savedDiscountRs && itemsSubtotal ? ((savedDiscountRs / itemsSubtotal) * 100).toFixed(2) : "");
@@ -284,6 +305,76 @@ export default function NewSaleScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.editId, catalog.length]);
 
+  // ── Add Item modal: qty*rate, then Discount and Total Amount are two ways to set the
+  // same outcome — editing one back-solves the other, subtotal (qty*rate) never moves.
+  // `newItemDiscountPct` is the only persisted value; Rs and Total are derived from it
+  // fresh every render, so a later qty/rate edit can't leave a stale Rs figure behind.
+  const newItemSubtotal = (parseFloat(newItemQty) || 0) * (parseFloat(newItemRate) || 0);
+  const newItemDiscountPctVal = parseFloat(newItemDiscountPct) || 0;
+  const newItemDiscountRsVal = (newItemSubtotal * newItemDiscountPctVal) / 100;
+  const newItemTotal = newItemSubtotal - newItemDiscountRsVal;
+
+  function handleNewItemDiscPctChange(val: string) {
+    setNewItemDiscountPct(val);
+    setNewItemDiscountRsText(undefined);
+    setNewItemTotalText(undefined);
+  }
+
+  function handleNewItemDiscRsChange(val: string) {
+    setNewItemDiscountRsText(val);
+    const rs = parseFloat(val) || 0;
+    setNewItemDiscountPct(newItemSubtotal ? ((rs / newItemSubtotal) * 100).toFixed(2) : "");
+    setNewItemTotalText(undefined);
+  }
+
+  function handleNewItemDiscRsBlur() {
+    setNewItemDiscountRsText(undefined);
+  }
+
+  function displayNewItemDiscRs(): string {
+    if (newItemDiscountRsText !== undefined) return newItemDiscountRsText;
+    return newItemDiscountRsVal ? newItemDiscountRsVal.toFixed(2) : "";
+  }
+
+  // Typing a final Total Amount directly (e.g. "customer will only pay 1400") back-solves
+  // the Discount against this row's own subtotal — qty/rate/subtotal stay exactly as
+  // entered, so the listed unit price stays accurate for reporting; only the discount
+  // shows how big a markdown was actually given.
+  function handleNewItemTotalChange(val: string) {
+    setNewItemTotalText(val);
+    const total = parseFloat(val) || 0;
+    const discPct = newItemSubtotal ? ((newItemSubtotal - total) / newItemSubtotal) * 100 : 0;
+    setNewItemDiscountPct(discPct > 0 ? discPct.toFixed(2) : "");
+    setNewItemDiscountRsText(undefined);
+  }
+
+  function handleNewItemTotalBlur() {
+    setNewItemTotalText(undefined);
+  }
+
+  function displayNewItemTotal(): string {
+    if (newItemTotalText !== undefined) return newItemTotalText;
+    return newItemSubtotal ? String(newItemTotal) : "";
+  }
+
+  async function loadLast5Prices() {
+    setShowLast5Prices(true);
+    if (!newItemName.trim()) { setLast5Prices([]); return; }
+    try {
+      const sales = await api.getTransactionsByType("sale");
+      const seen: { rate: number; date: string }[] = [];
+      for (const txn of [...sales].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())) {
+        const txnItems = parseNoteItems(txn.notes);
+        const match = txnItems.find((i) => (i.name ?? "").trim().toLowerCase() === newItemName.trim().toLowerCase());
+        if (match?.rate) seen.push({ rate: match.rate, date: txn.date });
+        if (seen.length >= 5) break;
+      }
+      setLast5Prices(seen);
+    } catch {
+      setLast5Prices([]);
+    }
+  }
+
   function openAddItem() {
     setEditItemId(null);
     setNewItemName(""); setNewItemQty("1"); setNewItemUnit("NONE");
@@ -291,6 +382,7 @@ export default function NewSaleScreen() {
     setNewItemSecondaryUnit(""); setNewItemConversionRate(0);
     setNewItemTertiaryUnit(""); setNewItemTertiaryConversionRate(0);
     setNewItemBaseSalePrice(0);
+    setNewItemDiscountPct(""); setNewItemDiscountRsText(undefined); setNewItemTotalText(undefined);
     setItemSearch(""); setShowCatalog(false);
     setShowAddItem(true);
   }
@@ -306,6 +398,9 @@ export default function NewSaleScreen() {
     setNewItemTertiaryUnit(item.tertiaryUnit ?? "");
     setNewItemTertiaryConversionRate(item.tertiaryConversionRate ?? 0);
     setNewItemBaseSalePrice(item.baseSalePrice ?? 0);
+    setNewItemDiscountPct(item.discount ? String(item.discount) : "");
+    setNewItemDiscountRsText(undefined);
+    setNewItemTotalText(undefined);
     setItemSearch(item.name); setShowCatalog(false);
     setShowAddItem(true);
   }
@@ -325,6 +420,7 @@ export default function NewSaleScreen() {
       tertiaryUnit: newItemTertiaryUnit || undefined,
       tertiaryConversionRate: newItemTertiaryConversionRate || undefined,
       baseSalePrice: newItemBaseSalePrice || undefined,
+      discount: parseFloat(newItemDiscountPct) || 0,
     };
     if (editItemId) {
       setItems((prev) => prev.map((it) => (it.id === editItemId ? item : it)));
@@ -337,6 +433,7 @@ export default function NewSaleScreen() {
       setNewItemSecondaryUnit(""); setNewItemConversionRate(0);
       setNewItemTertiaryUnit(""); setNewItemTertiaryConversionRate(0);
       setNewItemBaseSalePrice(0);
+      setNewItemDiscountPct(""); setNewItemDiscountRsText(undefined); setNewItemTotalText(undefined);
       setEditItemId(null);
     } else {
       setShowAddItem(false);
@@ -358,7 +455,7 @@ export default function NewSaleScreen() {
         total,
         balance: balanceDue,
         notes: JSON.stringify({
-          items: items.map((i) => ({ name: i.name, qty: i.qty, unit: i.unit, mrp: i.mrp, rate: i.rate })),
+          items: items.map((i) => ({ name: i.name, qty: i.qty, unit: i.unit, mrp: i.mrp, rate: i.rate, discount: i.discount || 0 })),
           discount: discountRsVal,
           roundOff: roundOffAmt,
           notes,
@@ -549,7 +646,7 @@ export default function NewSaleScreen() {
                         <Text style={styles.billedItemName}>
                           #{idx + 1} {item.name}
                         </Text>
-                        <Text style={styles.billedItemAmt}>Rs {fmt4(item.qty * item.rate)}</Text>
+                        <Text style={styles.billedItemAmt}>Rs {fmt4(rowAmount(item))}</Text>
                       </View>
                       <Text style={styles.billedItemSub}>
                         Item Subtotal &nbsp; {item.qty} × {item.rate} = Rs {fmt4(item.qty * item.rate)}
@@ -1084,6 +1181,63 @@ export default function NewSaleScreen() {
                   placeholder=""
                 />
               </View>
+
+              {txnSettings.showLast5SalePrice && (
+                <TouchableOpacity style={styles.last5Link} onPress={loadLast5Prices}>
+                  <Text style={styles.last5LinkTxt}>Last 5 Sale Prices</Text>
+                  <Ionicons name="chevron-forward" size={16} color={colors.primary} />
+                </TouchableOpacity>
+              )}
+
+              <View style={styles.totalsDivider} />
+              <Text style={styles.totalsSectionTitle}>Totals & Taxes</Text>
+
+              <View style={styles.totalsRow}>
+                <Text style={styles.totalsLabel}>Subtotal (Rate x Qty)</Text>
+                <Text style={styles.totalsValue}>Rs {fmt4(newItemSubtotal)}</Text>
+              </View>
+
+              <View style={styles.totalsRow}>
+                <Text style={styles.totalsLabel}>Discount</Text>
+                <View style={styles.discGroup}>
+                  <View style={styles.discBox}>
+                    <TextInput
+                      style={styles.discInput}
+                      value={newItemDiscountPct}
+                      onChangeText={handleNewItemDiscPctChange}
+                      keyboardType="numeric"
+                      placeholder="0"
+                    />
+                    <Text style={styles.discUnit}>%</Text>
+                  </View>
+                  <View style={styles.discBox}>
+                    <Text style={styles.discUnit}>Rs</Text>
+                    <TextInput
+                      style={styles.discInput}
+                      value={displayNewItemDiscRs()}
+                      onChangeText={handleNewItemDiscRsChange}
+                      onBlur={handleNewItemDiscRsBlur}
+                      keyboardType="numeric"
+                      placeholder="0.00"
+                    />
+                  </View>
+                </View>
+              </View>
+
+              <View style={[styles.totalsRow, styles.totalAmountRow]}>
+                <Text style={styles.totalAmountLabel}>Total Amount:</Text>
+                <View style={styles.totalAmountBox}>
+                  <Text style={styles.discUnit}>Rs</Text>
+                  <TextInput
+                    style={styles.totalAmountInput}
+                    value={displayNewItemTotal()}
+                    onChangeText={handleNewItemTotalChange}
+                    onBlur={handleNewItemTotalBlur}
+                    keyboardType="numeric"
+                    placeholder="0.00"
+                  />
+                </View>
+              </View>
             </ScrollView>
 
             <View style={[styles.footer, { paddingBottom: insets.bottom + 8 }]}>
@@ -1095,6 +1249,28 @@ export default function NewSaleScreen() {
               </TouchableOpacity>
             </View>
           </KeyboardAvoidingView>
+        </View>
+      </Modal>
+
+      {/* ── Last 5 Sale Prices Sheet ── */}
+      <Modal visible={showLast5Prices} transparent animationType="slide" onRequestClose={() => setShowLast5Prices(false)}>
+        <TouchableOpacity style={styles.sheetOverlay} activeOpacity={1} onPress={() => setShowLast5Prices(false)} />
+        <View style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
+          <Text style={styles.sheetTitle}>Last 5 Sale Prices</Text>
+          {last5Prices.length === 0 ? (
+            <Text style={styles.sheetEmpty}>No previous sales found for this item.</Text>
+          ) : (
+            last5Prices.map((p, i) => (
+              <TouchableOpacity
+                key={i}
+                style={styles.sheetRow}
+                onPress={() => { setNewItemRate(String(p.rate)); setShowLast5Prices(false); }}
+              >
+                <Text style={styles.sheetRowDate}>{new Date(p.date).toLocaleDateString("en-PK", { day: "2-digit", month: "short", year: "2-digit" })}</Text>
+                <Text style={styles.sheetRowRate}>Rs {fmt4(p.rate)}</Text>
+              </TouchableOpacity>
+            ))
+          )}
         </View>
       </Modal>
     </View>
@@ -1145,6 +1321,52 @@ const styles = StyleSheet.create({
   },
   outlinedLabel: { fontSize: 11, color: colors.primary, fontWeight: "600", marginBottom: 3 },
   outlinedInput: { fontSize: 15, color: colors.text, padding: 0 },
+
+  last5Link: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4,
+    paddingVertical: 6,
+  },
+  last5LinkTxt: { fontSize: 14, fontWeight: "700", color: colors.primary },
+
+  totalsDivider: { height: 8, marginHorizontal: -16, backgroundColor: colors.bg },
+  totalsSectionTitle: { fontSize: 14, fontWeight: "700", color: colors.text },
+  totalsRow: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.borderLight,
+  },
+  totalsLabel: { fontSize: 13, color: colors.textMuted },
+  totalsValue: { fontSize: 13.5, fontWeight: "600", color: colors.text },
+
+  discGroup: { flexDirection: "row", gap: 8 },
+  discBox: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    borderWidth: 1.5, borderColor: colors.border, borderRadius: 6,
+    paddingHorizontal: 8, paddingVertical: 6,
+  },
+  discInput: { fontSize: 13.5, color: colors.text, padding: 0, minWidth: 40, textAlign: "right" },
+  discUnit: { fontSize: 12, color: colors.textMuted, fontWeight: "500" },
+
+  totalAmountRow: { borderBottomWidth: 0, paddingTop: 12 },
+  totalAmountLabel: { fontSize: 15, fontWeight: "700", color: colors.text },
+  totalAmountBox: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    borderBottomWidth: 1.5, borderColor: colors.primary, borderStyle: "dashed", paddingBottom: 3,
+  },
+  totalAmountInput: { fontSize: 18, fontWeight: "700", color: colors.text, padding: 0, minWidth: 90, textAlign: "right" },
+
+  sheetOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)" },
+  sheet: {
+    backgroundColor: "#fff", borderTopLeftRadius: 18, borderTopRightRadius: 18,
+    paddingHorizontal: 20, paddingTop: 16,
+  },
+  sheetTitle: { fontSize: 16, fontWeight: "700", color: colors.text, marginBottom: 8 },
+  sheetEmpty: { fontSize: 13, color: colors.textMuted, textAlign: "center", paddingVertical: 24 },
+  sheetRow: {
+    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+    paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: colors.borderLight,
+  },
+  sheetRowDate: { fontSize: 13, color: colors.textMuted },
+  sheetRowRate: { fontSize: 14, fontWeight: "700", color: colors.text },
 
   partyDropdown: {
     marginTop: 6, borderWidth: 1, borderColor: colors.border, borderRadius: 8,
