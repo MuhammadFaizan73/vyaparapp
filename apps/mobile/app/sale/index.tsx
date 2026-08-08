@@ -13,6 +13,7 @@ try { Voice = require("@react-native-voice/voice").default; } catch { /* not ava
 import { colors } from "../../src/theme";
 import { api, getPermissions } from "../../src/auth";
 import { buildInvoiceHtml, fmt, formatDate } from "../../src/invoiceHtml";
+import { DateRangeFilterBar, type DateRange, getRange, isWithinRange } from "../../src/components/DateRangeFilter";
 import type { Transaction, Party } from "@vyapar/api-client";
 
 type SaleRow = Transaction & { partyName: string };
@@ -100,6 +101,7 @@ export default function SaleListScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [activeFilter, setActiveFilter] = useState(0);
+  const [range, setRange] = useState<DateRange>(() => getRange("all"));
   const [sales, setSales] = useState<SaleRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -295,8 +297,9 @@ export default function SaleListScreen() {
     }
   }
 
-  // Apply status chip filter + voice filter
+  // Apply status chip filter + date range + voice filter
   const filtered = sales.filter((s) => {
+    if (!isWithinRange(s.date, range)) return false;
     if (activeFilter === 1 && s.balance <= 0) return false;
     if (activeFilter === 2 && s.balance > 0) return false;
     if (voiceFilter) {
@@ -342,6 +345,8 @@ export default function SaleListScreen() {
           </TouchableOpacity>
         </View>
       </View>
+
+      <DateRangeFilterBar range={range} onChange={setRange} />
 
       {/* Filter chips */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false}

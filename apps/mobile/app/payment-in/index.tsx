@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../src/theme";
 import { api } from "../../src/auth";
+import { DateRangeFilterBar, type DateRange, getRange, isWithinRange } from "../../src/components/DateRangeFilter";
 import type { Transaction, Party } from "@vyapar/api-client";
 
 type PiRow = Transaction & { partyName: string; colorIdx: number };
@@ -38,6 +39,7 @@ export default function PaymentInListScreen() {
 
   const [rows, setRows] = useState<PiRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [range, setRange] = useState<DateRange>(() => getRange("all"));
 
   // FAB animation
   const micPulse = useRef(new Animated.Value(1)).current;
@@ -73,12 +75,7 @@ export default function PaymentInListScreen() {
     }, [])
   );
 
-  // Today's date formatted for filter row
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-    .toLocaleDateString("en-PK", { day: "2-digit", month: "2-digit", year: "numeric" });
-  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0)
-    .toLocaleDateString("en-PK", { day: "2-digit", month: "2-digit", year: "numeric" });
+  const filtered = rows.filter((r) => isWithinRange(r.date, range));
 
   function startMicPulse() {
     Animated.loop(
@@ -119,18 +116,7 @@ export default function PaymentInListScreen() {
         </View>
 
         {/* Row 2: Date range */}
-        <View style={styles.filterRow}>
-          <TouchableOpacity style={styles.filterDropdown}>
-            <Text style={styles.filterDropdownTxt}>This month</Text>
-            <Ionicons name="chevron-down" size={13} color={colors.textMuted} />
-          </TouchableOpacity>
-          <View style={styles.dateRangeRight}>
-            <Ionicons name="calendar-outline" size={14} color={colors.textMuted} />
-            <Text style={styles.filterDropdownTxt}>{monthStart}</Text>
-            <Text style={styles.toLabel}>to</Text>
-            <Text style={styles.filterDropdownTxt}>{monthEnd}</Text>
-          </View>
-        </View>
+        <DateRangeFilterBar range={range} onChange={setRange} />
 
         {/* Row 3: Type / Status — split */}
         <View style={[styles.filterRow, { paddingHorizontal: 0 }]}>
@@ -173,9 +159,22 @@ export default function PaymentInListScreen() {
           <Text style={styles.emptyTitle}>No transactions yet</Text>
           <Text style={styles.emptySub}>Record a payment to get started.</Text>
         </View>
+      ) : filtered.length === 0 ? (
+        <View style={styles.centerWrap}>
+          <View style={styles.docIllustration}>
+            <View style={styles.docPage}>
+              <View style={styles.docLine} />
+              <View style={styles.docLine} />
+              <View style={[styles.docLine, { width: "55%" }]} />
+            </View>
+            <View style={styles.docAccent} />
+          </View>
+          <Text style={styles.emptyTitle}>No transactions in this period</Text>
+          <Text style={styles.emptySub}>Try a wider date range.</Text>
+        </View>
       ) : (
         <FlatList
-          data={rows}
+          data={filtered}
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingBottom: insets.bottom + 90 }}
           renderItem={({ item, index }) => (
@@ -273,8 +272,6 @@ const styles = StyleSheet.create({
     paddingVertical: 11, gap: 4,
   },
   filterDivider: { width: 1, height: 32, backgroundColor: colors.border },
-  dateRangeRight: { flexDirection: "row", alignItems: "center", gap: 6 },
-  toLabel: { fontSize: 12, color: colors.textMuted },
 
   /* List row */
   txnRow: {

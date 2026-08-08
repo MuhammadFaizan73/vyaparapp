@@ -10,6 +10,7 @@ import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import { colors } from "../../src/theme";
 import { api } from "../../src/auth";
+import { DateRangeFilterBar, type DateRange, getRange, isWithinRange } from "../../src/components/DateRangeFilter";
 import type { Transaction, Party } from "@vyapar/api-client";
 
 type PurchaseRow = Transaction & { partyName: string };
@@ -48,6 +49,7 @@ export default function PurchaseListScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeFilter, setActiveFilter] = useState(0);
+  const [range, setRange] = useState<DateRange>(() => getRange("all"));
   const [search, setSearch] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [shareTarget, setShareTarget] = useState<{ row: PurchaseRow; idx: number } | null>(null);
@@ -90,6 +92,7 @@ export default function PurchaseListScreen() {
 
   const FILTERS = ["All", "Unpaid", "Paid"];
   const filtered = rows.filter((r) => {
+    if (!isWithinRange(r.date, range)) return false;
     const matchFilter =
       activeFilter === 0 ||
       (activeFilter === 1 && r.balance > 0) ||
@@ -119,6 +122,8 @@ export default function PurchaseListScreen() {
           </TouchableOpacity>
         </View>
       </View>
+
+      <DateRangeFilterBar range={range} onChange={setRange} />
 
       {/* Search bar */}
       {search && (

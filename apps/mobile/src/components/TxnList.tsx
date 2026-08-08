@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../theme";
 import { api } from "../auth";
+import { DateRangeFilterBar, type DateRange, getRange, isWithinRange } from "./DateRangeFilter";
 import type { Transaction, Party } from "@vyapar/api-client";
 
 type TxnRow = Transaction & { partyName: string };
@@ -16,6 +17,7 @@ interface Props {
   title: string;
   txnType: string;
   chips?: string[];
+  dateRange?: boolean;
   emptyMessage: string;
   fabLabel: string;
   fabRoute: string;
@@ -29,10 +31,11 @@ function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-PK", { day: "2-digit", month: "short", year: "2-digit" });
 }
 
-export function TxnList({ title, txnType, chips, emptyMessage, fabLabel, fabRoute, headerRight }: Props) {
+export function TxnList({ title, txnType, chips, dateRange, emptyMessage, fabLabel, fabRoute, headerRight }: Props) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [activeChip, setActiveChip] = useState(0);
+  const [range, setRange] = useState<DateRange>(() => getRange("all"));
   const [rows, setRows] = useState<TxnRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -64,9 +67,10 @@ export function TxnList({ title, txnType, chips, emptyMessage, fabLabel, fabRout
     setRefreshing(false);
   }
 
-  /* filter by chip */
+  /* filter by chip + date range */
   const chipLabel = chips?.[activeChip]?.toLowerCase() ?? "all";
   const filtered = rows.filter((r) => {
+    if (dateRange && !isWithinRange(r.date, range)) return false;
     if (chipLabel === "all") return true;
     if (chipLabel === "open") return r.balance > 0;
     if (chipLabel === "closed" || chipLabel === "converted") return r.balance === 0;
@@ -90,6 +94,8 @@ export function TxnList({ title, txnType, chips, emptyMessage, fabLabel, fabRout
         <Text style={s.appBarTitle}>{title}</Text>
         {headerRight ?? <View style={{ width: 24 }} />}
       </View>
+
+      {dateRange && <DateRangeFilterBar range={range} onChange={setRange} />}
 
       {/* Filter chips */}
       {chips && (

@@ -8,6 +8,7 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../src/theme";
 import { api } from "../../src/auth";
+import { DateRangeFilterBar, type DateRange, getRange, isWithinRange } from "../../src/components/DateRangeFilter";
 import type { Transaction, Party } from "@vyapar/api-client";
 
 type TxnRow = Transaction & {
@@ -34,6 +35,7 @@ export default function DeliveryNoteListScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState<Tab>("All");
+  const [range, setRange] = useState<DateRange>(() => getRange("all"));
 
   /* convert-to-sale inline screen */
   const [convertRow, setConvertRow] = useState<TxnRow | null>(null);
@@ -96,6 +98,7 @@ export default function DeliveryNoteListScreen() {
   }
 
   const filtered = rows.filter((r) => {
+    if (!isWithinRange(r.date, range)) return false;
     const matchTab =
       tab === "All" ||
       (tab === "Open Note" && r.balance > 0) ||
@@ -180,6 +183,8 @@ export default function DeliveryNoteListScreen() {
         <Text style={s.appBarTitle}>Delivery Note Details</Text>
         <View style={{ width: 24 }} />
       </View>
+
+      <DateRangeFilterBar range={range} onChange={setRange} />
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false}
         style={s.chipBar} contentContainerStyle={s.chipContent}>

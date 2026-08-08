@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../src/theme";
 import { api } from "../../src/auth";
+import { DateRangeFilterBar, type DateRange, getRange, isWithinRange } from "../../src/components/DateRangeFilter";
 import type { Transaction, Party } from "@vyapar/api-client";
 
 type TxnRow = Transaction & { partyName: string };
@@ -28,6 +29,7 @@ export default function ProformaInvoiceListScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeChip, setActiveChip] = useState(0);
+  const [range, setRange] = useState<DateRange>(() => getRange("all"));
   const [search, setSearch] = useState("");
   const [converting, setConverting] = useState<string | null>(null);
 
@@ -94,6 +96,7 @@ export default function ProformaInvoiceListScreen() {
   /* filter */
   const chipKey = CHIPS[activeChip].toLowerCase();
   const filtered = rows.filter((r) => {
+    if (!isWithinRange(r.date, range)) return false;
     const matchChip =
       chipKey === "all" ||
       (chipKey.startsWith("open") && r.balance > 0) ||
@@ -161,6 +164,8 @@ export default function ProformaInvoiceListScreen() {
         <Text style={s.appBarTitle}>Proforma Invoice Details</Text>
         <View style={{ width: 24 }} />
       </View>
+
+      <DateRangeFilterBar range={range} onChange={setRange} />
 
       {/* Filter chips */}
       <View style={s.chipsBar}>
