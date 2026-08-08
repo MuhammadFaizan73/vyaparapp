@@ -438,6 +438,139 @@ const af = StyleSheet.create({
   txt: { fontSize: 11, color: colors.primary, fontWeight: "600" },
 });
 
+// ─── Export row builders ────────────────────────────────────────────────────
+// Each report's backend response has its own field names and shape — a single
+// "guess the common field name" mapper only ever matched Sale/Purchase (the
+// two it was written against) and silently produced empty or zeroed-out
+// exports for every other report. One explicit builder per report type keeps
+// the exported PDF/Excel columns accurate to what that report actually returns.
+
+const GENERIC_ROW_BUILDER = (data: any): ExportRow[] =>
+  (data.transactions ?? data.parties ?? data.items ?? data.categories ?? data.orders ?? data.rates ?? [])
+    .map((r: any) => ({
+      Party:       r.partyName  ?? r.name    ?? "–",
+      Date:        r.date       ? fmt(r.date) : "–",
+      "Invoice #": r.invoiceNo  ?? r.refNo   ?? r.number ?? "–",
+      Type:        r.type       ? txnLabel(r.type) : "–",
+      Total:       r.amount     ?? r.total   ?? r.saleAmount ?? r.stockValue ?? 0,
+      Balance:     r.balance    ?? 0,
+      Status:      r.status     ?? "–",
+    }));
+
+const REPORT_ROW_BUILDERS: Record<string, (data: any) => ExportRow[]> = {
+  sale: (data) => (data.transactions ?? []).map((r: any) => ({
+    Date: fmt(r.date), "Invoice #": r.invoiceNo ?? "–", Party: r.partyName ?? "–",
+    Type: txnLabel(r.type), "Payment Type": r.paymentType ?? "–",
+    Amount: r.amount ?? 0, Balance: r.balance ?? 0, Booker: r.bookerName ?? "–", Status: r.status ?? "–",
+  })),
+  purchase: (data) => (data.transactions ?? []).map((r: any) => ({
+    Date: fmt(r.date), "Invoice #": r.invoiceNo ?? "–", Party: r.partyName ?? "–",
+    Type: txnLabel(r.type), "Payment Type": r.paymentType ?? "–",
+    Amount: r.amount ?? 0, Balance: r.balance ?? 0, Status: r.status ?? "–",
+  })),
+  "day-book": (data) => (data.transactions ?? []).map((r: any) => ({
+    Date: data.date ? fmt(data.date) : "–", "Ref #": r.refNo ?? "–", Party: r.name ?? "–",
+    Type: txnLabel(r.type), "Payment Type": r.paymentType ?? "–",
+    "Money In": r.moneyIn ?? 0, "Money Out": r.moneyOut ?? 0, Total: r.total ?? 0,
+  })),
+  "all-transactions": (data) => (data.transactions ?? []).map((r: any) => ({
+    Date: fmt(r.date), "Ref #": r.refNo ?? "–", Party: r.partyName ?? "–", Type: txnLabel(r.type),
+    "Payment Type": r.paymentType ?? "–", Total: r.total ?? 0, Received: r.received ?? 0,
+    Balance: r.balance ?? 0, Status: r.status ?? "–",
+  })),
+  "profit-and-loss": (data) => [
+    { Particular: "Sale", Amount: data.saleTotal ?? 0 },
+    { Particular: "Less: Credit Note", Amount: data.creditNoteTotal ?? 0 },
+    { Particular: "Purchase", Amount: data.purchaseTotal ?? 0 },
+    { Particular: "Less: Debit Note", Amount: data.debitNoteTotal ?? 0 },
+    { Particular: "Opening Stock", Amount: data.openingStockValue ?? 0 },
+    { Particular: "Closing Stock", Amount: data.closingStockValue ?? 0 },
+    { Particular: "Gross Profit", Amount: data.grossProfit ?? 0 },
+    { Particular: "Expenses", Amount: data.expenseTotal ?? 0 },
+    { Particular: "Net Profit", Amount: data.netProfit ?? 0 },
+  ],
+  "cash-flow": (data) => [
+    { Date: "–", "Ref #": "–", Party: "Opening Cash", Category: "–", Type: "–", "Cash In": 0, "Cash Out": 0, "Running Balance": data.openingCash ?? 0 },
+    ...(data.transactions ?? []).map((r: any) => ({
+      Date: fmt(r.date), "Ref #": r.refNo ?? "–", Party: r.name ?? "–", Category: r.category || "–",
+      Type: txnLabel(r.type), "Cash In": r.cashIn ?? 0, "Cash Out": r.cashOut ?? 0,
+      "Running Balance": r.runningBalance ?? 0,
+    })),
+    { Date: "–", "Ref #": "–", Party: "Closing Cash", Category: "–", Type: "–", "Cash In": data.totalCashIn ?? 0, "Cash Out": data.totalCashOut ?? 0, "Running Balance": data.closingCash ?? 0 },
+  ],
+  "party-statement": (data) => (data.transactions ?? []).map((r: any) => ({
+    Date: fmt(r.date), Party: r.partyName ?? "–", Type: txnLabel(r.type), "Ref #": r.refNo ?? "–",
+    "Payment Type": r.paymentType ?? "–", Total: r.total ?? 0, Received: r.received ?? 0, Balance: r.txnBalance ?? 0,
+  })),
+  "all-parties": (data) => (data.parties ?? []).map((r: any) => ({
+    Party: r.name ?? "–", Phone: r.phone || "–", Email: r.email || "–", Type: r.partyType ?? "–",
+    Receivable: r.receivableBalance ?? 0, Payable: r.payableBalance ?? 0, "Credit Limit": r.creditLimit ?? 0,
+  })),
+  "stock-summary": (data) => (data.items ?? []).map((r: any) => ({
+    Item: r.name ?? "–", Unit: r.unit || "–", "Stock Qty": r.stockQty ?? 0,
+    "Sale Price": r.salePrice ?? 0, "Purchase Price": r.purchasePrice ?? 0, "Stock Value": r.stockValue ?? 0,
+  })),
+  "low-stock": (data) => (data.items ?? []).map((r: any) => ({
+    Item: r.name ?? "–", "Stock Qty": r.stockQty ?? 0, "Min Stock Qty": r.minStockQty ?? 0, "Stock Value": r.stockValue ?? 0,
+  })),
+  "stock-detail": (data) => (data.items ?? []).map((r: any) => ({
+    Item: r.name ?? "–", "Beginning Qty": r.beginningQty ?? 0, "Qty In": r.qtyIn ?? 0,
+    "Purchase Amount": r.purchaseAmount ?? 0, "Qty Out": r.qtyOut ?? 0, "Sale Amount": r.saleAmount ?? 0,
+    "Closing Qty": r.closingQty ?? 0,
+  })),
+  "item-detail": (data) => (data.items ?? []).map((r: any) => ({
+    Date: r.date ? fmt(r.date) : "–", "Sale Qty": r.saleQty ?? 0, "Purchase Qty": r.purchaseQty ?? 0,
+    "Adjustment Qty": r.adjustmentQty ?? 0, "Closing Qty": r.closingQty ?? 0,
+  })),
+  "item-wise-pnl": (data) => (data.items ?? []).map((r: any) => ({
+    Item: r.name ?? "–", Sale: r.sale ?? 0, "Credit Note": r.creditNote ?? 0, Purchase: r.purchase ?? 0,
+    "Debit Note": r.debitNote ?? 0, "Opening Stock": r.openingStock ?? 0, "Closing Stock": r.closingStock ?? 0,
+    "Net Profit": r.netProfit ?? 0,
+  })),
+  "item-category-pnl": (data) => (data.categories ?? []).map((r: any) => ({
+    Category: r.name ?? "–", Sale: r.sale ?? 0, Purchase: r.purchase ?? 0, "Net Profit": r.netProfit ?? 0,
+  })),
+  "sale-purchase-by-party": (data) => (data.parties ?? []).map((r: any) => ({
+    Party: r.partyName ?? "–", "Sale Amount": r.saleAmount ?? 0, "Purchase Amount": r.purchaseAmount ?? 0,
+  })),
+  "sale-purchase-by-party-group": (data) => (data.groups ?? []).map((r: any) => ({
+    Group: r.groupName ?? "–", "Sale Amount": r.saleAmount ?? 0, "Purchase Amount": r.purchaseAmount ?? 0,
+  })),
+  "sale-purchase-by-item-category": (data) => (data.categories ?? []).map((r: any) => ({
+    Category: r.category ?? "–", "Sale Qty": r.saleQty ?? 0, "Sale Amount": r.saleAmount ?? 0,
+    "Purchase Qty": r.purchaseQty ?? 0, "Purchase Amount": r.purchaseAmount ?? 0,
+  })),
+  "stock-summary-by-category": (data) => (data.categories ?? []).map((r: any) => ({
+    Category: r.category ?? "–", "Stock Qty": r.stockQty ?? 0, "Stock Value": r.stockValue ?? 0,
+  })),
+  expense: (data) => (data.transactions ?? []).map((r: any) => ({
+    Date: fmt(r.date), "Expense #": r.expNo ?? "–", Party: r.party ?? "–", Category: r.category || "–",
+    "Payment Type": r.paymentType ?? "–", Amount: r.amount ?? 0, "Balance Due": r.balanceDue ?? 0, Status: r.status ?? "–",
+  })),
+  "expense-category": (data) => (data.categories ?? []).map((r: any) => ({
+    Category: r.category ?? "–", Type: r.categoryType ?? "–", Amount: r.amount ?? 0,
+  })),
+  "expense-item": (data) => (data.items ?? []).map((r: any) => ({
+    Item: r.expenseItem ?? "–", "Unit Price": r.unitPrice ?? 0, Quantity: r.quantity ?? 0, Amount: r.amount ?? 0,
+  })),
+  "discount-report": (data) => (data.parties ?? []).map((r: any) => ({
+    Party: r.name ?? "–", "Sale Discount": r.saleDiscount ?? 0, "Purchase Discount": r.purchaseDiscount ?? 0,
+  })),
+  "tax-report": (data) => (data.parties ?? []).map((r: any) => ({
+    Party: r.name ?? "–", "Sale Tax": r.saleTax ?? 0, "Purchase Tax": r.purchaseTax ?? 0,
+  })),
+  "sale-purchase-orders": (data) => (data.orders ?? []).map((r: any) => ({
+    Date: fmt(r.date), "Order #": r.orderNo ?? "–", Party: r.name ?? "–", Type: txnLabel(r.type),
+    Status: r.status ?? "–", Total: r.total ?? 0, Advance: r.advance ?? 0, Balance: r.balance ?? 0,
+  })),
+  "sale-purchase-order-items": (data) => (data.items ?? []).map((r: any) => ({
+    Item: r.name ?? "–", Qty: r.qty ?? 0, Amount: r.amount ?? 0,
+  })),
+  "bank-statement": (data) => (data.transactions ?? []).map((r: any) => ({
+    Date: r.date ? fmt(r.date) : "–", Description: r.description ?? "–", Amount: r.amount ?? 0, Balance: r.balance ?? 0,
+  })),
+};
+
 // ─── Shared hooks ──────────────────────────────────────────────────────────────
 
 function useReport(
@@ -467,18 +600,8 @@ function useReport(
 
   useEffect(() => {
     if (!data || !onDataLoaded) return;
-    const rows: ExportRow[] =
-      (data.transactions ?? data.parties ?? data.items ?? data.categories ?? data.orders ?? data.rates ?? [])
-        .map((r: any) => ({
-          Party:       r.partyName  ?? r.name    ?? "–",
-          Date:        r.date       ? fmt(r.date) : "–",
-          "Invoice #": r.invoiceNo  ?? r.refNo   ?? r.number ?? "–",
-          Type:        r.type       ? txnLabel(r.type) : "–",
-          Total:       r.amount     ?? r.total   ?? r.saleAmount ?? r.stockValue ?? 0,
-          Balance:     r.balance    ?? 0,
-          Status:      r.status     ?? "–",
-        }));
-    onDataLoaded(rows);
+    const build = REPORT_ROW_BUILDERS[type] ?? GENERIC_ROW_BUILDER;
+    onDataLoaded(build(data));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
