@@ -52,6 +52,11 @@ export class TransactionsController {
     return this.transactionsService.openingBalance(req.tenantId, type, before).then((total) => ({ total }));
   }
 
+  @Get(":id")
+  findOne(@Req() req: AuthedRequest, @Param("id") id: string) {
+    return this.transactionsService.findOne(req.tenantId, id);
+  }
+
   @Post()
   create(@Req() req: AuthedRequest, @Body() dto: CreateTransactionDto) {
     return this.transactionsService.create(req.tenantId, dto);

@@ -217,6 +217,11 @@ export class VyaparApiClient {
     return data;
   }
 
+  async getTransaction(id: string): Promise<Transaction> {
+    const { data } = await this.http.get<Transaction>(`/transactions/${id}`);
+    return data;
+  }
+
   async getTransactionsByType(
     type: string,
     opts?: { take?: number; skip?: number; from?: string; to?: string; companyId?: string },
