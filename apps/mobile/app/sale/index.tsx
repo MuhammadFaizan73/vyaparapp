@@ -12,6 +12,7 @@ let Voice: any = null;
 try { Voice = require("@react-native-voice/voice").default; } catch { /* not available in Expo Go */ }
 import { colors } from "../../src/theme";
 import { api, getPermissions } from "../../src/auth";
+import { buildInvoiceHtml, fmt, formatDate } from "../../src/invoiceHtml";
 import type { Transaction, Party } from "@vyapar/api-client";
 
 type SaleRow = Transaction & { partyName: string };
@@ -39,23 +40,6 @@ let colorIdx = 0;
 function partyHue(name: string) {
   if (!PARTY_COLORS[name]) { PARTY_COLORS[name] = TINTS[colorIdx % TINTS.length]; colorIdx++; }
   return PARTY_COLORS[name];
-}
-
-function fmt(n: number) { return n.toLocaleString("en-PK", { minimumFractionDigits: 4, maximumFractionDigits: 4 }); }
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-PK", { day: "2-digit", month: "short", year: "2-digit" });
-}
-
-function numberToWords(n: number): string {
-  const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
-    "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
-  const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
-  if (n === 0) return "Zero";
-  if (n < 20) return ones[n];
-  if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 ? " " + ones[n % 10] : "");
-  if (n < 1000) return ones[Math.floor(n / 100)] + " Hundred" + (n % 100 ? " " + numberToWords(n % 100) : "");
-  if (n < 100000) return numberToWords(Math.floor(n / 1000)) + " Thousand" + (n % 1000 ? " " + numberToWords(n % 1000) : "");
-  return numberToWords(Math.floor(n / 100000)) + " Lakh" + (n % 100000 ? " " + numberToWords(n % 100000) : "");
 }
 
 // Parse spoken text into structured filters.
@@ -110,80 +94,6 @@ function parseVoiceCommand(text: string): VoiceFilter | null {
   }
 
   return filter;
-}
-
-function buildInvoiceHtml(sale: SaleRow, idx: number): string {
-  const received = sale.total - sale.balance;
-  const amountWords = numberToWords(Math.round(sale.total)) + " Rupees only";
-  return `
-<!DOCTYPE html><html><head><meta charset="utf-8"/>
-<style>
-  body { font-family: Arial, sans-serif; font-size: 11px; color: #222; margin: 0; padding: 20px; }
-  .company { font-weight: bold; font-size: 14px; }
-  .phone { color: #555; font-size: 10px; margin-bottom: 4px; }
-  hr { border: none; border-top: 1px solid #aaa; margin: 6px 0; }
-  .title { text-align: center; color: #6366f1; font-size: 15px; font-weight: bold; margin: 8px 0; }
-  .two-col { display: flex; justify-content: space-between; margin: 8px 0; }
-  .bill-to { font-weight: bold; }
-  .inv-details { text-align: right; }
-  table { width: 100%; border-collapse: collapse; margin: 10px 0; }
-  thead tr { background: #6366f1; color: #fff; }
-  thead th { padding: 6px 8px; text-align: left; font-size: 10px; }
-  tbody td { padding: 5px 8px; border-bottom: 1px solid #eee; }
-  .total-row td { font-weight: bold; }
-  .summary { display: flex; justify-content: space-between; margin-top: 10px; }
-  .words { flex: 1; }
-  .amounts { text-align: right; min-width: 200px; }
-  .amounts table { margin: 0; }
-  .amounts td { padding: 2px 6px; }
-  .highlight { background: #6366f1; color: #fff; font-weight: bold; }
-  .footer-sig { text-align: right; margin-top: 40px; font-weight: bold; }
-  .footer-brand { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; color: #6366f1; font-size: 10px; }
-</style></head><body>
-  <div class="company">Godigi</div>
-  <div class="phone">Phone no.: ${sale.partyName}</div>
-  <hr/>
-  <div class="title">Invoice</div>
-  <div class="two-col">
-    <div>
-      <div style="font-size:10px;color:#555;">Bill To</div>
-      <div class="bill-to">${sale.partyName}</div>
-    </div>
-    <div class="inv-details">
-      <div style="font-size:10px;color:#555;">Invoice Details</div>
-      <div>Invoice No.: ${idx + 1}</div>
-      <div>Date: ${formatDate(sale.date)}</div>
-    </div>
-  </div>
-  <table>
-    <thead><tr>
-      <th>#</th><th>Item name</th><th>Quantity</th><th>Unit</th><th>Price/ Unit</th><th>Amount</th>
-    </tr></thead>
-    <tbody>
-      <tr><td>1</td><td>—</td><td>1</td><td>—</td><td>Rs ${fmt(sale.total)}</td><td>Rs ${fmt(sale.total)}</td></tr>
-      <tr class="total-row"><td colspan="3"><strong>Total</strong></td><td>1</td><td></td><td><strong>Rs ${fmt(sale.total)}</strong></td></tr>
-    </tbody>
-  </table>
-  <div class="summary">
-    <div class="words">
-      <div><strong>Invoice Amount In Words</strong></div>
-      <div>${amountWords}</div>
-      <br/>
-      <div><strong>Terms And Conditions</strong></div>
-      <div>Thanks for doing business with us!</div>
-    </div>
-    <div class="amounts">
-      <table>
-        <tr><td>Sub Total</td><td>Rs ${fmt(sale.total)}</td></tr>
-        <tr class="highlight"><td>Total</td><td>Rs ${fmt(sale.total)}</td></tr>
-        <tr><td>Received</td><td>Rs ${fmt(received)}</td></tr>
-        <tr><td>Balance</td><td>Rs ${fmt(sale.balance)}</td></tr>
-      </table>
-    </div>
-  </div>
-  <div class="footer-sig">For: Godigi<br/><br/><br/>Authorized Signatory</div>
-  <div class="footer-brand"><span>▼ Godigi</span></div>
-</body></html>`;
 }
 
 export default function SaleListScreen() {
@@ -332,7 +242,7 @@ export default function SaleListScreen() {
 
   async function handlePrint(sale: SaleRow, idx: number) {
     try {
-      await Print.printAsync({ html: buildInvoiceHtml(sale, idx) });
+      await Print.printAsync({ html: buildInvoiceHtml(sale, idx + 1) });
     } catch {
       Alert.alert("Print failed", "Could not open printer.");
     }
@@ -340,7 +250,7 @@ export default function SaleListScreen() {
 
   async function handleSharePdf(sale: SaleRow, idx: number) {
     try {
-      const { uri } = await Print.printToFileAsync({ html: buildInvoiceHtml(sale, idx) });
+      const { uri } = await Print.printToFileAsync({ html: buildInvoiceHtml(sale, idx + 1) });
       await Sharing.shareAsync(uri, { mimeType: "application/pdf", dialogTitle: "Share Invoice" });
     } catch {
       Alert.alert("Error", "Could not generate PDF.");

@@ -51,7 +51,10 @@ function CompanyBanner() {
   } = useSelectedCompany();
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<CompanyView>({ level: "root" });
-  if (companies.length < 2 && distributors.length === 0) return null;
+  // Desktop's equivalent dropdown is always visible, even for a single-company tenant —
+  // it's the only way to confirm/select that company. Only hide here if there's truly
+  // nothing to pick (a brand-new tenant whose default Company row hasn't loaded yet).
+  if (companies.length === 0 && distributors.length === 0) return null;
 
   function pick(fn: () => void) {
     fn();

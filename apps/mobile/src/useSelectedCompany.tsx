@@ -88,6 +88,19 @@ export function SelectedCompanyProvider({ children }: { children: ReactNode }) {
     void refreshCompanies();
   }, [refreshCompanies]);
 
+  // Every tenant gets at least one Company row at registration, but nothing ever
+  // auto-selected it here — combined with the switcher being hidden below 2 companies
+  // (see CompanyBanner), a single-company tenant had no way to ever set
+  // selectedCompanyId on mobile, so every Sale/Party/Item save requiring a company
+  // failed. Auto-pick the sole company the same way a user would if they could.
+  useEffect(() => {
+    if (loading) return;
+    if (companies.length === 1 && !selectedCompanyId && !selectedBranchId && !selectedDistributorId) {
+      setSelectedCompanyId(companies[0].id);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companies, loading]);
+
   // If a previously-selected Distributor/Branch/Company was deleted, fall back to
   // "All" at that level instead of silently filtering everything down to zero rows.
   useEffect(() => {

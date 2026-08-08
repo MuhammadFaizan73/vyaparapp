@@ -1,14 +1,18 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   View, Text, TextInput, TouchableOpacity, FlatList,
   StyleSheet, ActivityIndicator, RefreshControl, Modal,
-  ScrollView, Pressable,
+  ScrollView, Pressable, Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import * as Print from "expo-print";
+import * as Sharing from "expo-sharing";
 import { colors } from "../../src/theme";
-import { api } from "../../src/auth";
+import { api, getPermissions } from "../../src/auth";
+import { setHandoffTxn } from "../../src/txnHandoff";
+import { buildInvoiceHtml } from "../../src/invoiceHtml";
 import type { Transaction, Party } from "@vyapar/api-client";
 
 type Tab = "txn" | "party";
@@ -39,14 +43,82 @@ function fmtAmt(n: number) {
   return n.toLocaleString("en-PK", { minimumFractionDigits: 4, maximumFractionDigits: 4 });
 }
 
+// Only Sale has a mobile creation/edit screen today — other types can still be viewed and
+// exported, but editing stays a desktop-only action until those screens exist on mobile too.
+const EDITABLE_TYPES = new Set(["sale"]);
+
 // Hoisted to module scope (not defined inside HomeScreen) — a component redefined on every
 // render of its parent gets a new function identity each time, so React treats it as a
 // different component type and remounts every visible FlatList row on each keystroke in the
 // search box instead of diffing them normally.
-function TxnCard({ item }: { item: TxnRow }) {
+function TxnCard({ item, canEdit, canDelete, onChanged }: {
+  item: TxnRow; canEdit: boolean; canDelete: boolean; onChanged: () => void;
+}) {
+  const router = useRouter();
   const badge = getBadge(item.type, item.balance);
+  const [busy, setBusy] = useState<"download" | "share" | "delete" | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  function openDetail() {
+    setHandoffTxn(item);
+    router.push(`/txn/${item.id}` as never);
+  }
+
+  async function handleDownload() {
+    setBusy("download");
+    try {
+      await Print.printAsync({ html: buildInvoiceHtml(item, item.number ?? item.id.slice(0, 8)) });
+    } catch {
+      Alert.alert("Error", "Could not open printer.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleShare() {
+    setBusy("share");
+    try {
+      const { uri } = await Print.printToFileAsync({ html: buildInvoiceHtml(item, item.number ?? item.id.slice(0, 8)) });
+      await Sharing.shareAsync(uri, { mimeType: "application/pdf", dialogTitle: "Share Invoice" });
+    } catch {
+      Alert.alert("Error", "Could not generate PDF.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function handleEdit() {
+    setMenuOpen(false);
+    setHandoffTxn(item);
+    router.push({ pathname: "/sale/new", params: { editId: item.id } } as never);
+  }
+
+  function handleDelete() {
+    setMenuOpen(false);
+    Alert.alert(
+      "Delete transaction?",
+      `This will permanently delete this ${item.type.replace(/_/g, " ")} for ${item.partyName}.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete", style: "destructive", onPress: async () => {
+            setBusy("delete");
+            try {
+              await api.deleteTransaction(item.id);
+              onChanged();
+            } catch {
+              Alert.alert("Error", "Could not delete this transaction.");
+            } finally {
+              setBusy(null);
+            }
+          },
+        },
+      ],
+    );
+  }
+
   return (
-    <View style={s.card}>
+    <TouchableOpacity style={s.card} onPress={openDetail} activeOpacity={0.8}>
       <View style={s.cardTop}>
         <View style={{ flex: 1 }}>
           <Text style={s.cardParty} numberOfLines={1}>{item.partyName}</Text>
@@ -71,18 +143,41 @@ function TxnCard({ item }: { item: TxnRow }) {
           </Text>
         </View>
         <View style={s.cardActions}>
-          <TouchableOpacity style={s.actionBtn} hitSlop={8}>
-            <Ionicons name="print-outline" size={18} color={colors.textMuted} />
+          <TouchableOpacity style={s.actionBtn} hitSlop={8} onPress={handleDownload} disabled={busy !== null}>
+            {busy === "download" ? <ActivityIndicator size="small" color={colors.textMuted} /> : <Ionicons name="print-outline" size={18} color={colors.textMuted} />}
           </TouchableOpacity>
-          <TouchableOpacity style={s.actionBtn} hitSlop={8}>
-            <Ionicons name="share-outline" size={18} color={colors.textMuted} />
+          <TouchableOpacity style={s.actionBtn} hitSlop={8} onPress={handleShare} disabled={busy !== null}>
+            {busy === "share" ? <ActivityIndicator size="small" color={colors.textMuted} /> : <Ionicons name="share-outline" size={18} color={colors.textMuted} />}
           </TouchableOpacity>
-          <TouchableOpacity style={s.actionBtn} hitSlop={8}>
+          <TouchableOpacity style={s.actionBtn} hitSlop={8} onPress={() => setMenuOpen(true)} disabled={busy !== null}>
             <Ionicons name="ellipsis-vertical" size={18} color={colors.textMuted} />
           </TouchableOpacity>
         </View>
       </View>
-    </View>
+
+      <Modal visible={menuOpen} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setMenuOpen(false)}>
+        <Pressable style={s.menuOverlay} onPress={() => setMenuOpen(false)}>
+          <View style={s.menuSheet}>
+            <TouchableOpacity style={s.menuRow} onPress={() => { setMenuOpen(false); openDetail(); }}>
+              <Ionicons name="eye-outline" size={19} color={colors.text} />
+              <Text style={s.menuLabel}>View</Text>
+            </TouchableOpacity>
+            {canEdit && EDITABLE_TYPES.has(item.type) && (
+              <TouchableOpacity style={s.menuRow} onPress={handleEdit}>
+                <Ionicons name="create-outline" size={19} color={colors.text} />
+                <Text style={s.menuLabel}>Edit</Text>
+              </TouchableOpacity>
+            )}
+            {canDelete && (
+              <TouchableOpacity style={s.menuRow} onPress={handleDelete}>
+                <Ionicons name="trash-outline" size={19} color="#dc2626" />
+                <Text style={[s.menuLabel, { color: "#dc2626" }]}>Delete</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </Pressable>
+      </Modal>
+    </TouchableOpacity>
   );
 }
 
@@ -178,6 +273,15 @@ export default function HomeScreen() {
   const [companyName, setCompanyName] = useState("My Company");
   const [showAddTxn, setShowAddTxn] = useState(false);
   const [showMoreOptions, setShowMoreOptions] = useState(false);
+  const [canEditSale, setCanEditSale] = useState(true);
+  const [canDeleteSale, setCanDeleteSale] = useState(true);
+
+  useEffect(() => {
+    getPermissions().then((perms) => {
+      setCanEditSale(perms === null || perms.includes("sale_edit_own") || perms.includes("sale_edit_all"));
+      setCanDeleteSale(perms === null || perms.includes("sale_delete"));
+    });
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -325,7 +429,9 @@ export default function HomeScreen() {
           keyExtractor={(r) => r.id}
           contentContainerStyle={[s.list, filteredTxns.length === 0 && s.listEmpty]}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
-          renderItem={({ item }) => <TxnCard item={item} />}
+          renderItem={({ item }) => (
+            <TxnCard item={item} canEdit={canEditSale} canDelete={canDeleteSale} onChanged={load} />
+          )}
           ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
           ListEmptyComponent={
             <View style={s.emptyWrap}>
@@ -463,6 +569,11 @@ export default function HomeScreen() {
 
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#f0f2f5" },
+
+  menuOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.35)", justifyContent: "flex-end" },
+  menuSheet: { backgroundColor: "#fff", borderTopLeftRadius: 18, borderTopRightRadius: 18, paddingVertical: 8, paddingBottom: 24 },
+  menuRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#f0f2f5" },
+  menuLabel: { fontSize: 14.5, fontWeight: "500", color: colors.text },
 
   appBar: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",

@@ -13,6 +13,8 @@ import { useParties } from "../../src/useParties";
 import { api } from "../../src/auth";
 import { getItems, loadItems, subscribeItems, type Item } from "../../src/itemsStore";
 import { useSelectedCompany } from "../../src/useSelectedCompany";
+import { takeHandoffTxn } from "../../src/txnHandoff";
+import { parseNoteItems } from "../../src/invoiceHtml";
 import type { TeamMember } from "@vyapar/api-client";
 
 type LineItem = {
@@ -76,7 +78,9 @@ export default function NewSaleScreen() {
     prefillPartyId?: string;
     prefillItems?: string;
     prefillNotes?: string;
+    editId?: string;
   }>();
+  const isEdit = Boolean(params.editId);
 
   const [catalog, setCatalog] = useState<Item[]>(getItems());
   const { companies, selectedCompanyId } = useSelectedCompany();
@@ -214,6 +218,72 @@ export default function NewSaleScreen() {
   const receivedAmtVal = parseFloat(receivedAmt) || 0;
   const balanceDue = received ? Math.max(0, total - receivedAmtVal) : total;
 
+  const [loadingEdit, setLoadingEdit] = useState(isEdit);
+
+  // Prefill every field from the transaction being edited. The handoff store (stashed by
+  // whichever screen navigated here) avoids a redundant fetch; a deep link or app restart
+  // falls back to scanning the full list since there's no GET /transactions/:id endpoint.
+  useEffect(() => {
+    if (!params.editId) return;
+    const handed = takeHandoffTxn(params.editId);
+    const load = handed
+      ? Promise.resolve(handed)
+      : api.getAllTransactions().then((all) => {
+          const found = all.find((t) => t.id === params.editId);
+          if (!found) return null;
+          const partyName = parties.find((p) => p.id === found.partyId)?.name ?? "";
+          return { ...found, partyName };
+        });
+
+    load.then((txn) => {
+      if (!txn) { Alert.alert("Not found", "Could not load this invoice."); router.back(); return; }
+
+      setCustomer(txn.partyName);
+      setInvoiceDateObj(new Date(txn.date));
+      if (txn.companyId) setSelectedCompanyFilters([txn.companyId]);
+      setBookerId(txn.bookerId ?? "");
+
+      let parsedNotes: any = {};
+      try { parsedNotes = JSON.parse(txn.notes ?? "{}"); } catch { parsedNotes = {}; }
+
+      const loadedItems: LineItem[] = parseNoteItems(txn.notes).map((it, idx) => {
+        const match = catalog.find((c) => c.name.toLowerCase() === (it.name ?? "").toLowerCase());
+        return {
+          id: String(idx),
+          name: it.name ?? "",
+          mrp: it.mrp ?? 0,
+          qty: it.qty ?? 1,
+          unit: it.unit ?? "NONE",
+          rate: it.rate ?? 0,
+          secondaryUnit: match?.secondaryUnit ?? undefined,
+          conversionRate: match?.conversionRate ? Number(match.conversionRate) : undefined,
+          tertiaryUnit: (match as any)?.tertiaryUnit ?? undefined,
+          tertiaryConversionRate: (match as any)?.tertiaryConversionRate ? Number((match as any).tertiaryConversionRate) : undefined,
+          baseSalePrice: match?.salePrice ?? undefined,
+        };
+      });
+      setItems(loadedItems);
+
+      // Only the discount Rs amount is persisted (see handleSave's notes payload below) —
+      // re-derive the % against the reloaded items' own subtotal, same math as
+      // handleDiscountRs, just computed from freshly-parsed data instead of live state.
+      const itemsSubtotal = loadedItems.reduce((s, i) => s + i.qty * i.rate, 0);
+      const savedDiscountRs = Number(parsedNotes.discount) || 0;
+      setDiscountRs(savedDiscountRs ? String(savedDiscountRs) : "");
+      setDiscountPct(savedDiscountRs && itemsSubtotal ? ((savedDiscountRs / itemsSubtotal) * 100).toFixed(2) : "");
+      setNotes(typeof parsedNotes.notes === "string" ? parsedNotes.notes : "");
+
+      const receivedNow = txn.total - txn.balance;
+      if (receivedNow > 0) { setReceived(true); setReceivedAmt(String(receivedNow)); }
+
+      setLoadingEdit(false);
+    }).catch(() => {
+      Alert.alert("Error", "Could not load this invoice.");
+      router.back();
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.editId, catalog.length]);
+
   function openAddItem() {
     setEditItemId(null);
     setNewItemName(""); setNewItemQty("1"); setNewItemUnit("NONE");
@@ -282,9 +352,8 @@ export default function NewSaleScreen() {
     }
     setSaving(true);
     try {
-      const sale: any = await api.createTransaction({
+      const payload = {
         partyId: selectedParty.id,
-        type: "sale",
         date: invoiceDateObj.toISOString(),
         total,
         balance: balanceDue,
@@ -296,7 +365,15 @@ export default function NewSaleScreen() {
         }),
         companyId: selectedCompanyId ?? undefined,
         bookerId: bookerId || undefined,
-      });
+      };
+
+      if (params.editId) {
+        await api.updateTransaction(params.editId, payload);
+        router.back();
+        return;
+      }
+
+      const sale: any = await api.createTransaction({ ...payload, type: "sale" });
 
       if (params.fromDeliveryNoteId) {
         try {
@@ -328,7 +405,7 @@ export default function NewSaleScreen() {
         <TouchableOpacity onPress={() => router.back()} hitSlop={8}>
           <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.appBarTitle}>Sale</Text>
+        <Text style={styles.appBarTitle}>{isEdit ? "Edit Sale" : "Sale"}</Text>
         <View style={styles.modeToggle}>
           <TouchableOpacity
             style={[styles.modeBtn, mode === "credit" && styles.modeBtnCredit]}
@@ -722,19 +799,21 @@ export default function NewSaleScreen() {
 
         {/* ── Footer ── */}
         <View style={[styles.footer, { paddingBottom: insets.bottom + 8 }]}>
-          <TouchableOpacity
-            style={[styles.saveNewBtn, saving && { opacity: 0.6 }]}
-            onPress={() => handleSave(true)}
-            disabled={saving}
-          >
-            <Text style={styles.saveNewTxt}>Save & New</Text>
-          </TouchableOpacity>
+          {!isEdit && (
+            <TouchableOpacity
+              style={[styles.saveNewBtn, saving && { opacity: 0.6 }]}
+              onPress={() => handleSave(true)}
+              disabled={saving}
+            >
+              <Text style={styles.saveNewTxt}>Save & New</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             style={[styles.saveBtn, saving && { opacity: 0.6 }]}
             onPress={() => handleSave(false)}
-            disabled={saving}
+            disabled={saving || loadingEdit}
           >
-            <Text style={styles.saveBtnTxt}>{saving ? "Saving…" : "Save"}</Text>
+            <Text style={styles.saveBtnTxt}>{saving ? "Saving…" : isEdit ? "Update" : "Save"}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.moreBtn} hitSlop={8} onPress={() => setShowMore(true)}>
             <Ionicons name="ellipsis-vertical" size={18} color={colors.textMuted} />
