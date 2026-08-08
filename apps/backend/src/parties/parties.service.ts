@@ -80,21 +80,34 @@ export class PartiesService {
   // companyId may be a single id or a comma-separated list (a Distributor/Branch
   // rollup resolves to every Company id beneath it).
   async list(tenantId: string, companyId?: string): Promise<PartyRow[]> {
-    const parties = await this.prisma.party.findMany({
-      where: { tenantId },
-      orderBy: { createdAt: "asc" },
-      include: {
-        transactions: {
-          where: companyIdWhere(companyId),
-          select: { total: true, balance: true, type: true },
-        },
-        group: true,
-      },
-    });
+    // Balances used to be computed by pulling every transaction for every party into
+    // Node and reducing them here — an unbounded join that grew with the tenant's
+    // entire transaction history on every single page load. Sum per (party, type) in
+    // Postgres instead; the JS loop below only ever iterates a handful of rows per party.
+    const [parties, aggregates] = await Promise.all([
+      this.prisma.party.findMany({
+        where: { tenantId },
+        orderBy: { createdAt: "asc" },
+        include: { group: true },
+      }),
+      this.prisma.transaction.groupBy({
+        by: ["partyId", "type"],
+        where: { tenantId, ...companyIdWhere(companyId) },
+        _sum: { total: true, balance: true },
+      }),
+    ]);
+
+    const byParty = new Map<string, { type: string; total: number; balance: number }[]>();
+    for (const a of aggregates) {
+      const arr = byParty.get(a.partyId) ?? [];
+      arr.push({ type: a.type, total: a._sum.total ?? 0, balance: a._sum.balance ?? 0 });
+      byParty.set(a.partyId, arr);
+    }
+
     const filterIds = parseCompanyIds(companyId);
     const scoped = filterIds.length
       ? parties.filter(
-          (p) => p.isSystem || (p.transactions?.length ?? 0) > 0 || (p.companyId && filterIds.includes(p.companyId)),
+          (p) => p.isSystem || byParty.has(p.id) || (p.companyId && filterIds.includes(p.companyId)),
         )
       : parties;
     return scoped.map((p) => {
@@ -107,7 +120,7 @@ export class PartiesService {
       // invoice as 100% unpaid regardless of what's actually been paid, while real supplier
       // payments only show up in the separate payment_out cash ledger. So payable is netted
       // against actual cash paid per supplier instead of trusting purchase.balance.
-      for (const t of p.transactions ?? []) {
+      for (const t of byParty.get(p.id) ?? []) {
         if (t.type === "sale" || t.type === "credit_note") {
           receivable += t.balance;
         } else if (t.type === "purchase") {

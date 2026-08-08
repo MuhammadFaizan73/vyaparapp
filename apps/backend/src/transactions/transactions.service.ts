@@ -46,6 +46,14 @@ function toRow(t: any): TransactionRow {
 export class TransactionsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async findOne(tenantId: string, id: string): Promise<TransactionRow> {
+    const row = await this.prisma.transaction.findUnique({ where: { id } });
+    if (!row || row.tenantId !== tenantId) {
+      throw new NotFoundException("Transaction not found");
+    }
+    return toRow(row);
+  }
+
   async listForParty(tenantId: string, partyId: string): Promise<TransactionRow[]> {
     const rows = await this.prisma.transaction.findMany({
       where: { tenantId, partyId },

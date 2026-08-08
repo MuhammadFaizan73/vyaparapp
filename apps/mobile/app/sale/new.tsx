@@ -112,7 +112,8 @@ export default function NewSaleScreen() {
   const [showInvoiceNumEdit, setShowInvoiceNumEdit] = useState(false);
   const [invoiceNumInput, setInvoiceNumInput] = useState("");
   useEffect(() => {
-    api.getTransactionsByType("sale").then((txns) => setInvoiceNum(txns.length + 1)).catch(() => {});
+    // A DB-side count, not a fetch-every-sale-ever-just-to-count-them client-side scan.
+    api.getTransactionsSummary("sale").then((s) => setInvoiceNum(s.count + 1)).catch(() => {});
   }, []);
 
   // Date picker
@@ -242,18 +243,16 @@ export default function NewSaleScreen() {
 
   // Prefill every field from the transaction being edited. The handoff store (stashed by
   // whichever screen navigated here) avoids a redundant fetch; a deep link or app restart
-  // falls back to scanning the full list since there's no GET /transactions/:id endpoint.
+  // falls back to a direct lookup by id.
   useEffect(() => {
     if (!params.editId) return;
     const handed = takeHandoffTxn(params.editId);
     const load = handed
       ? Promise.resolve(handed)
-      : api.getAllTransactions().then((all) => {
-          const found = all.find((t) => t.id === params.editId);
-          if (!found) return null;
+      : api.getTransaction(params.editId).then((found) => {
           const partyName = parties.find((p) => p.id === found.partyId)?.name ?? "";
           return { ...found, partyName };
-        });
+        }).catch(() => null);
 
     load.then((txn) => {
       if (!txn) { Alert.alert("Not found", "Could not load this invoice."); router.back(); return; }
