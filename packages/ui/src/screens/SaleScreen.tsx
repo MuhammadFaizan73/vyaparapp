@@ -74,12 +74,17 @@ type LineItem = {
   secondaryUnit?: string; conversionRate?: number;
   tertiaryUnit?: string; tertiaryConversionRate?: number;
   baseSalePrice?: number;
-  discount?: number; // percent off qty*rate for this row
+  discount?: number; // percent off qty*rate for this row — the field actually persisted
   // Raw text of an in-progress edit to the Amount field, kept verbatim while focused so
   // typing isn't fought by the derived/rounded value re-rendering on every keystroke
   // (mirrors why the invoice-level Discount Rs/% pair uses its own plain string state
   // instead of a value computed fresh each render). Cleared on blur.
   amountText?: string;
+  // Same reason, for the row's Discount Rs input: while the user is typing an absolute
+  // Rs discount, `discount` (percent) is kept in sync for saving/totals, but the input
+  // itself displays this raw text rather than a value re-derived from that percent every
+  // render. Cleared on blur, after which the Rs field re-derives display from `discount`.
+  discountRsText?: string;
 };
 
 // Amount after this row's own discount — the figure the Amount column shows and what
@@ -87,6 +92,12 @@ type LineItem = {
 function rowAmount(item: LineItem): number {
   const base = item.qty * item.rate;
   return Number((base * (1 - (item.discount || 0) / 100)).toFixed(2));
+}
+
+// Row discount, in Rs, derived from the persisted percent — the counterpart to rowAmount.
+function rowDiscountRs(item: LineItem): number {
+  const base = item.qty * item.rate;
+  return Number((base * (item.discount || 0) / 100).toFixed(2));
 }
 
 // Every sellable unit for this row, biggest to smallest: tertiaryUnit (Carton) > unit
@@ -1245,6 +1256,37 @@ function NewSaleForm({
     return item.qty && item.rate ? String(rowAmount(item)) : "";
   }
 
+  // Editing the % field directly is the simple case — just persist it and drop any
+  // in-progress Rs text so the Rs field re-derives display from the new percent.
+  function handleDiscPctChange(id: string, pctStr: string) {
+    setLineItems((prev) => prev.map((item) => item.id === id
+      ? { ...item, discount: parseFloat(pctStr) || 0, discountRsText: undefined }
+      : item));
+  }
+
+  // Editing Rs back-solves the equivalent percent against this row's own qty*rate (not
+  // the invoice subtotal — each row's discount is scoped to itself). `discountRsText`
+  // holds raw keystrokes until blur, same reason as `amountText` above.
+  function handleDiscRsChange(id: string, rsStr: string) {
+    setLineItems((prev) => prev.map((item) => {
+      if (item.id !== id) return item;
+      const base = item.qty * item.rate;
+      const rs = parseFloat(rsStr) || 0;
+      const pct = base ? Number(((rs / base) * 100).toFixed(2)) : 0;
+      return { ...item, discount: pct, discountRsText: rsStr };
+    }));
+  }
+
+  function handleDiscRsBlur(id: string) {
+    setLineItems((prev) => prev.map((item) => item.id === id ? { ...item, discountRsText: undefined } : item));
+  }
+
+  function displayDiscRs(item: LineItem): string {
+    if (item.discountRsText !== undefined) return item.discountRsText;
+    const rs = rowDiscountRs(item);
+    return rs ? String(rs) : "";
+  }
+
   function addRow() {
     setLineItems((prev) => [...prev, emptyRow()]);
   }
@@ -1523,7 +1565,7 @@ function NewSaleForm({
                     <th className="lsf-th lsf-th--num">QTY</th>
                     <th className="lsf-th lsf-th--unit">UNIT</th>
                     <th className="lsf-th lsf-th--num">PRICE</th>
-                    <th className="lsf-th lsf-th--num">DISC %</th>
+                    <th className="lsf-th lsf-th--disc">DISCOUNT</th>
                     <th className="lsf-th lsf-th--num">TOTAL</th>
                     <th className="lsf-th lsf-th--add">
                       <button type="button" className="lsf-add-col-btn" onClick={addRow}>+</button>
@@ -1565,8 +1607,20 @@ function NewSaleForm({
                           value={item.rate || ""} onChange={(e) => updateItem(item.id, "rate", parseFloat(e.target.value)||0)} />
                       </td>
                       <td className="lsf-td lsf-td--num">
-                        <input className="lsf-cell-input lsf-cell-input--num" type="number" min="0" max="100" placeholder="0"
-                          value={item.discount || ""} onChange={(e) => updateItem(item.id, "discount", parseFloat(e.target.value)||0)} />
+                        <div className="nsf-disc-cell">
+                          <div className="nsf-disc-cell__row">
+                            <input className="lsf-cell-input lsf-cell-input--num" type="number" min="0" max="100" placeholder="0"
+                              value={item.discount || ""} onChange={(e) => handleDiscPctChange(item.id, e.target.value)} />
+                            <span className="nsf-disc-cell__unit">%</span>
+                          </div>
+                          <div className="nsf-disc-cell__row">
+                            <input className="lsf-cell-input lsf-cell-input--num" type="number" min="0" placeholder="0"
+                              value={displayDiscRs(item)}
+                              onChange={(e) => handleDiscRsChange(item.id, e.target.value)}
+                              onBlur={() => handleDiscRsBlur(item.id)} />
+                            <span className="nsf-disc-cell__unit">Rs</span>
+                          </div>
+                        </div>
                       </td>
                       <td className="lsf-td lsf-td--num lsf-td--total">
                         <input className="lsf-cell-input lsf-cell-input--num" type="number" min="0" placeholder="0"
@@ -1990,7 +2044,7 @@ function NewSaleForm({
                 <th className="nsf-th nsf-th--qty">QTY</th>
                 <th className="nsf-th nsf-th--unit">UNIT</th>
                 <th className="nsf-th nsf-th--rate">PRICE/UNIT</th>
-                <th className="nsf-th nsf-th--disc">DISC %</th>
+                <th className="nsf-th nsf-th--disc">DISCOUNT</th>
                 <th className="nsf-th nsf-th--amt">AMOUNT</th>
               </tr>
             </thead>
@@ -2063,15 +2117,32 @@ function NewSaleForm({
                     />
                   </td>
                   <td className="nsf-td">
-                    <input
-                      className="nsf-cell-input"
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={item.discount || ""}
-                      placeholder="0"
-                      onChange={(e) => updateItem(item.id, "discount", parseFloat(e.target.value) || 0)}
-                    />
+                    <div className="nsf-disc-cell">
+                      <div className="nsf-disc-cell__row">
+                        <input
+                          className="nsf-cell-input"
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={item.discount || ""}
+                          placeholder="0"
+                          onChange={(e) => handleDiscPctChange(item.id, e.target.value)}
+                        />
+                        <span className="nsf-disc-cell__unit">%</span>
+                      </div>
+                      <div className="nsf-disc-cell__row">
+                        <input
+                          className="nsf-cell-input"
+                          type="number"
+                          min="0"
+                          value={displayDiscRs(item)}
+                          placeholder="0"
+                          onChange={(e) => handleDiscRsChange(item.id, e.target.value)}
+                          onBlur={() => handleDiscRsBlur(item.id)}
+                        />
+                        <span className="nsf-disc-cell__unit">Rs</span>
+                      </div>
+                    </div>
                   </td>
                   <td className="nsf-td nsf-td--amt">
                     <input
