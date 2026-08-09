@@ -215,9 +215,16 @@ export default function SaleListScreen() {
 
   async function fetchSales() {
     try {
-      const [txns, parties] = await Promise.all([
-        api.getTransactionsByType("sale"),
-        api.getParties(),
+      // A hard JS-level backstop in addition to the API client's own axios timeout — if
+      // the request hangs in a way that timeout doesn't catch (seen on some devices),
+      // this still guarantees the spinner clears instead of spinning forever with no
+      // way to recover short of leaving the screen.
+      const timeout = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error("Sale list load timed out")), 15000);
+      });
+      const [txns, parties] = await Promise.race([
+        Promise.all([api.getTransactionsByType("sale"), api.getParties()]),
+        timeout,
       ]);
       const partyMap: Record<string, string> = {};
       parties.forEach((p: Party) => { partyMap[p.id] = p.name; });
