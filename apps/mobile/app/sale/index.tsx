@@ -12,6 +12,7 @@ let Voice: any = null;
 try { Voice = require("@react-native-voice/voice").default; } catch { /* not available in Expo Go */ }
 import { colors } from "../../src/theme";
 import { api, getPermissions } from "../../src/auth";
+import { setHandoffTxn } from "../../src/txnHandoff";
 import { buildInvoiceHtml, fmt, formatDate } from "../../src/invoiceHtml";
 import { DateRangeFilterBar, type DateRange, getRange, isWithinRange } from "../../src/components/DateRangeFilter";
 import type { Transaction, Party } from "@vyapar/api-client";
@@ -107,6 +108,8 @@ export default function SaleListScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [canCreate, setCanCreate] = useState(true);
+  const [canEdit, setCanEdit] = useState(true);
+  const [canDelete, setCanDelete] = useState(true);
 
   // Share sheet state
   const [shareTarget, setShareTarget] = useState<{ sale: SaleRow; idx: number } | null>(null);
@@ -240,6 +243,8 @@ export default function SaleListScreen() {
     fetchSales().finally(() => setLoading(false));
     getPermissions().then(perms => {
       setCanCreate(perms === null || perms.includes("sale_create"));
+      setCanEdit(perms === null || perms.includes("sale_edit_own") || perms.includes("sale_edit_all"));
+      setCanDelete(perms === null || perms.includes("sale_delete"));
     });
   }, []));
 
@@ -302,6 +307,36 @@ export default function SaleListScreen() {
     } catch {
       Alert.alert("Error", "Could not duplicate sale.");
     }
+  }
+
+  function handleView(sale: SaleRow) {
+    setHandoffTxn(sale);
+    router.push(`/txn/${sale.id}` as never);
+  }
+
+  function handleEdit(sale: SaleRow) {
+    setHandoffTxn(sale);
+    router.push({ pathname: "/sale/new", params: { editId: sale.id } } as never);
+  }
+
+  function handleDelete(sale: SaleRow) {
+    Alert.alert(
+      "Delete sale?",
+      `This will permanently delete this sale for ${sale.partyName}.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete", style: "destructive", onPress: async () => {
+            try {
+              await api.deleteTransaction(sale.id);
+              await fetchSales();
+            } catch {
+              Alert.alert("Error", "Could not delete this sale.");
+            }
+          },
+        },
+      ],
+    );
   }
 
   // Apply status chip filter + date range + voice filter
@@ -428,7 +463,7 @@ export default function SaleListScreen() {
               const statusTxtStyle = isPaid ? styles.statusTxtPaid : isPartial ? styles.statusTxtPartial : styles.statusTxtUnpaid;
               const statusLabel = isPaid ? "PAID" : isPartial ? "PARTIAL" : "UNPAID";
               return (
-                <View key={sale.id} style={styles.saleCard}>
+                <TouchableOpacity key={sale.id} style={styles.saleCard} activeOpacity={0.8} onPress={() => handleView(sale)}>
                   <View style={styles.saleTop}>
                     <View style={styles.saleMid}>
                       <View style={styles.saleNameRow}>
@@ -461,7 +496,7 @@ export default function SaleListScreen() {
                       </TouchableOpacity>
                     </View>
                   </View>
-                </View>
+                </TouchableOpacity>
               );
             })
           )}
@@ -626,8 +661,10 @@ export default function SaleListScreen() {
           <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setMenuTarget(null)} />
           <View style={[styles.sheet, { paddingBottom: insets.bottom + 8 }]}>
             {[
-              { label: "Duplicate", icon: "copy-outline", action: async () => { if (menuTarget) { setMenuTarget(null); await handleDuplicate(menuTarget.sale); } } },
-              { label: "Receive Payment", icon: "cash-outline", action: () => {
+              { label: "View", icon: "eye-outline" as const, show: true, action: () => { if (menuTarget) { setMenuTarget(null); handleView(menuTarget.sale); } } },
+              { label: "Edit", icon: "create-outline" as const, show: canEdit, action: () => { if (menuTarget) { setMenuTarget(null); handleEdit(menuTarget.sale); } } },
+              { label: "Duplicate", icon: "copy-outline" as const, show: true, action: async () => { if (menuTarget) { setMenuTarget(null); await handleDuplicate(menuTarget.sale); } } },
+              { label: "Receive Payment", icon: "cash-outline" as const, show: true, action: () => {
                 if (!menuTarget) return;
                 setMenuTarget(null);
                 router.push({
@@ -640,17 +677,18 @@ export default function SaleListScreen() {
                   },
                 } as never);
               } },
-              { label: "Return", icon: "return-down-back-outline", action: () => { setMenuTarget(null); Alert.alert("Return", "Coming soon."); } },
-              { label: "Delivery Note", icon: "document-text-outline", action: () => { setMenuTarget(null); Alert.alert("Delivery Note", "Coming soon."); } },
-              { label: "Share as PDF", icon: "share-outline", action: async () => { if (menuTarget) { setMenuTarget(null); await handleSharePdf(menuTarget.sale, menuTarget.idx); } } },
-            ].map(({ label, icon, action }, i, arr) => (
+              { label: "Return", icon: "return-down-back-outline" as const, show: true, action: () => { setMenuTarget(null); Alert.alert("Return", "Coming soon."); } },
+              { label: "Delivery Note", icon: "document-text-outline" as const, show: true, action: () => { setMenuTarget(null); Alert.alert("Delivery Note", "Coming soon."); } },
+              { label: "Share as PDF", icon: "share-outline" as const, show: true, action: async () => { if (menuTarget) { setMenuTarget(null); await handleSharePdf(menuTarget.sale, menuTarget.idx); } } },
+              { label: "Delete", icon: "trash-outline" as const, show: canDelete, danger: true, action: () => { if (menuTarget) { setMenuTarget(null); handleDelete(menuTarget.sale); } } },
+            ].filter((item) => item.show).map(({ label, icon, action, danger }, i, arr) => (
               <TouchableOpacity
                 key={label}
                 style={[styles.menuRow, i === arr.length - 1 && { borderBottomWidth: 0 }]}
                 onPress={action}
               >
-                <Ionicons name={icon as any} size={20} color={colors.text} />
-                <Text style={styles.menuLabel}>{label}</Text>
+                <Ionicons name={icon as any} size={20} color={danger ? "#dc2626" : colors.text} />
+                <Text style={[styles.menuLabel, danger && { color: "#dc2626" }]}>{label}</Text>
               </TouchableOpacity>
             ))}
           </View>
