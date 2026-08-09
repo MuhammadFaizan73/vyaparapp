@@ -313,8 +313,8 @@ export default function SaleListScreen() {
     return true;
   });
 
-  const totalSale = sales.reduce((s, i) => s + i.total, 0);
-  const totalPending = sales.filter((s) => s.balance > 0).reduce((s, i) => s + i.balance, 0);
+  const totalSale = filtered.reduce((s, i) => s + i.total, 0);
+  const totalPending = filtered.filter((s) => s.balance > 0).reduce((s, i) => s + i.balance, 0);
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>

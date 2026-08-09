@@ -13,10 +13,11 @@ import { useParties } from "../../src/useParties";
 import { api } from "../../src/auth";
 import { getItems, loadItems, subscribeItems, type Item } from "../../src/itemsStore";
 import { useSelectedCompany } from "../../src/useSelectedCompany";
+import { CompanySwitcherBar } from "../../src/components/CompanySwitcher";
 import { takeHandoffTxn } from "../../src/txnHandoff";
 import { parseNoteItems } from "../../src/invoiceHtml";
 import { useTransactionSettings } from "../../src/useTransactionSettings";
-import type { TeamMember } from "@vyapar/api-client";
+import type { TeamMember, Party } from "@vyapar/api-client";
 
 type LineItem = {
   id: string;
@@ -91,7 +92,7 @@ export default function NewSaleScreen() {
   const isEdit = Boolean(params.editId);
 
   const [catalog, setCatalog] = useState<Item[]>(getItems());
-  const { companies, selectedCompanyId } = useSelectedCompany();
+  const { companies, selectedCompanyId, setSelectedCompanyId } = useSelectedCompany();
   const { settings: txnSettings } = useTransactionSettings();
   const [selectedCompanyFilters, setSelectedCompanyFilters] = useState<string[]>(
     () => (selectedCompanyId ? [selectedCompanyId] : []),
@@ -196,8 +197,16 @@ export default function NewSaleScreen() {
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // A salesman's `parties` list (useParties) is filtered down to only their assigned
+  // shops — correct for picking a customer on a NEW sale, but editing an EXISTING sale
+  // for a party outside that filter (reassigned, or created before assignment) would
+  // otherwise leave selectedParty permanently undefined and block every save. Backend
+  // access isn't actually restricted by role here, so a direct fetch is safe.
+  const [editModeParty, setEditModeParty] = useState<Party | null>(null);
+
   // Computed values
-  const selectedParty = parties.find((p) => p.name === customer);
+  const selectedParty = parties.find((p) => p.name === customer)
+    ?? (editModeParty && editModeParty.name === customer ? editModeParty : undefined);
   const filteredParties = parties
     .filter((p) => p.partyType === "customer" || p.partyType === "both" || p.isSystem)
     .filter((p) =>
@@ -251,6 +260,29 @@ export default function NewSaleScreen() {
   const receivedAmtVal = parseFloat(receivedAmt) || 0;
   const balanceDue = received ? Math.max(0, total - receivedAmtVal) : total;
 
+  // Typing the invoice's Total Amount directly (e.g. "customer will only pay 1400" against
+  // a Rs 1584 subtotal) back-solves the invoice-level Discount, same as the per-item Total
+  // Amount field in the Add Item modal above — qty/rate on every line stay exactly as
+  // entered, only the discount absorbs the difference.
+  const [totalText, setTotalText] = useState<string | undefined>(undefined);
+
+  function handleTotalChange(val: string) {
+    setTotalText(val);
+    const typed = parseFloat(val) || 0;
+    const rs = subtotal - typed;
+    setDiscountRs(rs > 0 ? rs.toFixed(2) : "");
+    setDiscountPct(subtotal && rs > 0 ? ((rs / subtotal) * 100).toFixed(2) : "");
+  }
+
+  function handleTotalBlur() {
+    setTotalText(undefined);
+  }
+
+  function displayTotal(): string {
+    if (totalText !== undefined) return totalText;
+    return total ? fmt4(total) : "";
+  }
+
   const [loadingEdit, setLoadingEdit] = useState(isEdit);
 
   // Prefill every field from the transaction being edited. The handoff store (stashed by
@@ -266,12 +298,28 @@ export default function NewSaleScreen() {
           return { ...found, partyName };
         }).catch(() => null);
 
-    load.then((txn) => {
+    load.then(async (txn) => {
       if (!txn) { Alert.alert("Not found", "Could not load this invoice."); router.back(); return; }
 
-      setCustomer(txn.partyName);
+      // A salesman's `parties` (useParties) is filtered to only their assigned shops —
+      // editing a sale for a party outside that filter would otherwise leave
+      // `selectedParty` permanently undefined below, blocking every save. The backend
+      // isn't actually role-restricted here, so fetch the real party directly if it's
+      // missing from the (possibly filtered, possibly not-yet-loaded) local list.
+      let partyName = txn.partyName;
+      if (!parties.some((p) => p.id === txn.partyId)) {
+        try {
+          const match = (await api.getParties()).find((p) => p.id === txn.partyId);
+          if (match) { setEditModeParty(match); partyName = match.name; }
+        } catch { /* keep whatever partyName the handoff/fetch already gave us */ }
+      }
+
+      setCustomer(partyName);
       setInvoiceDateObj(new Date(txn.date));
-      if (txn.companyId) setSelectedCompanyFilters([txn.companyId]);
+      if (txn.companyId) {
+        setSelectedCompanyFilters([txn.companyId]);
+        setSelectedCompanyId(txn.companyId);
+      }
       setBookerId(txn.bookerId ?? "");
 
       let parsedNotes: any = {};
@@ -313,8 +361,13 @@ export default function NewSaleScreen() {
       Alert.alert("Error", "Could not load this invoice.");
       router.back();
     });
+  // Deliberately NOT depending on `catalog`/`parties` — this must run exactly once per
+  // editId. `takeHandoffTxn` is consume-once, so a re-run (e.g. when catalog finishes
+  // loading after this effect's first pass) would fall through to a from-scratch reload
+  // that wipes out any edits the user already made, and previously produced a blank
+  // customer field entirely when `parties` hadn't resolved yet either.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.editId, catalog.length]);
+  }, [params.editId]);
 
   // ── Add Item modal: qty*rate, then Discount and Total Amount are two ways to set the
   // same outcome — editing one back-solves the other, subtotal (qty*rate) never moves.
@@ -452,6 +505,11 @@ export default function NewSaleScreen() {
   }
 
   async function handleSave(andNew = false) {
+    // `disabled={saving}` on the buttons only takes effect once React commits the
+    // re-render from setSaving(true) below — a fast double-tap can land both touch
+    // events before that happens, so guard re-entry synchronously here too, or a
+    // double-tap creates two identical invoices.
+    if (saving) return;
     if (!customer.trim()) { Alert.alert("Missing customer", "Please select a customer."); return; }
     if (!selectedParty) { Alert.alert("Unknown customer", "Select a customer from the list."); return; }
     if (!selectedCompanyId) {
@@ -532,6 +590,11 @@ export default function NewSaleScreen() {
           <Ionicons name="settings-outline" size={20} color={colors.textMuted} />
         </TouchableOpacity>
       </View>
+
+      {/* This screen is pushed outside the Tabs layout, so the tab bar's own company
+          switcher never renders here — without this, there was no way to see or change
+          which company a new invoice gets tagged with short of backing out to a tab. */}
+      <CompanySwitcherBar />
 
       {/* ── Invoice No + Date row ── */}
       <View style={styles.invoiceInfoRow}>
@@ -751,7 +814,15 @@ export default function NewSaleScreen() {
             <Text style={styles.totalAmtLabel}>Total Amount</Text>
             <View style={styles.totalAmtRight}>
               <Text style={styles.rsLabel}>Rs</Text>
-              <Text style={styles.totalAmtVal}>{total ? fmt4(total) : ""}</Text>
+              <TextInput
+                style={styles.totalAmtVal}
+                value={displayTotal()}
+                onChangeText={handleTotalChange}
+                onBlur={handleTotalBlur}
+                keyboardType="numeric"
+                placeholder="0.0000"
+                placeholderTextColor={colors.textLight}
+              />
             </View>
           </View>
 

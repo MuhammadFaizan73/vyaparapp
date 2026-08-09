@@ -7,7 +7,7 @@ import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../src/theme";
-import { api } from "../../src/auth";
+import { api, getMemberId } from "../../src/auth";
 import { usePartySettings } from "../../src/usePartySettings";
 import { useSelectedCompany } from "../../src/useSelectedCompany";
 import type { PartyGroup } from "@vyapar/api-client";
@@ -81,7 +81,7 @@ export default function NewPartyScreen() {
     }
     setSaving(true);
     try {
-      await api.createParty({
+      const party = await api.createParty({
         name: name.trim(),
         phone: phone.trim() || undefined,
         email: email.trim() || undefined,
@@ -96,6 +96,18 @@ export default function NewPartyScreen() {
         groupId: groupId || undefined,
         companyId: companyId || undefined,
       });
+
+      // A salesman's own party/customer picker only shows parties assigned to them —
+      // without an assignment, a party they just created themselves (e.g. signing up a
+      // new shop on the spot) would immediately vanish from their own app. Assign every
+      // day so it's visible right away; the owner can narrow the schedule later via the
+      // normal Assign screen.
+      const memberId = await getMemberId();
+      if (memberId) {
+        try { await api.createAssignment(party.id, memberId, ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]); }
+        catch { /* non-fatal — the party still saved */ }
+      }
+
       if (andNew) { reset(); } else { router.back(); }
     } catch (err: any) {
       const msg = err?.response?.data?.message ?? "Could not save party. Please try again.";

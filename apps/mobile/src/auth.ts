@@ -58,3 +58,15 @@ export async function getPermissions(): Promise<string[] | null> {
     return null;
   }
 }
+
+// Returns null for an owner JWT (no team-member row, nothing to assign) or on any error.
+export async function getMemberId(): Promise<string | null> {
+  const token = await SecureStore.getItemAsync(TOKEN_KEY);
+  if (!token) return null;
+  try {
+    const payload = decodeJwtPayload(token);
+    return typeof payload.memberId === "string" ? payload.memberId : null;
+  } catch {
+    return null;
+  }
+}

@@ -102,8 +102,8 @@ export default function PurchaseListScreen() {
     return matchFilter && matchSearch;
   });
 
-  const totalPurchase = rows.reduce((s, r) => s + r.total, 0);
-  const balanceDue = rows.reduce((s, r) => s + r.balance, 0);
+  const totalPurchase = filtered.reduce((s, r) => s + r.total, 0);
+  const balanceDue = filtered.reduce((s, r) => s + r.balance, 0);
 
   return (
     <View style={[s.screen, { paddingTop: insets.top }]}>
