@@ -12,6 +12,7 @@ import type {
   Transaction,
   CreateTransactionRequest,
   UpdateTransactionRequest,
+  LastSalePrice,
   Item,
   CreateItemRequest,
   UpdateItemRequest,
@@ -253,6 +254,12 @@ export class VyaparApiClient {
   async getOpeningBalance(type: string, before: string): Promise<{ total: number }> {
     const params = new URLSearchParams({ type, before });
     const { data } = await this.http.get<{ total: number }>(`/transactions/opening-balance?${params.toString()}`);
+    return data;
+  }
+
+  async getLastSalePrices(partyId: string, itemName: string): Promise<LastSalePrice[]> {
+    const params = new URLSearchParams({ partyId, itemName });
+    const { data } = await this.http.get<LastSalePrice[]>(`/transactions/last-sale-prices?${params.toString()}`);
     return data;
   }
 
@@ -618,6 +625,7 @@ export type {
   Transaction,
   CreateTransactionRequest,
   UpdateTransactionRequest,
+  LastSalePrice,
   Item,
   CreateItemRequest,
   UpdateItemRequest,

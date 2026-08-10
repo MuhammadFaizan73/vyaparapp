@@ -52,6 +52,15 @@ export class TransactionsController {
     return this.transactionsService.openingBalance(req.tenantId, type, before).then((total) => ({ total }));
   }
 
+  @Get("last-sale-prices")
+  lastSalePrices(
+    @Req() req: AuthedRequest,
+    @Query("partyId") partyId: string,
+    @Query("itemName") itemName: string,
+  ) {
+    return this.transactionsService.getLastSalePrices(req.tenantId, partyId, itemName);
+  }
+
   @Get(":id")
   findOne(@Req() req: AuthedRequest, @Param("id") id: string) {
     return this.transactionsService.findOne(req.tenantId, id);

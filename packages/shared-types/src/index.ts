@@ -319,6 +319,12 @@ export const UpdateTransactionRequestSchema = z.object({
 });
 export type UpdateTransactionRequest = z.infer<typeof UpdateTransactionRequestSchema>;
 
+export const LastSalePriceSchema = z.object({
+  rate: z.number(),
+  date: z.string().datetime(),
+});
+export type LastSalePrice = z.infer<typeof LastSalePriceSchema>;
+
 export const BulkSaleImportLineItemSchema = z.object({
   name: z.string(),
   qty: z.number(),
