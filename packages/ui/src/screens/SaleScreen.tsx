@@ -9,6 +9,7 @@ import { AddItemModal } from "./AddItemModal";
 import { InvoicePreviewModal } from "./InvoicePreviewModal";
 import { PaymentInForm, RECENT_ROWS_LIMIT } from "./PaymentInScreen";
 import { DeliveryChallanModal } from "./DeliveryChallanModal";
+import { loadSettings } from "./SettingsScreen";
 
 /* ── helpers ── */
 function fmt(n: number) {
@@ -1132,6 +1133,11 @@ function NewSaleForm({
   const [stockWarningItems, setStockWarningItems] = useState<string[]>([]);
   const [activeItemRow, setActiveItemRow] = useState<string | null>(null);
   const [dropPos, setDropPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [showLast5] = useState(() => loadSettings().showLast5SalePrice);
+  const [priceRowId, setPriceRowId] = useState<string | null>(null);
+  const [pricePos, setPricePos] = useState<{ top: number; left: number } | null>(null);
+  const [lastPrices, setLastPrices] = useState<{ rate: number; date: string }[]>([]);
+  const [pricesLoading, setPricesLoading] = useState(false);
 
   /* ── Link Payment ── */
   const [partyTxns, setPartyTxns] = useState<Transaction[]>([]);
@@ -1192,6 +1198,36 @@ function NewSaleForm({
       });
     }, 160);
   }
+
+  function closeLastPrices() {
+    setPriceRowId(null); setPricePos(null); setLastPrices([]);
+  }
+
+  async function openLastPrices(item: LineItem, btnEl: HTMLElement) {
+    if (!selectedParty || !item.name.trim()) return;
+    if (priceRowId === item.id) { closeLastPrices(); return; }
+    const rect = btnEl.getBoundingClientRect();
+    setPriceRowId(item.id);
+    setPricePos({ top: rect.bottom + 4, left: Math.max(8, rect.right - 220) });
+    setPricesLoading(true);
+    try {
+      setLastPrices(await api.getLastSalePrices(selectedParty.id, item.name.trim()));
+    } catch {
+      setLastPrices([]);
+    } finally {
+      setPricesLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      const target = e.target as HTMLElement;
+      if (target.closest("[data-price-popover]") || target.closest("[data-price-btn]")) return;
+      closeLastPrices();
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   const selectedParty = parties.find((p) => p.name === customer);
 
@@ -1602,9 +1638,33 @@ function NewSaleForm({
                             : ["NONE","PCS","KG","G","L","ML","MTR","CM","BOX","PKT","DOZ","SET"].map(u=><option key={u}>{u}</option>)}
                         </select>
                       </td>
-                      <td className="lsf-td lsf-td--num">
-                        <input className="lsf-cell-input lsf-cell-input--num" type="number" min="0" placeholder="0"
-                          value={item.rate || ""} onChange={(e) => updateItem(item.id, "rate", parseFloat(e.target.value)||0)} />
+                      <td className="lsf-td lsf-td--num" style={{ position: "relative" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+                          <input className="lsf-cell-input lsf-cell-input--num" type="number" min="0" placeholder="0"
+                            value={item.rate || ""} onChange={(e) => updateItem(item.id, "rate", parseFloat(e.target.value)||0)} />
+                          {showLast5 && selectedParty && item.name.trim() && (
+                            <button type="button" data-price-btn title="Last 5 Sale Prices" style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, padding: 2, flexShrink: 0 }}
+                              onClick={(e) => openLastPrices(item, e.currentTarget)}
+                            >🕐</button>
+                          )}
+                        </div>
+                        {priceRowId === item.id && pricePos && (
+                          <div data-price-popover style={{ position: "fixed", top: pricePos.top, left: pricePos.left, width: 220, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 6, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", zIndex: 800, maxHeight: 220, overflowY: "auto" }}>
+                            <div style={{ padding: "6px 10px", fontSize: 11, color: "#9ca3af", borderBottom: "1px solid #f0f0f0", fontWeight: 600 }}>LAST 5 SALE PRICES</div>
+                            {pricesLoading && <p style={{ padding: 10, fontSize: 12, color: "#9ca3af" }}>Loading…</p>}
+                            {!pricesLoading && lastPrices.length === 0 && <p style={{ padding: 10, fontSize: 12, color: "#9ca3af" }}>No prior sales to this customer</p>}
+                            {!pricesLoading && lastPrices.map((p, i) => (
+                              <button key={i} type="button" data-price-btn style={{ display: "flex", justifyContent: "space-between", width: "100%", padding: "8px 10px", background: "none", border: "none", cursor: "pointer", fontSize: 13 }}
+                                onMouseEnter={(e) => (e.currentTarget.style.background = "#f9fafb")}
+                                onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+                                onClick={() => { updateItem(item.id, "rate", p.rate); closeLastPrices(); }}
+                              >
+                                <span>Rs {fmt(p.rate)}</span>
+                                <span style={{ color: "#9ca3af" }}>{formatDate(p.date)}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </td>
                       <td className="lsf-td lsf-td--num">
                         <div className="nsf-disc-cell">
@@ -2106,15 +2166,39 @@ function NewSaleForm({
                         : UNITS.map((u) => <option key={u}>{u}</option>)}
                     </select>
                   </td>
-                  <td className="nsf-td">
-                    <input
-                      className="nsf-cell-input"
-                      type="number"
-                      min="0"
-                      value={item.rate || ""}
-                      placeholder="0"
-                      onChange={(e) => updateItem(item.id, "rate", parseFloat(e.target.value) || 0)}
-                    />
+                  <td className="nsf-td" style={{ position: "relative" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+                      <input
+                        className="nsf-cell-input"
+                        type="number"
+                        min="0"
+                        value={item.rate || ""}
+                        placeholder="0"
+                        onChange={(e) => updateItem(item.id, "rate", parseFloat(e.target.value) || 0)}
+                      />
+                      {showLast5 && selectedParty && item.name.trim() && (
+                        <button type="button" data-price-btn title="Last 5 Sale Prices" style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, padding: 2, flexShrink: 0 }}
+                          onClick={(e) => openLastPrices(item, e.currentTarget)}
+                        >🕐</button>
+                      )}
+                    </div>
+                    {priceRowId === item.id && pricePos && (
+                      <div data-price-popover style={{ position: "fixed", top: pricePos.top, left: pricePos.left, width: 220, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 6, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", zIndex: 800, maxHeight: 220, overflowY: "auto" }}>
+                        <div style={{ padding: "6px 10px", fontSize: 11, color: "#9ca3af", borderBottom: "1px solid #f0f0f0", fontWeight: 600 }}>LAST 5 SALE PRICES</div>
+                        {pricesLoading && <p style={{ padding: 10, fontSize: 12, color: "#9ca3af" }}>Loading…</p>}
+                        {!pricesLoading && lastPrices.length === 0 && <p style={{ padding: 10, fontSize: 12, color: "#9ca3af" }}>No prior sales to this customer</p>}
+                        {!pricesLoading && lastPrices.map((p, i) => (
+                          <button key={i} type="button" data-price-btn style={{ display: "flex", justifyContent: "space-between", width: "100%", padding: "8px 10px", background: "none", border: "none", cursor: "pointer", fontSize: 13 }}
+                            onMouseEnter={(e) => (e.currentTarget.style.background = "#f9fafb")}
+                            onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+                            onClick={() => { updateItem(item.id, "rate", p.rate); closeLastPrices(); }}
+                          >
+                            <span>Rs {fmt(p.rate)}</span>
+                            <span style={{ color: "#9ca3af" }}>{formatDate(p.date)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </td>
                   <td className="nsf-td">
                     <div className="nsf-disc-cell">

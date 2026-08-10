@@ -3,6 +3,7 @@ import { api } from "../lib/api";
 import type { Transaction, Party, Item } from "@vyapar/api-client";
 import { useCompany } from "../lib/CompanyContext";
 import { InvoicePreviewModal } from "./InvoicePreviewModal";
+import { loadSettings } from "./SettingsScreen";
 
 /* ─────────────────────────────────────────────
    Helpers
@@ -977,6 +978,11 @@ function TxnForm({ cfg, parties, catalog, initialRow, existingCount, onClose, on
   const [savedTxn, setSavedTxn] = useState<TxnRow | null>(null);
   const [activeItemRow, setActiveItemRow] = useState<string | null>(null);
   const [dropPos, setDropPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [showLast5] = useState(() => loadSettings().showLast5SalePrice);
+  const [priceRowId, setPriceRowId] = useState<string | null>(null);
+  const [pricePos, setPricePos] = useState<{ top: number; left: number } | null>(null);
+  const [lastPrices, setLastPrices] = useState<{ rate: number; date: string }[]>([]);
+  const [pricesLoading, setPricesLoading] = useState(false);
 
   /* Link Payment state (credit note only) */
   const [partyInvoices, setPartyInvoices] = useState<Transaction[]>([]);
@@ -1065,6 +1071,36 @@ function TxnForm({ cfg, parties, catalog, initialRow, existingCount, onClose, on
       setActiveItemRow((cur) => { if (cur === itemId) { setDropPos(null); return null; } return cur; });
     }, 160);
   }
+
+  function closeLastPrices() {
+    setPriceRowId(null); setPricePos(null); setLastPrices([]);
+  }
+
+  async function openLastPrices(item: LineItem, btnEl: HTMLElement) {
+    if (!selectedPartyId || !item.name.trim()) return;
+    if (priceRowId === item.id) { closeLastPrices(); return; }
+    const rect = btnEl.getBoundingClientRect();
+    setPriceRowId(item.id);
+    setPricePos({ top: rect.bottom + 4, left: Math.max(8, rect.right - 220) });
+    setPricesLoading(true);
+    try {
+      setLastPrices(await api.getLastSalePrices(selectedPartyId, item.name.trim()));
+    } catch {
+      setLastPrices([]);
+    } finally {
+      setPricesLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      const target = e.target as HTMLElement;
+      if (target.closest("[data-price-popover]") || target.closest("[data-price-btn]")) return;
+      closeLastPrices();
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   function handleDiscountPct(val: string) {
     setDiscountPct(val);
@@ -1326,7 +1362,33 @@ function TxnForm({ cfg, parties, catalog, initialRow, existingCount, onClose, on
                       {UNITS.map((u) => <option key={u}>{u}</option>)}
                     </select>
                   </td>
-                  <td style={tdStyle}><input style={cellInputStyle} type="number" value={item.rate || ""} placeholder="0" onChange={(e) => updateItem(item.id, "rate", parseFloat(e.target.value) || 0)} /></td>
+                  <td style={{ ...tdStyle, position: "relative" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+                      <input style={cellInputStyle} type="number" value={item.rate || ""} placeholder="0" onChange={(e) => updateItem(item.id, "rate", parseFloat(e.target.value) || 0)} />
+                      {showLast5 && selectedPartyId && item.name.trim() && (
+                        <button type="button" data-price-btn title="Last 5 Sale Prices" style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, padding: 2, flexShrink: 0 }}
+                          onClick={(e) => openLastPrices(item, e.currentTarget)}
+                        >🕐</button>
+                      )}
+                    </div>
+                    {priceRowId === item.id && pricePos && (
+                      <div data-price-popover style={{ position: "fixed", top: pricePos.top, left: pricePos.left, width: 220, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 6, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", zIndex: 800, maxHeight: 220, overflowY: "auto" }}>
+                        <div style={{ padding: "6px 10px", fontSize: 11, color: "#9ca3af", borderBottom: "1px solid #f0f0f0", fontWeight: 600 }}>LAST 5 SALE PRICES</div>
+                        {pricesLoading && <p style={{ padding: 10, fontSize: 12, color: "#9ca3af" }}>Loading…</p>}
+                        {!pricesLoading && lastPrices.length === 0 && <p style={{ padding: 10, fontSize: 12, color: "#9ca3af" }}>No prior sales to this customer</p>}
+                        {!pricesLoading && lastPrices.map((p, i) => (
+                          <button key={i} type="button" data-price-btn style={{ display: "flex", justifyContent: "space-between", width: "100%", padding: "8px 10px", background: "none", border: "none", cursor: "pointer", fontSize: 13 }}
+                            onMouseEnter={(e) => (e.currentTarget.style.background = "#f9fafb")}
+                            onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+                            onClick={() => { updateItem(item.id, "rate", p.rate); closeLastPrices(); }}
+                          >
+                            <span>Rs {fmt(p.rate)}</span>
+                            <span style={{ color: "#9ca3af" }}>{formatDate(p.date)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </td>
                   <td style={{ ...tdStyle, textAlign: "right", color: "#374151" }}>{(item.qty * item.rate) || ""}</td>
                   <td style={tdStyle}>
                     <button type="button" style={{ background: "none", border: "none", cursor: "pointer", color: "#dc2626", fontSize: 14 }}

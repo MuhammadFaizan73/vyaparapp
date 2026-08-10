@@ -427,17 +427,9 @@ export default function NewSaleScreen() {
 
   async function loadLast5Prices() {
     setShowLast5Prices(true);
-    if (!newItemName.trim()) { setLast5Prices([]); return; }
+    if (!newItemName.trim() || !selectedParty) { setLast5Prices([]); return; }
     try {
-      const sales = await api.getTransactionsByType("sale");
-      const seen: { rate: number; date: string }[] = [];
-      for (const txn of [...sales].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())) {
-        const txnItems = parseNoteItems(txn.notes);
-        const match = txnItems.find((i) => (i.name ?? "").trim().toLowerCase() === newItemName.trim().toLowerCase());
-        if (match?.rate) seen.push({ rate: match.rate, date: txn.date });
-        if (seen.length >= 5) break;
-      }
-      setLast5Prices(seen);
+      setLast5Prices(await api.getLastSalePrices(selectedParty.id, newItemName.trim()));
     } catch {
       setLast5Prices([]);
     }

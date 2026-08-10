@@ -134,6 +134,46 @@ export class TransactionsService {
     return rows.map(toRow);
   }
 
+  // Notes stores line items as JSON — either `{ items: [...] }` or a bare array, each
+  // item shaped `{ name, qty, rate, unit }` (same shape mobile's parseNoteItems reads).
+  // A malformed row shouldn't fail the whole request, so parse failures just yield [].
+  private parseNoteItems(notes: string | null): Array<{ name?: string; rate?: number }> {
+    if (!notes) return [];
+    try {
+      const parsed = JSON.parse(notes);
+      const items = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.items) ? parsed.items : [];
+      return items.filter((i: any) => i?.name);
+    } catch {
+      return [];
+    }
+  }
+
+  // Last N prices a specific customer paid for a specific item, most recent first —
+  // scoped by partyId (not just item name) so one customer's price history never leaks
+  // into another's. Scans the party's most recent sales rather than their whole history
+  // for cost; a party with no matching item within that window just returns fewer rows.
+  async getLastSalePrices(
+    tenantId: string,
+    partyId: string,
+    itemName: string,
+    limit = 5,
+  ): Promise<Array<{ rate: number; date: string }>> {
+    const target = itemName.trim().toLowerCase();
+    if (!target) return [];
+    const rows = await this.prisma.transaction.findMany({
+      where: { tenantId, partyId, type: "sale" },
+      orderBy: { date: "desc" },
+      take: 200,
+    });
+    const found: Array<{ rate: number; date: string }> = [];
+    for (const row of rows) {
+      const match = this.parseNoteItems(row.notes).find((i) => (i.name ?? "").trim().toLowerCase() === target);
+      if (match?.rate) found.push({ rate: match.rate, date: row.date.toISOString() });
+      if (found.length >= limit) break;
+    }
+    return found;
+  }
+
   // Cheap aggregate for header stats (total / received-or-paid) — computed entirely in
   // Postgres via SUM, never by fetching and summing individual rows client-side. from/to
   // let a screen with a real date filter (e.g. Sale's "This Month") get an aggregate that

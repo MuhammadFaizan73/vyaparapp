@@ -4,7 +4,7 @@ import type { TaxRate } from "@vyapar/api-client";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Settings = {
+export type Settings = {
   // GENERAL
   enablePasscode: boolean;
   currency: string;
@@ -145,7 +145,7 @@ const DEFAULT_SETTINGS: Settings = {
 
 const STORAGE_KEY = "vyapar_settings";
 
-function loadSettings(): Settings {
+export function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
