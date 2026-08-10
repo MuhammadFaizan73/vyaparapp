@@ -11,7 +11,8 @@ import * as Sharing from "expo-sharing";
 let Voice: any = null;
 try { Voice = require("@react-native-voice/voice").default; } catch { /* not available in Expo Go */ }
 import { colors } from "../../src/theme";
-import { api, getPermissions } from "../../src/auth";
+import { api, getPermissions, getMemberId } from "../../src/auth";
+import { canEditSale } from "../../src/permissions";
 import { setHandoffTxn } from "../../src/txnHandoff";
 import { buildInvoiceHtml, fmt, formatDate } from "../../src/invoiceHtml";
 import { DateRangeFilterBar, type DateRange, getRange, isWithinRange } from "../../src/components/DateRangeFilter";
@@ -108,7 +109,8 @@ export default function SaleListScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [canCreate, setCanCreate] = useState(true);
-  const [canEdit, setCanEdit] = useState(true);
+  const [permissions, setPermissions] = useState<string[] | null>(null);
+  const [memberId, setMemberId] = useState<string | null>(null);
   const [canDelete, setCanDelete] = useState(true);
 
   // Share sheet state
@@ -243,9 +245,10 @@ export default function SaleListScreen() {
     fetchSales().finally(() => setLoading(false));
     getPermissions().then(perms => {
       setCanCreate(perms === null || perms.includes("sale_create"));
-      setCanEdit(perms === null || perms.includes("sale_edit_own") || perms.includes("sale_edit_all"));
+      setPermissions(perms);
       setCanDelete(perms === null || perms.includes("sale_delete"));
     });
+    getMemberId().then(setMemberId);
   }, []));
 
   async function onRefresh() {
@@ -662,7 +665,7 @@ export default function SaleListScreen() {
           <View style={[styles.sheet, { paddingBottom: insets.bottom + 8 }]}>
             {[
               { label: "View", icon: "eye-outline" as const, show: true, action: () => { if (menuTarget) { setMenuTarget(null); handleView(menuTarget.sale); } } },
-              { label: "Edit", icon: "create-outline" as const, show: canEdit, action: () => { if (menuTarget) { setMenuTarget(null); handleEdit(menuTarget.sale); } } },
+              { label: "Edit", icon: "create-outline" as const, show: !!menuTarget && canEditSale(menuTarget.sale, permissions, memberId), action: () => { if (menuTarget) { setMenuTarget(null); handleEdit(menuTarget.sale); } } },
               { label: "Duplicate", icon: "copy-outline" as const, show: true, action: async () => { if (menuTarget) { setMenuTarget(null); await handleDuplicate(menuTarget.sale); } } },
               { label: "Receive Payment", icon: "cash-outline" as const, show: true, action: () => {
                 if (!menuTarget) return;

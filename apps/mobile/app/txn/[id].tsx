@@ -9,9 +9,10 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import { colors } from "../../src/theme";
-import { api, getPermissions } from "../../src/auth";
+import { api, getPermissions, getMemberId } from "../../src/auth";
 import { setHandoffTxn, takeHandoffTxn, type TxnWithParty } from "../../src/txnHandoff";
 import { buildInvoiceHtml, fmt, formatDate, parseNoteItems } from "../../src/invoiceHtml";
+import { canEditSale } from "../../src/permissions";
 
 type BadgeCfg = { label: string; bg: string; fg: string };
 
@@ -42,13 +43,15 @@ export default function TransactionDetailScreen() {
   const [txn, setTxn] = useState<TxnWithParty | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [canEdit, setCanEdit] = useState(true);
+  const [permissions, setPermissions] = useState<string[] | null>(null);
+  const [memberId, setMemberId] = useState<string | null>(null);
   const [canDelete, setCanDelete] = useState(true);
   const [busy, setBusy] = useState<"download" | "share" | "delete" | null>(null);
 
   useEffect(() => {
-    getPermissions().then((perms) => {
-      setCanEdit(perms === null || perms.includes("sale_edit_own") || perms.includes("sale_edit_all"));
+    Promise.all([getPermissions(), getMemberId()]).then(([perms, mid]) => {
+      setPermissions(perms);
+      setMemberId(mid);
       setCanDelete(perms === null || perms.includes("sale_delete"));
     });
   }, []);
@@ -204,7 +207,7 @@ export default function TransactionDetailScreen() {
             {busy === "share" ? <ActivityIndicator size="small" color={colors.primary} /> : <Ionicons name="share-outline" size={20} color={colors.primary} />}
             <Text style={st.actionLbl}>Share</Text>
           </TouchableOpacity>
-          {canEdit && EDITABLE_TYPES.has(txn.type) && (
+          {canEditSale(txn, permissions, memberId) && EDITABLE_TYPES.has(txn.type) && (
             <TouchableOpacity style={st.actionBtn} onPress={handleEdit} disabled={busy !== null}>
               <Ionicons name="create-outline" size={20} color={colors.primary} />
               <Text style={st.actionLbl}>Edit</Text>

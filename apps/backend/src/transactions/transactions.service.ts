@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, NotFoundException, ForbiddenException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateTransactionDto, UpdateTransactionDto } from "./transactions.dto";
 import { companyIdWhere } from "../common/company-filter.util";
@@ -40,6 +40,35 @@ function toRow(t: any): TransactionRow {
     bookerId: t.bookerId ?? null,
     createdAt: t.createdAt.toISOString(),
   };
+}
+
+export type Caller = { memberId?: string; permissions: string[] | null };
+
+// Permissions are only enforced for the "sale" type today — other types (purchase,
+// payment_in, etc.) have no comparable edit/delete permission strings yet, so there's
+// nothing meaningful to check for them here. null permissions = owner/legacy token,
+// unrestricted (matches the mobile client's own getPermissions() convention exactly).
+function assertCanTouchSale(caller: Caller, txn: { type: string; bookerId: string | null; date: Date }, action: "edit" | "delete") {
+  if (!caller.memberId || caller.permissions === null || txn.type !== "sale") return;
+  const perms = caller.permissions;
+  if (action === "delete") {
+    if (!perms.includes("sale_delete")) {
+      throw new ForbiddenException("You don't have permission to delete this invoice.");
+    }
+    return;
+  }
+  const canAll = perms.includes("sale_edit_all");
+  const canOwn = perms.includes("sale_edit_own") && txn.bookerId === caller.memberId;
+  if (!canAll && !canOwn) {
+    throw new ForbiddenException("You don't have permission to edit this invoice.");
+  }
+  if (perms.includes("sale_edit_today_only")) {
+    const today = new Date().toISOString().slice(0, 10);
+    const txnDate = txn.date.toISOString().slice(0, 10);
+    if (txnDate !== today) {
+      throw new ForbiddenException("You can only edit today's invoices.");
+    }
+  }
 }
 
 @Injectable()
@@ -173,19 +202,21 @@ export class TransactionsService {
     }));
   }
 
-  async remove(tenantId: string, id: string): Promise<void> {
+  async remove(tenantId: string, id: string, caller: Caller): Promise<void> {
     const existing = await this.prisma.transaction.findUnique({ where: { id } });
     if (!existing || existing.tenantId !== tenantId) {
       throw new NotFoundException("Transaction not found");
     }
+    assertCanTouchSale(caller, existing, "delete");
     await this.prisma.transaction.delete({ where: { id } });
   }
 
-  async update(tenantId: string, id: string, dto: UpdateTransactionDto, ipAddress?: string): Promise<TransactionRow> {
+  async update(tenantId: string, id: string, dto: UpdateTransactionDto, caller: Caller, ipAddress?: string): Promise<TransactionRow> {
     const existing = await this.prisma.transaction.findUnique({ where: { id } });
     if (!existing || existing.tenantId !== tenantId) {
       throw new NotFoundException("Transaction not found");
     }
+    assertCanTouchSale(caller, existing, "edit");
 
     /* Build human-readable diff */
     const changes: string[] = [];

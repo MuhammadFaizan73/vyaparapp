@@ -10,7 +10,8 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import { colors } from "../../src/theme";
-import { api, getPermissions, getRole, getStaffName, getStaffContact } from "../../src/auth";
+import { api, getPermissions, getRole, getStaffName, getStaffContact, getMemberId } from "../../src/auth";
+import { canEditSale } from "../../src/permissions";
 import { setHandoffTxn } from "../../src/txnHandoff";
 import { buildInvoiceHtml } from "../../src/invoiceHtml";
 import type { Transaction, Party } from "@vyapar/api-client";
@@ -51,10 +52,11 @@ const EDITABLE_TYPES = new Set(["sale"]);
 // render of its parent gets a new function identity each time, so React treats it as a
 // different component type and remounts every visible FlatList row on each keystroke in the
 // search box instead of diffing them normally.
-function TxnCard({ item, canEdit, canDelete, onChanged }: {
-  item: TxnRow; canEdit: boolean; canDelete: boolean; onChanged: () => void;
+function TxnCard({ item, permissions, memberId, canDelete, onChanged }: {
+  item: TxnRow; permissions: string[] | null; memberId: string | null; canDelete: boolean; onChanged: () => void;
 }) {
   const router = useRouter();
+  const canEdit = canEditSale(item, permissions, memberId);
   const badge = getBadge(item.type, item.balance);
   const [busy, setBusy] = useState<"download" | "share" | "delete" | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -273,7 +275,8 @@ export default function HomeScreen() {
   const [companyName, setCompanyName] = useState("My Company");
   const [showAddTxn, setShowAddTxn] = useState(false);
   const [showMoreOptions, setShowMoreOptions] = useState(false);
-  const [canEditSale, setCanEditSale] = useState(true);
+  const [permissions, setPermissions] = useState<string[] | null>(null);
+  const [memberId, setMemberId] = useState<string | null>(null);
   const [canDeleteSale, setCanDeleteSale] = useState(true);
   // The header shows the TENANT's identity (companyName/phone) by default — that's the
   // owner's own business, so it's correct for an owner login. A staff/salesman login
@@ -283,9 +286,10 @@ export default function HomeScreen() {
 
   useEffect(() => {
     getPermissions().then((perms) => {
-      setCanEditSale(perms === null || perms.includes("sale_edit_own") || perms.includes("sale_edit_all"));
+      setPermissions(perms);
       setCanDeleteSale(perms === null || perms.includes("sale_delete"));
     });
+    getMemberId().then(setMemberId);
     getRole().then(async (role) => {
       if (role === "owner") { setStaffLabel(null); return; }
       const [name, contact] = await Promise.all([getStaffName(), getStaffContact()]);
@@ -440,7 +444,7 @@ export default function HomeScreen() {
           contentContainerStyle={[s.list, filteredTxns.length === 0 && s.listEmpty]}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
           renderItem={({ item }) => (
-            <TxnCard item={item} canEdit={canEditSale} canDelete={canDeleteSale} onChanged={load} />
+            <TxnCard item={item} permissions={permissions} memberId={memberId} canDelete={canDeleteSale} onChanged={load} />
           )}
           ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
           ListEmptyComponent={

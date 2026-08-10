@@ -467,6 +467,10 @@ export const ALL_PERMISSIONS: TeamPermission[] = [
   { id: "delivery_note_view", label: "Delivery Note",             group: "Sales" },
   { id: "sale_edit_own",      label: "Edit Own Sales",            group: "Sales" },
   { id: "sale_edit_all",      label: "Edit All Sales",            group: "Sales" },
+  // Modifier on top of sale_edit_own/sale_edit_all, not a standalone edit grant — narrows
+  // whichever of those two is on to only that invoice's own creation date. Off by default:
+  // adding it never restricts an existing team member who didn't have it before.
+  { id: "sale_edit_today_only", label: "Edit Only Today's Invoices", group: "Sales" },
   { id: "sale_delete",        label: "Delete Sales",              group: "Sales" },
   // Purchase
   { id: "purchase_view",        label: "View Purchase Bills",   group: "Purchase" },

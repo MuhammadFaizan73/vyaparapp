@@ -65,12 +65,12 @@ export class TransactionsController {
   @Patch(":id")
   update(@Req() req: AuthedRequest, @Param("id") id: string, @Body() dto: UpdateTransactionDto) {
     const ip = (req as any).ip ?? (req as any).socket?.remoteAddress ?? undefined;
-    return this.transactionsService.update(req.tenantId, id, dto, ip);
+    return this.transactionsService.update(req.tenantId, id, dto, { memberId: req.memberId, permissions: req.permissions }, ip);
   }
 
   @Delete(":id")
   remove(@Req() req: AuthedRequest, @Param("id") id: string) {
-    return this.transactionsService.remove(req.tenantId, id);
+    return this.transactionsService.remove(req.tenantId, id, { memberId: req.memberId, permissions: req.permissions });
   }
 
   @Get(":id/history")
