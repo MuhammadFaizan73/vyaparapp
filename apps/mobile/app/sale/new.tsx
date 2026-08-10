@@ -401,18 +401,22 @@ export default function NewSaleScreen() {
   }
 
   // Typing a final Total Amount directly (e.g. "customer will only pay 1400") back-solves
-  // the Discount against this row's own subtotal — qty/rate/subtotal stay exactly as
-  // entered, so the listed unit price stays accurate for reporting; only the discount
-  // shows how big a markdown was actually given.
+  // the Discount against this row's own subtotal once typing is done — qty/rate/subtotal
+  // stay exactly as entered, so the listed unit price stays accurate for reporting; only
+  // the discount shows how big a markdown was actually given. The Discount % / Rs boxes
+  // are deliberately left untouched while typing (only committed on blur) so only the one
+  // field being edited visibly changes keystroke-to-keystroke, not several at once.
   function handleNewItemTotalChange(val: string) {
     setNewItemTotalText(val);
-    const total = parseFloat(val) || 0;
-    const discPct = newItemSubtotal ? ((newItemSubtotal - total) / newItemSubtotal) * 100 : 0;
-    setNewItemDiscountPct(discPct > 0 ? discPct.toFixed(2) : "");
-    setNewItemDiscountRsText(undefined);
   }
 
   function handleNewItemTotalBlur() {
+    if (newItemTotalText !== undefined) {
+      const total = parseFloat(newItemTotalText) || 0;
+      const discPct = newItemSubtotal ? ((newItemSubtotal - total) / newItemSubtotal) * 100 : 0;
+      setNewItemDiscountPct(discPct > 0 ? discPct.toFixed(2) : "");
+      setNewItemDiscountRsText(undefined);
+    }
     setNewItemTotalText(undefined);
   }
 
@@ -1094,7 +1098,7 @@ export default function NewSaleScreen() {
 
           <KeyboardAvoidingView
             style={{ flex: 1 }}
-            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
           >
             <ScrollView
               style={styles.scroll}
