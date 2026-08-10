@@ -10,7 +10,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import { colors } from "../../src/theme";
-import { api, getPermissions } from "../../src/auth";
+import { api, getPermissions, getRole, getStaffName, getStaffContact } from "../../src/auth";
 import { setHandoffTxn } from "../../src/txnHandoff";
 import { buildInvoiceHtml } from "../../src/invoiceHtml";
 import type { Transaction, Party } from "@vyapar/api-client";
@@ -275,11 +275,21 @@ export default function HomeScreen() {
   const [showMoreOptions, setShowMoreOptions] = useState(false);
   const [canEditSale, setCanEditSale] = useState(true);
   const [canDeleteSale, setCanDeleteSale] = useState(true);
+  // The header shows the TENANT's identity (companyName/phone) by default — that's the
+  // owner's own business, so it's correct for an owner login. A staff/salesman login
+  // shares that same tenant, so without this override they'd see the owner's info at the
+  // top instead of confirmation of which staff account they're actually logged in as.
+  const [staffLabel, setStaffLabel] = useState<string | null>(null);
 
   useEffect(() => {
     getPermissions().then((perms) => {
       setCanEditSale(perms === null || perms.includes("sale_edit_own") || perms.includes("sale_edit_all"));
       setCanDeleteSale(perms === null || perms.includes("sale_delete"));
+    });
+    getRole().then(async (role) => {
+      if (role === "owner") { setStaffLabel(null); return; }
+      const [name, contact] = await Promise.all([getStaffName(), getStaffContact()]);
+      if (name) setStaffLabel(contact ? `${name} · ${contact}` : name);
     });
   }, []);
 
@@ -331,9 +341,9 @@ export default function HomeScreen() {
       <View style={s.appBar}>
         <View style={s.appBarLeft}>
           <View style={s.avatar}>
-            <Text style={s.avatarTxt}>{companyName[0]?.toUpperCase()}</Text>
+            <Text style={s.avatarTxt}>{(staffLabel ?? companyName)[0]?.toUpperCase()}</Text>
           </View>
-          <Text style={s.companyName} numberOfLines={1}>{companyName}</Text>
+          <Text style={s.companyName} numberOfLines={1}>{staffLabel ?? companyName}</Text>
         </View>
         <View style={s.appBarRight}>
           <TouchableOpacity style={s.filterBtn}>

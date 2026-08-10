@@ -7,7 +7,7 @@ import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../src/theme";
-import { api, saveToken } from "../src/auth";
+import { api, saveToken, saveStaffIdentity } from "../src/auth";
 
 const ROLE_LABELS: Record<string, string> = {
   secondary_admin: "Secondary Admin",
@@ -37,6 +37,7 @@ export default function AcceptInviteScreen() {
     try {
       const result = await api.acceptInvite(code);
       await saveToken(result.token);
+      await saveStaffIdentity(result.member.name, result.member.contact);
       Alert.alert(
         "Welcome aboard!",
         `You've joined as ${ROLE_LABELS[result.member.role] ?? result.member.role}. You now have access to the company data.`,

@@ -7,7 +7,7 @@ import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../src/theme";
-import { api, saveToken } from "../src/auth";
+import { api, saveToken, saveStaffIdentity } from "../src/auth";
 
 export default function StaffLoginScreen() {
   const router = useRouter();
@@ -31,6 +31,7 @@ export default function StaffLoginScreen() {
     try {
       const result = await api.staffLogin(identifierTrimmed, password);
       await saveToken(result.token);
+      await saveStaffIdentity(result.member.name, result.member.contact);
       router.replace("/(tabs)/dashboard" as never);
     } catch (err: any) {
       const msg = err?.response?.data?.message ?? "Invalid email or password.";

@@ -2,6 +2,12 @@ import * as SecureStore from "expo-secure-store";
 import { VyaparApiClient } from "@vyapar/api-client";
 
 const TOKEN_KEY = "vyapar_jwt";
+// The JWT itself only carries memberId/role/permissions, not a display identity (see
+// getMemberId below) — the staff member's name/contact are only ever returned once, in
+// the staff-login/accept-invite response body, so they're saved here at that moment for
+// the Home screen to show instead of the tenant's own phone/company identity.
+const STAFF_NAME_KEY = "vyapar_staff_name";
+const STAFF_CONTACT_KEY = "vyapar_staff_contact";
 const API_BASE = process.env.EXPO_PUBLIC_API_BASE ?? "https://63dfc27578ffa4d0-125-62-88-237.serveousercontent.com/api";
 
 export const api = new VyaparApiClient(API_BASE);
@@ -26,12 +32,32 @@ export async function loadToken(): Promise<string | null> {
 
 export async function saveToken(token: string) {
   await SecureStore.setItemAsync(TOKEN_KEY, token);
+  // Every login (owner or staff) starts from a clean slate — staff-login/accept-invite
+  // call saveStaffIdentity() right after this, so an owner login on a device previously
+  // used by staff doesn't keep showing that staff member's identity on the Home screen.
+  await SecureStore.deleteItemAsync(STAFF_NAME_KEY);
+  await SecureStore.deleteItemAsync(STAFF_CONTACT_KEY);
   api.setToken(token);
 }
 
 export async function clearToken() {
   await SecureStore.deleteItemAsync(TOKEN_KEY);
+  await SecureStore.deleteItemAsync(STAFF_NAME_KEY);
+  await SecureStore.deleteItemAsync(STAFF_CONTACT_KEY);
   api.clearToken();
+}
+
+export async function saveStaffIdentity(name: string, contact?: string | null) {
+  await SecureStore.setItemAsync(STAFF_NAME_KEY, name);
+  if (contact) await SecureStore.setItemAsync(STAFF_CONTACT_KEY, contact);
+}
+
+export async function getStaffName(): Promise<string | null> {
+  return SecureStore.getItemAsync(STAFF_NAME_KEY);
+}
+
+export async function getStaffContact(): Promise<string | null> {
+  return SecureStore.getItemAsync(STAFF_CONTACT_KEY);
 }
 
 export async function getRole(): Promise<string> {

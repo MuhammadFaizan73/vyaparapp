@@ -420,7 +420,7 @@ export class VyaparApiClient {
     return res.data;
   }
 
-  async staffLogin(identifier: string, password: string): Promise<{ token: string; member: { id: string; name: string; email: string | null; role: string; permissions: string[] }; tenant: { id: string; phone: string; trialExpiresAt: string } }> {
+  async staffLogin(identifier: string, password: string): Promise<{ token: string; member: { id: string; name: string; email: string | null; contact: string; role: string; permissions: string[] }; tenant: { id: string; phone: string; trialExpiresAt: string } }> {
     const res = await this.http.post("/team-invite/login", { identifier, password });
     return res.data;
   }

@@ -89,6 +89,7 @@ export class TeamService {
         id: member.id,
         name: member.name,
         email: member.email,
+        contact: member.contact,
         role: member.role,
         permissions,
       },
