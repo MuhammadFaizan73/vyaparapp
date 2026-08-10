@@ -473,6 +473,19 @@ export default function NewSaleScreen() {
     setShowAddItem(true);
   }
 
+  // If Total Amount is mid-edit (focused, not yet blurred), setNewItemDiscountPct from
+  // handleNewItemTotalBlur hasn't committed yet — tapping Save right away would read the
+  // stale pre-edit percent from a closure that predates that pending state update. Compute
+  // straight from the raw typed text in that case instead of waiting on blur to happen first.
+  function resolveNewItemDiscountPct(): number {
+    if (newItemTotalText !== undefined) {
+      const total = parseFloat(newItemTotalText) || 0;
+      const discPct = newItemSubtotal ? ((newItemSubtotal - total) / newItemSubtotal) * 100 : 0;
+      return discPct > 0 ? discPct : 0;
+    }
+    return parseFloat(newItemDiscountPct) || 0;
+  }
+
   function saveItem(andNew: boolean) {
     if (!newItemName.trim()) { Alert.alert("Item Name", "Please enter an item name."); return; }
     const id = editItemId ?? Date.now().toString();
@@ -488,7 +501,7 @@ export default function NewSaleScreen() {
       tertiaryUnit: newItemTertiaryUnit || undefined,
       tertiaryConversionRate: newItemTertiaryConversionRate || undefined,
       baseSalePrice: newItemBaseSalePrice || undefined,
-      discount: parseFloat(newItemDiscountPct) || 0,
+      discount: resolveNewItemDiscountPct(),
     };
     if (editItemId) {
       setItems((prev) => prev.map((it) => (it.id === editItemId ? item : it)));
