@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback, useMemo, type ReactNode } from "react";
 import * as SecureStore from "expo-secure-store";
 import type { Company, Distributor, Branch } from "@vyapar/api-client";
-import { api, loadToken } from "./auth";
+import { api, loadToken, getToken } from "./auth";
 
 const SELECTED_DISTRIBUTOR_KEY = "vyapar_selected_distributor_id";
 const SELECTED_BRANCH_KEY = "vyapar_selected_branch_id";
@@ -92,7 +92,27 @@ export function SelectedCompanyProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    void refreshCompanies();
+    // This provider mounts once at the app root, before the user has necessarily
+    // logged in yet (e.g. fresh install, or a session that starts on the onboarding
+    // screen) — firing refreshCompanies() immediately at that point fetches with no
+    // token at all, and since this effect never runs again, a login completed later
+    // in the same app session was never picked up: companies stayed [] until the app
+    // was fully restarted. Poll for a token to actually exist before the first fetch.
+    let cancelled = false;
+    async function waitForTokenThenLoad() {
+      while (!cancelled) {
+        const token = await getToken();
+        if (token) {
+          await refreshCompanies();
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+    }
+    void waitForTokenThenLoad();
+    return () => {
+      cancelled = true;
+    };
   }, [refreshCompanies]);
 
   // Every tenant gets at least one Company row at registration, but nothing ever
