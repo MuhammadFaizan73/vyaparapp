@@ -112,16 +112,36 @@ export function SelectedCompanyProvider({ children }: { children: ReactNode }) {
     // was fully restarted. Poll for a token to actually exist before the first fetch.
     let cancelled = false;
     async function waitForTokenThenLoad() {
+      const deadline = Date.now() + 15000;
       while (!cancelled) {
-        const token = await getToken();
+        let token: string | null = null;
+        try {
+          token = await getToken();
+        } catch (err: any) {
+          // A SecureStore read throwing (seen on some Android devices when the OS
+          // invalidates Keystore-backed values) would otherwise die here as an
+          // unhandled rejection — loading never clears, and no error ever surfaces,
+          // so the switcher looks identical to a device that's still polling normally.
+          setCompaniesError(`Couldn't read saved login (${err?.message ?? "unknown error"})`);
+          setLoading(false);
+          return;
+        }
         if (token) {
           await refreshCompanies();
+          return;
+        }
+        if (Date.now() > deadline) {
+          setCompaniesError("No login token found after 15s — try logging in again");
+          setLoading(false);
           return;
         }
         await new Promise((resolve) => setTimeout(resolve, 500));
       }
     }
-    void waitForTokenThenLoad();
+    void waitForTokenThenLoad().catch((err: any) => {
+      setCompaniesError(`Unexpected error waiting for login (${err?.message ?? String(err)})`);
+      setLoading(false);
+    });
     return () => {
       cancelled = true;
     };
