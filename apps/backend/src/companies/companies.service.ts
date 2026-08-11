@@ -46,7 +46,23 @@ export class CompaniesService {
     } catch {
       legacy = [];
     }
-    if (!Array.isArray(legacy) || legacy.length === 0) return;
+    if (!Array.isArray(legacy) || legacy.length === 0) {
+      // No Company rows AND nothing in the legacy blob either — this tenant registered
+      // before Company became a real table and never ran mobile's "manage companies"
+      // flow, so nothing has ever created one. Without this, such a tenant has zero
+      // companies forever: the switcher hides, auto-select can't fire, and every
+      // Sale/Party/Item save that requires a company is permanently blocked. Fall back
+      // to their registration-time company fields so they always have at least one.
+      await this.prisma.company.create({
+        data: {
+          tenantId,
+          name: tenant.companyName || "My Business",
+          businessType: tenant.businessType ?? null,
+          email: tenant.companyEmail ?? null,
+        },
+      });
+      return;
+    }
 
     await this.prisma.company.createMany({
       data: legacy

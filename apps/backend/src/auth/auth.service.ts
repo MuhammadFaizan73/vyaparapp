@@ -62,7 +62,11 @@ export class AuthService {
   // mobile's existing whole-array-replace flow (create-company.tsx/manage-companies.tsx)
   // keeps working unchanged. This lazily imports any companies that only ever existed
   // in the old blob (e.g. a tenant that's only used mobile so far) into real rows.
-  private async ensureCompaniesMigrated(tenantId: string, rawExtraCompanies: string): Promise<void> {
+  private async ensureCompaniesMigrated(
+    tenantId: string,
+    rawExtraCompanies: string,
+    fallback: { companyName: string | null; businessType: string | null; companyEmail: string | null },
+  ): Promise<void> {
     const existing = await this.prisma.company.count({ where: { tenantId } });
     if (existing > 0) return;
 
@@ -72,7 +76,19 @@ export class AuthService {
     } catch {
       legacy = [];
     }
-    if (!Array.isArray(legacy) || legacy.length === 0) return;
+    if (!Array.isArray(legacy) || legacy.length === 0) {
+      // See CompaniesService.ensureMigratedFromLegacyBlob — same "tenant has zero
+      // companies forever" gap, fixed the same way here for desktop's getTenant().
+      await this.prisma.company.create({
+        data: {
+          tenantId,
+          name: fallback.companyName || "My Business",
+          businessType: fallback.businessType,
+          email: fallback.companyEmail,
+        },
+      });
+      return;
+    }
 
     await this.prisma.company.createMany({
       data: legacy
@@ -113,7 +129,11 @@ export class AuthService {
         trialStartedAt: true, trialExpiresAt: true,
       },
     });
-    await this.ensureCompaniesMigrated(tenantId, t.extraCompanies);
+    await this.ensureCompaniesMigrated(tenantId, t.extraCompanies, {
+      companyName: t.companyName,
+      businessType: t.businessType,
+      companyEmail: t.companyEmail,
+    });
     return {
       ...t,
       extraCompanies: await this.companiesAsExtraCompanies(tenantId),
