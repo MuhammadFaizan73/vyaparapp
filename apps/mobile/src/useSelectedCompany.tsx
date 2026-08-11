@@ -22,6 +22,10 @@ type Ctx = {
   // list (a Distributor/Branch rollup), or null ("All Companies").
   companyFilter: string | null;
   filterLabel: string;
+  // Set only when the last refreshCompanies() call actually failed, so the switcher
+  // can show the real reason and a retry button instead of just silently vanishing —
+  // this was reported as "no option to select the company" with no clue why.
+  companiesError: string | null;
   setSelectedDistributorId: (id: string | null) => void;
   setSelectedBranchId: (id: string | null) => void;
   setSelectedCompanyId: (id: string | null) => void;
@@ -39,6 +43,7 @@ const SelectedCompanyContext = createContext<Ctx>({
   selectedCompany: null,
   companyFilter: null,
   filterLabel: "All Companies",
+  companiesError: null,
   setSelectedDistributorId: () => {},
   setSelectedBranchId: () => {},
   setSelectedCompanyId: () => {},
@@ -50,6 +55,7 @@ export function SelectedCompanyProvider({ children }: { children: ReactNode }) {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
+  const [companiesError, setCompaniesError] = useState<string | null>(null);
   const [selectedDistributorId, setSelectedDistributorIdState] = useState<string | null>(null);
   const [selectedBranchId, setSelectedBranchIdState] = useState<string | null>(null);
   const [selectedCompanyId, setSelectedCompanyIdState] = useState<string | null>(null);
@@ -84,8 +90,14 @@ export function SelectedCompanyProvider({ children }: { children: ReactNode }) {
       setDistributors(d);
       setBranches(b);
       setCompanies(c);
-    } catch {
+      setCompaniesError(null);
+    } catch (err: any) {
       setCompanies([]);
+      const status = err?.response?.status;
+      const serverMsg = err?.response?.data?.message;
+      setCompaniesError(
+        status ? `HTTP ${status}${serverMsg ? `: ${String(serverMsg)}` : ""}` : (err?.message ?? "Unknown error"),
+      );
     } finally {
       setLoading(false);
     }
@@ -218,6 +230,7 @@ export function SelectedCompanyProvider({ children }: { children: ReactNode }) {
         selectedCompany,
         companyFilter,
         filterLabel,
+        companiesError,
         setSelectedDistributorId,
         setSelectedBranchId,
         setSelectedCompanyId,

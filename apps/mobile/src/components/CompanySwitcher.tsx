@@ -19,15 +19,49 @@ export function CompanySwitcherBar() {
   const {
     distributors, branches, companies,
     selectedDistributorId, selectedBranchId, selectedCompanyId,
-    filterLabel,
+    filterLabel, companiesError, loading,
     setSelectedDistributorId, setSelectedBranchId, setSelectedCompanyId,
+    refreshCompanies,
   } = useSelectedCompany();
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<CompanyView>({ level: "root" });
   // Desktop's equivalent dropdown is always visible, even for a single-company tenant —
   // it's the only way to confirm/select that company. Only hide here if there's truly
   // nothing to pick (a brand-new tenant whose default Company row hasn't loaded yet).
-  if (companies.length === 0 && distributors.length === 0) return null;
+  if (companies.length === 0 && distributors.length === 0) {
+    // Reported as "there is no option to select the company at all" — that's this branch
+    // silently returning null on a failed fetch. Surface the real reason and a manual
+    // retry instead, since we haven't yet reproduced why the fetch itself is failing.
+    if (companiesError) {
+      return (
+        <TouchableOpacity
+          style={s.errorBanner}
+          onPress={() => void refreshCompanies()}
+          activeOpacity={0.85}
+          disabled={loading}
+        >
+          <Ionicons name="alert-circle-outline" size={14} color="#b91c1c" />
+          <Text style={s.errorBannerText} numberOfLines={2}>
+            Couldn't load companies ({companiesError}) — tap to retry
+          </Text>
+          <Ionicons name="refresh" size={14} color="#b91c1c" />
+        </TouchableOpacity>
+      );
+    }
+    // Fetch actually succeeded but came back with zero companies — the backend now
+    // always backfills a default company, so this shouldn't happen anymore, but show
+    // a retry affordance instead of nothing rather than assume that guarantee holds.
+    if (!loading) {
+      return (
+        <TouchableOpacity style={s.errorBanner} onPress={() => void refreshCompanies()} activeOpacity={0.85}>
+          <Ionicons name="alert-circle-outline" size={14} color="#b91c1c" />
+          <Text style={s.errorBannerText} numberOfLines={2}>No companies found — tap to retry</Text>
+          <Ionicons name="refresh" size={14} color="#b91c1c" />
+        </TouchableOpacity>
+      );
+    }
+    return null;
+  }
 
   function pick(fn: () => void) {
     fn();
@@ -164,6 +198,24 @@ export function CompanySwitcherBar() {
 }
 
 const s = StyleSheet.create({
+  errorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fef2f2",
+    borderBottomWidth: 1,
+    borderBottomColor: "#fecaca",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    gap: 6,
+  },
+  errorBannerText: {
+    color: "#b91c1c",
+    fontSize: 12,
+    fontWeight: "600",
+    flex: 1,
+    textAlign: "center",
+  },
   banner: {
     flexDirection: "row",
     alignItems: "center",
