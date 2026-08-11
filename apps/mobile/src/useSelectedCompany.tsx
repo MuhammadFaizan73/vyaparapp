@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback, useMemo, type ReactNode } from "react";
 import * as SecureStore from "expo-secure-store";
 import type { Company, Distributor, Branch } from "@vyapar/api-client";
-import { api } from "./auth";
+import { api, loadToken } from "./auth";
 
 const SELECTED_DISTRIBUTOR_KEY = "vyapar_selected_distributor_id";
 const SELECTED_BRANCH_KEY = "vyapar_selected_branch_id";
@@ -69,6 +69,13 @@ export function SelectedCompanyProvider({ children }: { children: ReactNode }) {
   const refreshCompanies = useCallback(async () => {
     setLoading(true);
     try {
+      // This provider mounts alongside app/index.tsx's own token bootstrap, and both
+      // read the same SecureStore key independently — without this, getCompanies() can
+      // fire before that other load finishes setting the auth header, fail with 401
+      // (it has no .catch, so the whole Promise.all below rejects), and leave `companies`
+      // stuck at [] for the rest of the app session since this effect never re-runs.
+      // loadToken() is idempotent, so calling it again here is harmless.
+      await loadToken();
       const [d, b, c] = await Promise.all([
         api.getDistributors().catch(() => []),
         api.getBranches().catch(() => []),
