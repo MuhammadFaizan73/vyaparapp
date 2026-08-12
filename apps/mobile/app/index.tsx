@@ -24,8 +24,18 @@ export default function Root() {
           showExpiryBannerIfNeeded(status).catch(() => {});
           setState("app");
         }
-      } catch {
-        setState("onboarding");
+      } catch (err: any) {
+        // A token already exists at this point (the no-token case returned above), so
+        // this call failing doesn't mean "not logged in" — it can just as easily be a
+        // network blip or a slow Railway cold start. Only a genuine 401 means the token
+        // itself is dead; anything else was wiping a perfectly valid session back to the
+        // phone-entry screen, which read as "having to log in again and again" for no
+        // reason. Fail open into the app for any other error.
+        if (err?.response?.status === 401) {
+          setState("onboarding");
+        } else {
+          setState("app");
+        }
       }
     })();
   }, []);

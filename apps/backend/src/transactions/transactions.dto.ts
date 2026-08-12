@@ -10,6 +10,7 @@ export class CreateTransactionDto {
   @IsOptional() @IsString() notes?: string;
   @IsOptional() @IsUUID() companyId?: string;
   @IsOptional() @IsUUID() bookerId?: string;
+  @IsOptional() @IsString() idempotencyKey?: string;
 }
 
 export class UpdateTransactionDto {

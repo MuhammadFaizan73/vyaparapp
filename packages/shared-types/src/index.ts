@@ -305,6 +305,7 @@ export const CreateTransactionRequestSchema = z.object({
   notes: z.string().optional(),
   companyId: z.string().uuid().nullable().optional(),
   bookerId: z.string().uuid().nullable().optional(),
+  idempotencyKey: z.string().optional(),
 });
 export type CreateTransactionRequest = z.infer<typeof CreateTransactionRequestSchema>;
 

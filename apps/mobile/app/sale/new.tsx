@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
   StyleSheet, KeyboardAvoidingView, Platform, Alert, Modal,
@@ -37,6 +37,10 @@ type LineItem = {
 };
 
 const UNITS = ["NONE", "PCS", "KG", "LTR", "MTR", "BOX", "BAG", "DOZ"];
+
+function generateIdempotencyKey(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
 
 // Amount after this row's own discount — mirrors desktop's identical helper.
 function rowAmount(item: Pick<LineItem, "qty" | "rate" | "discount">): number {
@@ -90,6 +94,12 @@ export default function NewSaleScreen() {
     editId?: string;
   }>();
   const isEdit = Boolean(params.editId);
+
+  // One key per invoice-creation attempt, stable across retries of THAT attempt (a slow
+  // save that times out client-side while the write still lands server-side would
+  // otherwise create a second identical invoice on retry) — regenerated only when the
+  // user starts a genuinely new invoice via "Save & New".
+  const idempotencyKeyRef = useRef(generateIdempotencyKey());
 
   const [catalog, setCatalog] = useState<Item[]>(getItems());
   const { companies, selectedCompanyId, setSelectedCompanyId } = useSelectedCompany();
@@ -369,10 +379,10 @@ export default function NewSaleScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.editId]);
 
-  // ── Add Item modal: qty*rate, then Discount and Total Amount are two ways to set the
-  // same outcome — editing one back-solves the other, subtotal (qty*rate) never moves.
-  // `newItemDiscountPct` is the only persisted value; Rs and Total are derived from it
-  // fresh every render, so a later qty/rate edit can't leave a stale Rs figure behind.
+  // ── Add Item modal: qty*rate is the subtotal. Discount %/Rs mark it down from there.
+  // Editing Total Amount instead sets Rate = Total ÷ Qty directly (see
+  // handleNewItemTotalBlur/resolveNewItemRate) and clears any discount, since Rate is
+  // meant to reflect the actual price this item sold at, not a pre-discount list price.
   const newItemSubtotal = (parseFloat(newItemQty) || 0) * (parseFloat(newItemRate) || 0);
   const newItemDiscountPctVal = parseFloat(newItemDiscountPct) || 0;
   const newItemDiscountRsVal = (newItemSubtotal * newItemDiscountPctVal) / 100;
@@ -400,12 +410,11 @@ export default function NewSaleScreen() {
     return newItemDiscountRsVal ? newItemDiscountRsVal.toFixed(2) : "";
   }
 
-  // Typing a final Total Amount directly (e.g. "customer will only pay 1400") back-solves
-  // the Discount against this row's own subtotal once typing is done — qty/rate/subtotal
-  // stay exactly as entered, so the listed unit price stays accurate for reporting; only
-  // the discount shows how big a markdown was actually given. The Discount % / Rs boxes
-  // are deliberately left untouched while typing (only committed on blur) so only the one
-  // field being edited visibly changes keystroke-to-keystroke, not several at once.
+  // Typing a final Total Amount directly (e.g. "customer will only pay 1400") sets the
+  // Rate itself (Rate = Total ÷ Qty) once typing is done and clears any discount — the
+  // Rate field is meant to reflect the actual price this item sold at. The Rate/Discount
+  // boxes are deliberately left untouched while typing (only committed on blur) so only
+  // the one field being edited visibly changes keystroke-to-keystroke, not several at once.
   function handleNewItemTotalChange(val: string) {
     setNewItemTotalText(val);
   }
@@ -413,8 +422,9 @@ export default function NewSaleScreen() {
   function handleNewItemTotalBlur() {
     if (newItemTotalText !== undefined) {
       const total = parseFloat(newItemTotalText) || 0;
-      const discPct = newItemSubtotal ? ((newItemSubtotal - total) / newItemSubtotal) * 100 : 0;
-      setNewItemDiscountPct(discPct > 0 ? discPct.toFixed(2) : "");
+      const qty = parseFloat(newItemQty) || 0;
+      setNewItemRate(qty ? String(total / qty) : "0");
+      setNewItemDiscountPct("");
       setNewItemDiscountRsText(undefined);
     }
     setNewItemTotalText(undefined);
@@ -465,16 +475,21 @@ export default function NewSaleScreen() {
     setShowAddItem(true);
   }
 
-  // If Total Amount is mid-edit (focused, not yet blurred), setNewItemDiscountPct from
-  // handleNewItemTotalBlur hasn't committed yet — tapping Save right away would read the
-  // stale pre-edit percent from a closure that predates that pending state update. Compute
-  // straight from the raw typed text in that case instead of waiting on blur to happen first.
-  function resolveNewItemDiscountPct(): number {
+  // If Total Amount is mid-edit (focused, not yet blurred), handleNewItemTotalBlur's state
+  // updates haven't committed yet — tapping Save right away would read stale pre-edit
+  // values from a closure that predates those pending updates. Compute straight from the
+  // raw typed text in that case instead of waiting on blur to happen first.
+  function resolveNewItemRate(): number {
     if (newItemTotalText !== undefined) {
       const total = parseFloat(newItemTotalText) || 0;
-      const discPct = newItemSubtotal ? ((newItemSubtotal - total) / newItemSubtotal) * 100 : 0;
-      return discPct > 0 ? discPct : 0;
+      const qty = parseFloat(newItemQty) || 0;
+      return qty ? total / qty : 0;
     }
+    return parseFloat(newItemRate) || 0;
+  }
+
+  function resolveNewItemDiscountPct(): number {
+    if (newItemTotalText !== undefined) return 0;
     return parseFloat(newItemDiscountPct) || 0;
   }
 
@@ -487,7 +502,7 @@ export default function NewSaleScreen() {
       mrp: parseFloat(newItemMrp) || 0,
       qty: parseFloat(newItemQty) || 1,
       unit: newItemUnit,
-      rate: parseFloat(newItemRate) || 0,
+      rate: resolveNewItemRate(),
       secondaryUnit: newItemSecondaryUnit || undefined,
       conversionRate: newItemConversionRate || undefined,
       tertiaryUnit: newItemTertiaryUnit || undefined,
@@ -548,7 +563,11 @@ export default function NewSaleScreen() {
         return;
       }
 
-      const sale: any = await api.createTransaction({ ...payload, type: "sale" });
+      const sale: any = await api.createTransaction({
+        ...payload,
+        type: "sale",
+        idempotencyKey: idempotencyKeyRef.current,
+      });
 
       if (params.fromDeliveryNoteId) {
         try {
@@ -561,6 +580,7 @@ export default function NewSaleScreen() {
       }
 
       if (andNew) {
+        idempotencyKeyRef.current = generateIdempotencyKey();
         setCustomer(""); setItems([]); setDiscountPct(""); setDiscountRs("");
         setRoundOff(true); setReceived(false); setReceivedAmt(""); setNotes(""); setBookerId("");
       } else {
@@ -778,7 +798,7 @@ export default function NewSaleScreen() {
                   />
                   <Text style={styles.discountUnit}>%</Text>
                 </View>
-                <View style={[styles.discountBox, { borderColor: colors.border }]}>
+                <View style={styles.discountBox}>
                   <Text style={styles.discountRs}>Rs</Text>
                   <TextInput
                     style={[styles.discountInput, { flex: 1 }]}
@@ -1516,7 +1536,7 @@ const styles = StyleSheet.create({
   discountGroup: { flexDirection: "row", gap: 8, flex: 1, justifyContent: "flex-end" },
   discountBox: {
     flexDirection: "row", alignItems: "center", gap: 4,
-    borderWidth: 1, borderColor: "#f59e0b", borderRadius: 4,
+    borderWidth: 1, borderColor: colors.border, borderRadius: 4,
     paddingHorizontal: 8, paddingVertical: 6,
   },
   discountInput: { fontSize: 13, color: colors.text, minWidth: 44, padding: 0 },

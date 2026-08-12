@@ -219,10 +219,15 @@ model Transaction {
   booker    TeamMember?          @relation(fields: [bookerId], references: [id], onDelete: SetNull)
   createdAt DateTime             @default(now())
   history   TransactionHistory[]
+  // Client-generated, one per create attempt (not per retry) — lets a client that
+  // resent a create after a slow/timed-out response get back the original row instead
+  // of creating a second one. Null for callers that don't send one (old clients, PATCH).
+  idempotencyKey String?
 
   @@index([tenantId, type, date])
   @@index([tenantId, partyId])
   @@index([tenantId, companyId])
+  @@unique([tenantId, idempotencyKey])
 }
 
 model TransactionHistory {

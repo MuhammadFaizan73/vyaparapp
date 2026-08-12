@@ -208,25 +208,50 @@ export class TransactionsService {
   }
 
   async create(tenantId: string, dto: CreateTransactionDto): Promise<TransactionRow> {
+    // A client that resends a create after a slow/timed-out response (a real risk on the
+    // weak connections this app targets) would otherwise land two identical invoices —
+    // the client-side "disabled while saving" guard only protects against a double-tap
+    // on the SAME in-flight request, not a genuinely separate retry. Return the original
+    // row instead of creating a second one when the same key has already been used.
+    if (dto.idempotencyKey) {
+      const existing = await this.prisma.transaction.findUnique({
+        where: { tenantId_idempotencyKey: { tenantId, idempotencyKey: dto.idempotencyKey } },
+      });
+      if (existing) return toRow(existing);
+    }
     const party = await this.prisma.party.findUnique({ where: { id: dto.partyId } });
     if (!party || party.tenantId !== tenantId) {
       throw new NotFoundException("Party not found");
     }
-    const transaction = await this.prisma.transaction.create({
-      data: {
-        tenantId,
-        partyId: dto.partyId,
-        type: dto.type,
-        number: dto.number ?? null,
-        date: dto.date ? new Date(dto.date) : new Date(),
-        total: dto.total,
-        balance: dto.balance,
-        notes: dto.notes ?? null,
-        companyId: dto.companyId ?? null,
-        bookerId: dto.bookerId ?? null,
-      },
-    });
-    return toRow(transaction);
+    try {
+      const transaction = await this.prisma.transaction.create({
+        data: {
+          tenantId,
+          partyId: dto.partyId,
+          type: dto.type,
+          number: dto.number ?? null,
+          date: dto.date ? new Date(dto.date) : new Date(),
+          total: dto.total,
+          balance: dto.balance,
+          notes: dto.notes ?? null,
+          companyId: dto.companyId ?? null,
+          bookerId: dto.bookerId ?? null,
+          idempotencyKey: dto.idempotencyKey ?? null,
+        },
+      });
+      return toRow(transaction);
+    } catch (err: any) {
+      // Two near-simultaneous retries can both pass the findUnique check above before
+      // either commits — the unique constraint catches that race; return the winner
+      // instead of surfacing a 500 for what the client should see as a successful save.
+      if (dto.idempotencyKey && err?.code === "P2002") {
+        const existing = await this.prisma.transaction.findUnique({
+          where: { tenantId_idempotencyKey: { tenantId, idempotencyKey: dto.idempotencyKey } },
+        });
+        if (existing) return toRow(existing);
+      }
+      throw err;
+    }
   }
 
   async getHistory(tenantId: string, transactionId: string): Promise<HistoryRow[]> {
