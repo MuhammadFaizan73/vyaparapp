@@ -38,6 +38,16 @@ type LineItem = {
 
 const UNITS = ["NONE", "PCS", "KG", "LTR", "MTR", "BOX", "BAG", "DOZ"];
 
+// Every word typed must start some word in the target — "bombay biryani" must match
+// "SS Bombay Biryani" even though neither of the target's own words starts with the
+// whole two-word query. Word order in the query doesn't have to match the target's.
+function matchesAllWords(target: string, query: string): boolean {
+  const targetWords = target.toLowerCase().split(/\s+/);
+  const queryWords = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  if (queryWords.length === 0) return true;
+  return queryWords.every((qw) => targetWords.some((tw) => tw.startsWith(qw)));
+}
+
 function generateIdempotencyKey(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
@@ -236,7 +246,7 @@ export default function NewSaleScreen() {
   const filteredParties = parties
     .filter((p) => p.partyType === "customer" || p.partyType === "both" || p.isSystem)
     .filter((p) =>
-      p.name.toLowerCase().includes(customer.toLowerCase()) ||
+      matchesAllWords(p.name, customer) ||
       (p.phone && p.phone.includes(customer))
     );
   const itemSearchQuery = itemSearch.trim().toLowerCase();
@@ -249,8 +259,9 @@ export default function NewSaleScreen() {
       if (!itemSearchQuery) return true;
       // Match on word start rather than "contains anywhere" — a query like "b" would
       // otherwise surface unrelated items such as "Vegetable Masala" just because a
-      // "b" appears mid-word.
-      const matchesName = c.name.toLowerCase().split(/\s+/).some((w) => w.startsWith(itemSearchQuery));
+      // "b" appears mid-word. Every typed word (e.g. "bombay biryani") must match some
+      // word in the name, not the whole query against a single word.
+      const matchesName = matchesAllWords(c.name, itemSearchQuery);
       const matchesSku = (c.sku ?? "").toLowerCase().startsWith(itemSearchQuery);
       return matchesName || matchesSku;
     })
