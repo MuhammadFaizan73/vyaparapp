@@ -495,15 +495,21 @@ function AllTransactionsReport() {
   const [from,    setFrom]    = useState(monthStart);
   const [to,      setTo]      = useState(monthEnd);
   const [txnType, setTxnType] = useState("");
+  const [bookerId, setBookerId] = useState("");
+  const [teamMembers, setTeamMembers] = useState<{ id: string; name: string }[]>([]);
   const { companyFilter } = useCompany();
-  const { data, loading, error } = useReport("all-transactions", { from, to, txnType: txnType || undefined, companyId: companyFilter ?? undefined });
+  const { data, loading, error } = useReport("all-transactions", { from, to, txnType: txnType || undefined, companyId: companyFilter ?? undefined, bookerId: bookerId || undefined });
+
+  useEffect(() => {
+    api.listTeamMembers().then(setTeamMembers).catch(() => {});
+  }, []);
 
   function handleExport() {
     if (!data?.transactions?.length) return;
     exportToExcel(
       data.transactions.map((r: any, i: number) => ({
         "#": i + 1, Date: fmt(r.date), "Ref No.": r.refNo || "", "Party Name": r.partyName,
-        Category: r.category || "", Type: txnLabel(r.type),
+        Category: r.category || "", Type: txnLabel(r.type), "Booked By": r.bookerName || "",
         Total: r.total, "Received/Paid": r.received, Balance: r.balance, Status: r.status,
       })),
       "All Transactions", "Transactions",
@@ -526,6 +532,12 @@ function AllTransactionsReport() {
           <option value="sale_order">Sale Order</option>
           <option value="estimate">Estimate</option>
         </select>
+        <select className="rpt-select" value={bookerId} onChange={(e) => setBookerId(e.target.value)}>
+          <option value="">All Salesmen</option>
+          {teamMembers.map((m) => (
+            <option key={m.id} value={m.id}>{m.name}</option>
+          ))}
+        </select>
         <ExcelPrint onExport={handleExport} />
       </div>
       <ReportWrap loading={loading} error={error}>
@@ -535,7 +547,7 @@ function AllTransactionsReport() {
               <table className="rpt-table">
                 <thead><tr>
                   <th>#</th><th>Date</th><th>Ref No.</th><th>Party Name</th>
-                  <th>Category N...</th><th>Type</th>
+                  <th>Category N...</th><th>Type</th><th>Booked By</th>
                   <th className="rpt-num">Total</th>
                   <th className="rpt-num">Received/...</th>
                   <th className="rpt-num">Balance</th><th>Status</th>
@@ -549,6 +561,7 @@ function AllTransactionsReport() {
                       <td>{r.partyName}</td>
                       <td>{r.category || "–"}</td>
                       <td>{txnLabel(r.type)}</td>
+                      <td>{r.bookerName || "–"}</td>
                       <td className="rpt-num">{rs(r.total)}</td>
                       <td className="rpt-num">{rs(r.received)}</td>
                       <td className="rpt-num">{rs(r.balance)}</td>

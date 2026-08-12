@@ -475,7 +475,7 @@ const REPORT_ROW_BUILDERS: Record<string, (data: any) => ExportRow[]> = {
   })),
   "all-transactions": (data) => (data.transactions ?? []).map((r: any) => ({
     Date: fmt(r.date), "Ref #": r.refNo ?? "–", Party: r.partyName ?? "–", Type: txnLabel(r.type),
-    "Payment Type": r.paymentType ?? "–", Total: r.total ?? 0, Received: r.received ?? 0,
+    "Payment Type": r.paymentType ?? "–", "Booked By": r.bookerName ?? "–", Total: r.total ?? 0, Received: r.received ?? 0,
     Balance: r.balance ?? 0, Status: r.status ?? "–",
   })),
   "profit-and-loss": (data) => [
@@ -618,6 +618,14 @@ function usePartiesList() {
   return parties;
 }
 
+function useTeamMembersList() {
+  const [members, setMembers] = useState<{ id: string; name: string }[]>([]);
+  useEffect(() => {
+    api.listTeamMembers().then((list) => setMembers(list.map((m: any) => ({ id: m.id, name: m.name })))).catch(() => {});
+  }, []);
+  return members;
+}
+
 function useCompaniesList() {
   const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
   useEffect(() => {
@@ -665,6 +673,7 @@ function TxnRow({ item }: { item: any }) {
           <Text style={tr.sub} numberOfLines={1}>
             {fmt(item.date)}  ·  {txnLabel(item.type)}
             {item.invoiceNo ? `  ·  ${item.invoiceNo}` : item.refNo ? `  ·  ${item.refNo}` : ""}
+            {item.bookerName ? `  ·  ${item.bookerName}` : ""}
           </Text>
           {item.status && (
             <View style={[tr.badge, { backgroundColor: color + "1a" }]}>
@@ -1035,27 +1044,33 @@ function AllTransactionsReport({ onDataLoaded }: { onDataLoaded?: (rows: ExportR
   const [txnType, setTxnType] = useState("");
   const [status, setStatus] = useState("");
   const [partyId, setPartyId] = useState("");
+  const [bookerId, setBookerId] = useState("");
   const [showPeriod, setShowPeriod] = useState(false);
   const [showTxnType, setShowTxnType] = useState(false);
   const [showStatus, setShowStatus] = useState(false);
   const [showParty, setShowParty] = useState(false);
+  const [showBooker, setShowBooker] = useState(false);
   const parties = usePartiesList();
+  const teamMembers = useTeamMembersList();
 
   const { data, loading, error, reload } = useReport("all-transactions", {
     from: range.from, to: range.to,
     ...(txnType ? { txnType } : {}),
     ...(status  ? { status }  : {}),
     ...(partyId ? { partyId } : {}),
+    ...(bookerId ? { bookerId } : {}),
   }, onDataLoaded);
 
   const partyOptions = [{ label: "All Parties", value: "" }, ...parties.map((p) => ({ label: p.name, value: p.id }))];
+  const bookerOptions = [{ label: "All Salesmen", value: "" }, ...teamMembers.map((m) => ({ label: m.name, value: m.id }))];
   const activeFilters = [
     ...(txnType ? [{ key: "txnType", label: `Type: ${TXN_TYPES.find(t => t.value === txnType)?.label}`   }] : []),
     ...(status  ? [{ key: "status",  label: `Status: ${STATUSES.find(s => s.value === status)?.label}`   }] : []),
     ...(partyId ? [{ key: "partyId", label: `Party: ${parties.find(p => p.id === partyId)?.name ?? ""}` }] : []),
+    ...(bookerId ? [{ key: "bookerId", label: `Booked By: ${teamMembers.find(m => m.id === bookerId)?.name ?? ""}` }] : []),
   ];
   function removeFilter(key: string) {
-    if (key === "txnType") setTxnType(""); else if (key === "status") setStatus(""); else setPartyId("");
+    if (key === "txnType") setTxnType(""); else if (key === "status") setStatus(""); else if (key === "partyId") setPartyId(""); else setBookerId("");
   }
 
   return (
@@ -1065,6 +1080,7 @@ function AllTransactionsReport({ onDataLoaded }: { onDataLoaded?: (rows: ExportR
         <FilterChip label={txnType ? TXN_TYPES.find(t => t.value === txnType)!.label : "All Types"} active={!!txnType} onPress={() => setShowTxnType(true)} />
         <FilterChip label={status ? STATUSES.find(s => s.value === status)!.label : "All Statuses"} active={!!status} onPress={() => setShowStatus(true)} />
         <FilterChip label={partyId ? (parties.find(p => p.id === partyId)?.name ?? "Party") : "All Parties"} active={!!partyId} onPress={() => setShowParty(true)} />
+        <FilterChip label={bookerId ? (teamMembers.find(m => m.id === bookerId)?.name ?? "Salesman") : "All Salesmen"} active={!!bookerId} onPress={() => setShowBooker(true)} />
       </FilterRow>
       <ActiveFiltersBar filters={activeFilters} onRemove={removeFilter} />
 
@@ -1089,6 +1105,7 @@ function AllTransactionsReport({ onDataLoaded }: { onDataLoaded?: (rows: ExportR
       <FilterPickerModal visible={showTxnType} title="Transaction Type" options={TXN_TYPES} selected={txnType} onClose={() => setShowTxnType(false)} onSelect={setTxnType} />
       <FilterPickerModal visible={showStatus} title="Payment Status" options={STATUSES.map(s => ({ ...s, color: s.value ? statusColor(s.value) : undefined }))} selected={status} onClose={() => setShowStatus(false)} onSelect={setStatus} />
       <FilterPickerModal visible={showParty} title="Select Party" options={partyOptions} selected={partyId} onClose={() => setShowParty(false)} onSelect={setPartyId} searchable />
+      <FilterPickerModal visible={showBooker} title="Select Salesman" options={bookerOptions} selected={bookerId} onClose={() => setShowBooker(false)} onSelect={setBookerId} searchable />
     </>
   );
 }

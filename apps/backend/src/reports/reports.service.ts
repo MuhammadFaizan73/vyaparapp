@@ -298,6 +298,7 @@ export class ReportsService {
     status?: string,
     partyId?: string,
     companyId?: string,
+    bookerId?: string,
   ) {
     const dateFilter = buildDateFilter(from, to);
 
@@ -307,9 +308,10 @@ export class ReportsService {
         ...(txnType ? { type: txnType } : {}),
         ...(dateFilter ? { date: dateFilter } : {}),
         ...(partyId ? { partyId } : {}),
+        ...(bookerId ? { bookerId } : {}),
         ...companyIdWhere(companyId),
       },
-      include: { party: true },
+      include: { party: true, booker: true },
       orderBy: { date: 'desc' },
     });
 
@@ -336,6 +338,7 @@ export class ReportsService {
         balance: t.balance,
         status: txnStatus(t.total, t.balance),
         paymentType: pt,
+        bookerName: t.booker?.name ?? '',
       };
     });
 

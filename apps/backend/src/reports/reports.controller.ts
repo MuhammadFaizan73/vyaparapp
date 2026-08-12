@@ -51,8 +51,9 @@ export class ReportsController {
     @Query('status') status?: string,
     @Query('partyId') partyId?: string,
     @Query('companyId') companyId?: string,
+    @Query('bookerId') bookerId?: string,
   ) {
-    return this.reports.getAllTransactions(req.tenantId, from, to, txnType, paymentType, status, partyId, companyId);
+    return this.reports.getAllTransactions(req.tenantId, from, to, txnType, paymentType, status, partyId, companyId, bookerId);
   }
 
   @Get('profit-and-loss')
