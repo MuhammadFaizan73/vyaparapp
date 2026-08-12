@@ -68,7 +68,7 @@ export class TransactionsController {
 
   @Post()
   create(@Req() req: AuthedRequest, @Body() dto: CreateTransactionDto) {
-    return this.transactionsService.create(req.tenantId, dto);
+    return this.transactionsService.create(req.tenantId, dto, { memberId: req.memberId, permissions: req.permissions });
   }
 
   @Patch(":id")

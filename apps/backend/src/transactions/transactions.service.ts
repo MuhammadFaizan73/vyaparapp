@@ -207,7 +207,7 @@ export class TransactionsService {
     return agg._sum.total ?? 0;
   }
 
-  async create(tenantId: string, dto: CreateTransactionDto): Promise<TransactionRow> {
+  async create(tenantId: string, dto: CreateTransactionDto, caller: Caller): Promise<TransactionRow> {
     // A client that resends a create after a slow/timed-out response (a real risk on the
     // weak connections this app targets) would otherwise land two identical invoices —
     // the client-side "disabled while saving" guard only protects against a double-tap
@@ -235,7 +235,12 @@ export class TransactionsService {
           balance: dto.balance,
           notes: dto.notes ?? null,
           companyId: dto.companyId ?? null,
-          bookerId: dto.bookerId ?? null,
+          // Only Sale has an explicit Booker picker in the UI — Payment In/Out and every
+          // other type send no bookerId at all, so a staff member's own payments were
+          // silently unattributed (indistinguishable from the owner's or another staff
+          // member's). Default to the logged-in staff member when the client didn't
+          // pick one explicitly; owners have no memberId, so this is a no-op for them.
+          bookerId: dto.bookerId ?? caller.memberId ?? null,
           idempotencyKey: dto.idempotencyKey ?? null,
         },
       });
