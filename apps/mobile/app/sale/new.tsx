@@ -17,7 +17,7 @@ import { CompanySwitcherBar } from "../../src/components/CompanySwitcher";
 import { takeHandoffTxn } from "../../src/txnHandoff";
 import { parseNoteItems } from "../../src/invoiceHtml";
 import { useTransactionSettings } from "../../src/useTransactionSettings";
-import type { TeamMember, Party } from "@vyapar/api-client";
+import type { TeamMember, Party, Transaction } from "@vyapar/api-client";
 
 type LineItem = {
   id: string;
@@ -207,6 +207,13 @@ export default function NewSaleScreen() {
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // Link Payment — draws down an existing unapplied advance (a payment_in with balance
+  // left over, i.e. money the party paid that wasn't tied to a specific invoice) against
+  // this new invoice's total. Mirrors desktop's identical feature 1:1.
+  const [partyTxns, setPartyTxns] = useState<Transaction[]>([]);
+  const [linkedTxnIds, setLinkedTxnIds] = useState<string[]>([]);
+  const [showLinkPayment, setShowLinkPayment] = useState(false);
+
   // A salesman's `parties` list (useParties) is filtered down to only their assigned
   // shops — correct for picking a customer on a NEW sale, but editing an EXISTING sale
   // for a party outside that filter (reassigned, or created before assignment) would
@@ -217,6 +224,15 @@ export default function NewSaleScreen() {
   // Computed values
   const selectedParty = parties.find((p) => p.name === customer)
     ?? (editModeParty && editModeParty.name === customer ? editModeParty : undefined);
+
+  useEffect(() => {
+    if (!selectedParty) { setPartyTxns([]); setLinkedTxnIds([]); return; }
+    api.getPartyTransactions(selectedParty.id)
+      .then((txns) => setPartyTxns(txns.filter((t) => t.type === "payment_in" && t.balance > 0)))
+      .catch(() => setPartyTxns([]));
+    setLinkedTxnIds([]);
+  }, [selectedParty?.id]);
+
   const filteredParties = parties
     .filter((p) => p.partyType === "customer" || p.partyType === "both" || p.isSystem)
     .filter((p) =>
@@ -268,7 +284,10 @@ export default function NewSaleScreen() {
   const roundOffAmt = roundOff ? Math.round(afterDiscount) - afterDiscount : 0;
   const total = afterDiscount + roundOffAmt;
   const receivedAmtVal = parseFloat(receivedAmt) || 0;
-  const balanceDue = received ? Math.max(0, total - receivedAmtVal) : total;
+  const linkedAmount = partyTxns
+    .filter((t) => linkedTxnIds.includes(t.id))
+    .reduce((s, t) => s + Math.min(t.balance, total), 0);
+  const balanceDue = Math.max(0, total - (received ? receivedAmtVal : 0) - linkedAmount);
 
   // Typing the invoice's Total Amount directly (e.g. "customer will only pay 1400" against
   // a Rs 1584 subtotal) back-solves the invoice-level Discount, same as the per-item Total
@@ -569,6 +588,19 @@ export default function NewSaleScreen() {
         idempotencyKey: idempotencyKeyRef.current,
       });
 
+      // Draw down whichever advance payments were linked — the invoice's own balance
+      // above already accounts for linkedAmount; this marks that amount as consumed on
+      // the advance side too, so it can't be linked again against a future invoice.
+      let remainingToDeduct = linkedAmount;
+      for (const txnId of linkedTxnIds) {
+        if (remainingToDeduct <= 0) break;
+        const pmtTxn = partyTxns.find((t) => t.id === txnId);
+        if (!pmtTxn) continue;
+        const deduct = Math.min(pmtTxn.balance, remainingToDeduct);
+        await api.updateTransaction(txnId, { balance: Math.max(0, pmtTxn.balance - deduct) });
+        remainingToDeduct -= deduct;
+      }
+
       if (params.fromDeliveryNoteId) {
         try {
           const existing = (() => { try { return JSON.parse(params.prefillNotes ?? "{}"); } catch { return {}; } })();
@@ -583,6 +615,7 @@ export default function NewSaleScreen() {
         idempotencyKeyRef.current = generateIdempotencyKey();
         setCustomer(""); setItems([]); setDiscountPct(""); setDiscountRs("");
         setRoundOff(true); setReceived(false); setReceivedAmt(""); setNotes(""); setBookerId("");
+        setLinkedTxnIds([]);
       } else {
         router.replace((params.fromDeliveryNoteId ? "/delivery-note" : "/sale") as never);
       }
@@ -864,10 +897,12 @@ export default function NewSaleScreen() {
                 </View>
                 <Text style={styles.summaryLabel}>Received</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.linkBtn}>
-                <Ionicons name="link-outline" size={14} color={colors.primary} />
-                <Text style={styles.linkTxt}>Link</Text>
-              </TouchableOpacity>
+              {!isEdit && partyTxns.length > 0 && (
+                <TouchableOpacity style={styles.linkBtn} onPress={() => setShowLinkPayment(true)}>
+                  <Ionicons name="link-outline" size={14} color={colors.primary} />
+                  <Text style={styles.linkTxt}>Link{linkedTxnIds.length > 0 ? ` (${linkedTxnIds.length})` : ""}</Text>
+                </TouchableOpacity>
+              )}
               <View style={styles.underlineValue}>
                 <Text style={styles.rsLabel}>Rs</Text>
                 <TextInput
@@ -880,6 +915,9 @@ export default function NewSaleScreen() {
                 />
               </View>
             </View>
+            {linkedAmount > 0 && (
+              <Text style={styles.linkedHint}>Rs {fmt4(linkedAmount)} linked from advance payment</Text>
+            )}
             <View style={styles.balanceDueRow}>
               <Text style={styles.balanceDueLabel}>Balance Due</Text>
               <View style={styles.underlineValue}>
@@ -1102,6 +1140,17 @@ export default function NewSaleScreen() {
           </ScrollView>
         </View>
       </Modal>
+
+      {showLinkPayment && (
+        <LinkPaymentModal
+          partyName={selectedParty?.name ?? customer}
+          invoiceTotal={total}
+          transactions={partyTxns}
+          linkedIds={linkedTxnIds}
+          onDone={(ids) => { setLinkedTxnIds(ids); setShowLinkPayment(false); }}
+          onClose={() => setShowLinkPayment(false)}
+        />
+      )}
 
       {/* ── Add Items to Sale Modal ── */}
       <Modal
@@ -1388,6 +1437,155 @@ export default function NewSaleScreen() {
   );
 }
 
+function LinkPaymentModal({
+  partyName, invoiceTotal, transactions, linkedIds, onDone, onClose,
+}: {
+  partyName: string;
+  invoiceTotal: number;
+  transactions: Transaction[];
+  linkedIds: string[];
+  onDone: (ids: string[]) => void;
+  onClose: () => void;
+}) {
+  const [selected, setSelected] = useState<string[]>(linkedIds);
+
+  const linkedAmount = transactions
+    .filter((t) => selected.includes(t.id))
+    .reduce((s, t) => s + Math.min(t.balance, invoiceTotal), 0);
+  const remaining = Math.max(0, invoiceTotal - linkedAmount);
+
+  function toggle(id: string) {
+    setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
+
+  function autoLink() {
+    const ids: string[] = [];
+    let left = invoiceTotal;
+    for (const t of transactions) {
+      if (left <= 0) break;
+      ids.push(t.id);
+      left -= Math.min(t.balance, left);
+    }
+    setSelected(ids);
+  }
+
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <TouchableOpacity style={lpm.overlay} activeOpacity={1} onPress={onClose} />
+      <View style={lpm.sheet}>
+        <View style={lpm.header}>
+          <Text style={lpm.title}>Link Payment to Txns</Text>
+          <TouchableOpacity onPress={onClose} hitSlop={8}>
+            <Ionicons name="close" size={22} color={colors.text} />
+          </TouchableOpacity>
+        </View>
+
+        <View style={lpm.metaRow}>
+          <View>
+            <Text style={lpm.metaLbl}>Party</Text>
+            <Text style={lpm.metaVal}>{partyName}</Text>
+          </View>
+          <View>
+            <Text style={lpm.metaLbl}>Total Amount</Text>
+            <Text style={lpm.metaVal}>Rs {fmt4(invoiceTotal)}</Text>
+          </View>
+          <View>
+            <Text style={lpm.metaLbl}>Amount to Link</Text>
+            <Text style={[lpm.metaVal, { color: colors.primary }]}>Rs {fmt4(linkedAmount)}</Text>
+          </View>
+        </View>
+        <View style={lpm.actionsRow}>
+          <TouchableOpacity style={lpm.autoBtn} onPress={autoLink}>
+            <Text style={lpm.autoBtnTxt}>AUTO LINK</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={lpm.resetBtn} onPress={() => setSelected([])}>
+            <Text style={lpm.resetBtnTxt}>↺ RESET</Text>
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView style={lpm.list}>
+          {transactions.length === 0 ? (
+            <Text style={lpm.empty}>No unapplied advance payments found</Text>
+          ) : (
+            transactions.map((t) => {
+              const isChecked = selected.includes(t.id);
+              const linkAmt = isChecked ? Math.min(t.balance, invoiceTotal) : 0;
+              return (
+                <TouchableOpacity key={t.id} style={[lpm.row, isChecked && lpm.rowSelected]} onPress={() => toggle(t.id)}>
+                  <View style={[lpm.checkbox, isChecked && lpm.checkboxOn]}>
+                    {isChecked && <Ionicons name="checkmark" size={12} color="#fff" />}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={lpm.rowTitle}>{t.number ? `Payment-In · ${t.number}` : "Payment-In"}</Text>
+                    <Text style={lpm.rowSub}>
+                      {new Date(t.date).toLocaleDateString("en-PK", { day: "2-digit", month: "short", year: "numeric" })}
+                      {"  ·  Available: Rs "}{fmt4(t.balance)}
+                    </Text>
+                  </View>
+                  {linkAmt > 0 && <Text style={lpm.rowAmt}>Rs {fmt4(linkAmt)}</Text>}
+                </TouchableOpacity>
+              );
+            })
+          )}
+        </ScrollView>
+
+        <View style={lpm.footer}>
+          <Text style={lpm.remaining}>Remaining to Link: <Text style={{ fontWeight: "700" }}>Rs {fmt4(remaining)}</Text></Text>
+          <View style={{ flexDirection: "row", gap: 10 }}>
+            <TouchableOpacity style={lpm.cancelBtn} onPress={onClose}>
+              <Text style={lpm.cancelBtnTxt}>CANCEL</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={lpm.doneBtn} onPress={() => onDone(selected)}>
+              <Text style={lpm.doneBtnTxt}>DONE</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const lpm = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)" },
+  sheet: { backgroundColor: "#fff", borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: "78%" },
+  header: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    padding: 16, borderBottomWidth: 1, borderBottomColor: "#f1f5f9",
+  },
+  title: { fontSize: 16, fontWeight: "700", color: colors.text },
+  metaRow: { flexDirection: "row", justifyContent: "space-between", padding: 16, gap: 8 },
+  metaLbl: { fontSize: 11, color: colors.textMuted },
+  metaVal: { fontSize: 13.5, fontWeight: "700", color: colors.text, marginTop: 2 },
+  actionsRow: { flexDirection: "row", gap: 10, paddingHorizontal: 16, paddingBottom: 10 },
+  autoBtn: { backgroundColor: colors.primary, borderRadius: 6, paddingVertical: 8, paddingHorizontal: 14 },
+  autoBtnTxt: { color: "#fff", fontSize: 12, fontWeight: "700" },
+  resetBtn: { borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingVertical: 8, paddingHorizontal: 14 },
+  resetBtnTxt: { color: colors.text, fontSize: 12, fontWeight: "700" },
+  list: { paddingHorizontal: 16 },
+  empty: { textAlign: "center", color: colors.textMuted, paddingVertical: 24, fontSize: 13 },
+  row: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#f1f5f9",
+  },
+  rowSelected: { backgroundColor: "#eef6ff" },
+  checkbox: {
+    width: 18, height: 18, borderRadius: 4, borderWidth: 1.5, borderColor: colors.border,
+    alignItems: "center", justifyContent: "center",
+  },
+  checkboxOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+  rowTitle: { fontSize: 13.5, fontWeight: "600", color: colors.text },
+  rowSub: { fontSize: 11.5, color: colors.textMuted, marginTop: 2 },
+  rowAmt: { fontSize: 13, fontWeight: "700", color: colors.primary },
+  footer: {
+    padding: 16, borderTopWidth: 1, borderTopColor: "#f1f5f9", gap: 10,
+  },
+  remaining: { fontSize: 12.5, color: colors.textMuted },
+  cancelBtn: { flex: 1, alignItems: "center", paddingVertical: 11, borderRadius: 8, borderWidth: 1, borderColor: colors.border },
+  cancelBtnTxt: { fontSize: 13, fontWeight: "700", color: colors.text },
+  doneBtn: { flex: 1, alignItems: "center", paddingVertical: 11, borderRadius: 8, backgroundColor: colors.primary },
+  doneBtnTxt: { fontSize: 13, fontWeight: "700", color: "#fff" },
+});
+
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   scroll: { flex: 1 },
@@ -1586,6 +1784,7 @@ const styles = StyleSheet.create({
 
   linkBtn: { flexDirection: "row", alignItems: "center", gap: 3 },
   linkTxt: { fontSize: 12, color: colors.primary, fontWeight: "500" },
+  linkedHint: { fontSize: 11.5, color: colors.primary, paddingHorizontal: 14, paddingTop: 8 },
 
   balanceDueRow: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
