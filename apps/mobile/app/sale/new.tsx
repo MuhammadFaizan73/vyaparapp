@@ -745,7 +745,7 @@ export default function NewSaleScreen() {
                   <Text style={[styles.pdName, { flex: 1 }]}>Cash Sale</Text>
                   <Text style={styles.pdBalance}>0</Text>
                 </TouchableOpacity>
-                {filteredParties.map((p) => (
+                {filteredParties.slice(0, 8).map((p) => (
                   <TouchableOpacity
                     key={p.id}
                     style={styles.pdRow}

@@ -397,7 +397,7 @@ export default function NewDeliveryNoteScreen() {
           </View>
           {showDrop && filteredParties.length > 0 && (
             <View style={s.dropList}>
-              {filteredParties.map((p) => (
+              {filteredParties.slice(0, 8).map((p) => (
                 <TouchableOpacity key={p.id} style={s.dropRow}
                   onPress={() => { setPartyName(p.name); setSelectedParty(p); setShowDrop(false); }}>
                   <View style={s.dropAvatar}>
