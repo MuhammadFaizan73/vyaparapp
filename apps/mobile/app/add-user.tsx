@@ -76,6 +76,125 @@ export const ALL_PERMISSIONS: Permission[] = [
   { id: "team_manage", label: "Add / Remove Team Members", group: "Team" },
 ];
 
+// Canonical report catalog (mirrors packages/shared-types ALL_REPORTS — mobile keeps its
+// own copy of these catalogs for historical reasons, same as ALL_PERMISSIONS above).
+// Which specific reports a restricted team member can open, only meaningful once
+// reports_view itself is on. Empty allowedReports = no extra restriction (show every
+// report reports_view already allows) — this is purely additive.
+export type ReportEntry = { key: string; label: string; group: string };
+
+export const ALL_REPORTS: ReportEntry[] = [
+  { key: "sale",              label: "Sale",                        group: "Transaction Reports" },
+  { key: "purchase",          label: "Purchase",                     group: "Transaction Reports" },
+  { key: "day-book",          label: "Day Book",                     group: "Transaction Reports" },
+  { key: "all-transactions",  label: "All Transactions",             group: "Transaction Reports" },
+  { key: "profit-and-loss",   label: "Profit & Loss",                group: "Transaction Reports" },
+  { key: "cash-flow",         label: "Cash Flow",                    group: "Transaction Reports" },
+  { key: "expense",           label: "Expense",                      group: "Transaction Reports" },
+  { key: "party-statement",              label: "Party Statement",              group: "Party Reports" },
+  { key: "all-parties",                  label: "All Parties",                  group: "Party Reports" },
+  { key: "sale-purchase-by-party",       label: "Sale Purchase By Party",       group: "Party Reports" },
+  { key: "party-report-by-item",         label: "Party Report By Item",         group: "Party Reports" },
+  { key: "sale-purchase-by-party-group", label: "Sale Purchase By Party Group", group: "Party Reports" },
+  { key: "stock-summary",        label: "Stock Summary",           group: "Item / Stock Reports" },
+  { key: "item-report-by-party", label: "Item Report By Party",   group: "Item / Stock Reports" },
+  { key: "low-stock",            label: "Low Stock Summary",       group: "Item / Stock Reports" },
+  { key: "stock-detail",         label: "Stock Detail",            group: "Item / Stock Reports" },
+  { key: "item-detail",          label: "Item Detail",             group: "Item / Stock Reports" },
+  { key: "item-wise-pnl",        label: "Item Wise Profit & Loss", group: "Item / Stock Reports" },
+  { key: "item-wise-discount",   label: "Item Wise Discount",      group: "Item / Stock Reports" },
+  { key: "discount-report",  label: "Discount Report",  group: "Business Status" },
+  { key: "expense-category", label: "Expense Category", group: "Business Status" },
+  { key: "expense-item",     label: "Expense Item",     group: "Business Status" },
+  { key: "tax-report",      label: "Tax Report",      group: "Taxes" },
+  { key: "tax-rate-report", label: "Tax Rate Report", group: "Taxes" },
+  { key: "sale-purchase-orders",      label: "Sale / Purchase Orders",      group: "Orders" },
+  { key: "sale-purchase-order-items", label: "Sale / Purchase Order Items", group: "Orders" },
+];
+
+export function ReportChecklist({
+  allowedReports, onChange,
+}: {
+  allowedReports: string[];
+  onChange: (reports: string[]) => void;
+}) {
+  const groups = Array.from(new Set(ALL_REPORTS.map((r) => r.group)));
+
+  function toggleReport(key: string) {
+    onChange(allowedReports.includes(key) ? allowedReports.filter((r) => r !== key) : [...allowedReports, key]);
+  }
+
+  function toggleGroup(group: string) {
+    const groupKeys = ALL_REPORTS.filter((r) => r.group === group).map((r) => r.key);
+    const allOn = groupKeys.every((k) => allowedReports.includes(k));
+    onChange(
+      allOn
+        ? allowedReports.filter((k) => !groupKeys.includes(k))
+        : Array.from(new Set([...allowedReports, ...groupKeys]))
+    );
+  }
+
+  return (
+    <View style={reportChecklistStyles.wrap}>
+      <Text style={reportChecklistStyles.hint}>
+        {allowedReports.length === 0
+          ? "No restriction — every report is visible. Check specific reports below to limit access."
+          : `Limited to ${allowedReports.length} of ${ALL_REPORTS.length} reports.`}
+      </Text>
+      {groups.map((group) => {
+        const groupReports = ALL_REPORTS.filter((r) => r.group === group);
+        const enabledCount = groupReports.filter((r) => allowedReports.includes(r.key)).length;
+        const allOn = enabledCount === groupReports.length;
+        return (
+          <View key={group} style={reportChecklistStyles.group}>
+            <TouchableOpacity style={reportChecklistStyles.groupHeader} onPress={() => toggleGroup(group)} activeOpacity={0.7}>
+              <Text style={reportChecklistStyles.groupTitle}>{group}</Text>
+              <View style={[reportChecklistStyles.checkbox, allOn && reportChecklistStyles.checkboxOn]}>
+                {allOn && <Ionicons name="checkmark" size={11} color="#fff" />}
+              </View>
+            </TouchableOpacity>
+            {groupReports.map((r) => (
+              <TouchableOpacity
+                key={r.key}
+                style={reportChecklistStyles.row}
+                onPress={() => toggleReport(r.key)}
+                activeOpacity={0.7}
+              >
+                <Text style={reportChecklistStyles.rowLabel}>{r.label}</Text>
+                <View style={[reportChecklistStyles.checkbox, allowedReports.includes(r.key) && reportChecklistStyles.checkboxOn]}>
+                  {allowedReports.includes(r.key) && <Ionicons name="checkmark" size={11} color="#fff" />}
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+const reportChecklistStyles = StyleSheet.create({
+  wrap: { backgroundColor: "#fafbfc", borderRadius: 10, padding: 10, marginTop: 6 },
+  hint: { fontSize: 11.5, color: colors.textMuted, marginBottom: 8, lineHeight: 16 },
+  group: { backgroundColor: "#fff", borderRadius: 8, borderWidth: 1, borderColor: colors.borderLight, overflow: "hidden", marginBottom: 8 },
+  groupHeader: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 10, paddingVertical: 8,
+    backgroundColor: "#f8fafc", borderBottomWidth: 1, borderBottomColor: colors.borderLight,
+  },
+  groupTitle: { fontSize: 11.5, fontWeight: "700", color: colors.text },
+  row: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 14, paddingVertical: 9,
+  },
+  rowLabel: { fontSize: 12.5, color: colors.text },
+  checkbox: {
+    width: 18, height: 18, borderRadius: 4, borderWidth: 1.5, borderColor: colors.border,
+    alignItems: "center", justifyContent: "center",
+  },
+  checkboxOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+});
+
 // Default permissions per role
 const ROLE_DEFAULT_PERMISSIONS: Record<string, string[]> = {
   secondary_admin: [
@@ -169,6 +288,7 @@ export default function AddUserScreen() {
   const [permissions, setPermissions] = useState<string[]>(
     ROLE_DEFAULT_PERMISSIONS["salesman"] ?? []
   );
+  const [allowedReports, setAllowedReports] = useState<string[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -178,6 +298,7 @@ export default function AddUserScreen() {
   function selectRole(roleId: string) {
     setRole(roleId);
     setPermissions(ROLE_DEFAULT_PERMISSIONS[roleId] ?? []);
+    setAllowedReports([]);
     setModalVisible(false);
   }
 
@@ -225,6 +346,7 @@ export default function AddUserScreen() {
         password,
         role,
         permissions,
+        allowedReports,
       });
       setSuccess(true);
     } catch (err: any) {
@@ -372,6 +494,9 @@ export default function AddUserScreen() {
                   </View>
                 </TouchableOpacity>
               ))}
+              {group === "Reports" && permissions.includes("reports_view") && (
+                <ReportChecklist allowedReports={allowedReports} onChange={setAllowedReports} />
+              )}
             </View>
           );
         })}

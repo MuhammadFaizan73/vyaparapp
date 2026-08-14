@@ -447,6 +447,7 @@ export const TeamMemberSchema = z.object({
   contact: z.string(),
   role: z.string(),
   permissions: z.string().default("[]"),
+  allowedReports: z.string().default("[]"),
   status: z.string(),
   inviteToken: z.string(),
   createdAt: z.string().datetime(),
@@ -568,6 +569,49 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<TeamRole, string[]> = {
     "expense_view", "expense_create",
   ],
 };
+
+// ── Report catalog ────────────────────────────────────────────────────────────
+// Canonical list of every report key either client can navigate to (desktop's is the
+// superset; mobile currently exposes a subset of these keys under its own labels/groups).
+// Used only to build the "which reports can this staff member see" checklist in Add/Edit
+// User — a team member's `reports_view` permission is still the master switch; an empty
+// `allowedReports` array under it means "no extra restriction, show everything" so this
+// is purely additive and never changes behavior for an existing team member on its own.
+export type ReportCatalogEntry = { key: string; label: string; group: string };
+
+export const ALL_REPORTS: ReportCatalogEntry[] = [
+  { key: "sale",              label: "Sale",                        group: "Transaction Reports" },
+  { key: "purchase",          label: "Purchase",                     group: "Transaction Reports" },
+  { key: "day-book",          label: "Day Book",                     group: "Transaction Reports" },
+  { key: "all-transactions",  label: "All Transactions",             group: "Transaction Reports" },
+  { key: "profit-and-loss",   label: "Profit & Loss",                group: "Transaction Reports" },
+  { key: "cash-flow",         label: "Cash Flow",                    group: "Transaction Reports" },
+  { key: "expense",           label: "Expense",                      group: "Transaction Reports" },
+  { key: "party-statement",              label: "Party Statement",              group: "Party Reports" },
+  { key: "all-parties",                  label: "All Parties",                  group: "Party Reports" },
+  { key: "sale-purchase-by-party",       label: "Sale Purchase By Party",       group: "Party Reports" },
+  { key: "party-report-by-item",         label: "Party Report By Item",         group: "Party Reports" },
+  { key: "sale-purchase-by-party-group", label: "Sale Purchase By Party Group", group: "Party Reports" },
+  { key: "stock-summary",       label: "Stock Summary",               group: "Item / Stock Reports" },
+  { key: "item-report-by-party", label: "Item Report By Party",       group: "Item / Stock Reports" },
+  { key: "item-wise-pnl",       label: "Item Wise Profit & Loss",     group: "Item / Stock Reports" },
+  { key: "item-category-pnl",   label: "Item Category Profit & Loss", group: "Item / Stock Reports" },
+  { key: "low-stock",           label: "Low Stock Summary",           group: "Item / Stock Reports" },
+  { key: "stock-detail",        label: "Stock Detail",                group: "Item / Stock Reports" },
+  { key: "item-detail",         label: "Item Detail",                 group: "Item / Stock Reports" },
+  { key: "sale-purchase-by-item-category", label: "Sale/Purchase By Item Category", group: "Item / Stock Reports" },
+  { key: "stock-summary-by-category",      label: "Stock Summary By Category",      group: "Item / Stock Reports" },
+  { key: "item-wise-discount",  label: "Item Wise Discount",          group: "Item / Stock Reports" },
+  { key: "bank-statement",  label: "Bank Statement",  group: "Business Status" },
+  { key: "discount-report", label: "Discount Report", group: "Business Status" },
+  { key: "expense-category", label: "Expense Category", group: "Business Status" },
+  { key: "expense-item",     label: "Expense Item",     group: "Business Status" },
+  { key: "tax-report",      label: "Tax Report",      group: "Taxes" },
+  { key: "tax-rate-report", label: "Tax Rate Report", group: "Taxes" },
+  { key: "sale-purchase-orders",      label: "Sale / Purchase Orders",      group: "Orders" },
+  { key: "sale-purchase-order-items", label: "Sale / Purchase Order Items", group: "Orders" },
+  { key: "loan-statement", label: "Loan Statement", group: "Loan Accounts" },
+];
 
 export const TEAM_ROLE_LABELS: Record<TeamRole, string> = {
   secondary_admin: "Secondary Admin",

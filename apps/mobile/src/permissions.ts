@@ -18,3 +18,11 @@ export function canEditSale(
   }
   return true;
 }
+
+// Empty allowedReports = no extra restriction beyond reports_view itself.
+export function canViewReport(reportKey: string, permissions: string[] | null, allowedReports: string[]): boolean {
+  if (permissions === null) return true;
+  if (!permissions.includes("reports_view")) return false;
+  if (allowedReports.length === 0) return true;
+  return allowedReports.includes(reportKey);
+}

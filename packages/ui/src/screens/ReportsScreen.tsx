@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import * as XLSX from "xlsx";
 import { api } from "../lib/api";
 import { useCompany } from "../lib/CompanyContext";
+import { loadPermissions, loadAllowedReports, canViewReport } from "../lib/permissions";
 
 // ─── Report list structure ────────────────────────────────────────────────────
 
@@ -128,15 +129,24 @@ type Props = {
 export function ReportsScreen({ initialReportKey }: Props = {}) {
   const [activeKey, setActiveKey] = useState<string | null>(initialReportKey ?? null);
   const [panelSearch, setPanelSearch] = useState("");
+  // Loaded once per session — governs which report keys a restricted staff member (a
+  // salesman etc. whose reports_view was scoped down) can even see in this list. An
+  // owner/legacy token (permissions === null) always sees the full list.
+  const [permissions] = useState(loadPermissions);
+  const [allowedReports] = useState(loadAllowedReports);
 
   const filteredGroups = useMemo(() => {
-    if (!panelSearch) return REPORT_GROUPS;
+    const visible = REPORT_GROUPS.map(g => ({
+      ...g,
+      items: g.items.filter(i => canViewReport(i.key, permissions, allowedReports)),
+    })).filter(g => g.items.length > 0);
+    if (!panelSearch) return visible;
     const q = panelSearch.toLowerCase();
-    return REPORT_GROUPS.map(g => ({
+    return visible.map(g => ({
       ...g,
       items: g.items.filter(i => i.label.toLowerCase().includes(q)),
     })).filter(g => g.items.length > 0);
-  }, [panelSearch]);
+  }, [panelSearch, permissions, allowedReports]);
 
   return (
     <div className="rpt-layout">

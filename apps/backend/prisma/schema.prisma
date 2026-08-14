@@ -252,6 +252,10 @@ model TeamMember {
   passwordHash  String?
   role          String        @default("salesman")
   permissions   String        @default("[]")
+  // Empty array = no extra restriction (every report reports_view already allows stays
+  // visible) — only a non-empty array narrows the Reports list down to these keys. Keeps
+  // every existing team member's behavior unchanged unless an owner explicitly restricts it.
+  allowedReports String       @default("[]")
   status        String        @default("active")
   inviteToken   String        @unique @default(uuid())
   locationPings LocationPing[]

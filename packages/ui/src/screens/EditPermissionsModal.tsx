@@ -4,9 +4,9 @@ import type { TeamMember } from "@vyapar/api-client";
 import { api } from "../lib/api";
 import { PermissionChecklist } from "./PermissionChecklist";
 
-function parseMemberPermissions(member: TeamMember): string[] {
+function parseMemberJsonArray(member: TeamMember, field: "permissions" | "allowedReports"): string[] {
   try {
-    const raw = (member as any).permissions;
+    const raw = (member as any)[field];
     return raw ? JSON.parse(raw) : [];
   } catch {
     return [];
@@ -20,7 +20,8 @@ type Props = {
 };
 
 export function EditPermissionsModal({ member, onClose, onSaved }: Props) {
-  const [permissions, setPermissions] = useState<string[]>(parseMemberPermissions(member));
+  const [permissions, setPermissions] = useState<string[]>(parseMemberJsonArray(member, "permissions"));
+  const [allowedReports, setAllowedReports] = useState<string[]>(parseMemberJsonArray(member, "allowedReports"));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,7 +29,7 @@ export function EditPermissionsModal({ member, onClose, onSaved }: Props) {
     setBusy(true);
     setError(null);
     try {
-      const updated = await api.updateTeamMemberPermissions(member.id, permissions);
+      const updated = await api.updateTeamMemberPermissions(member.id, permissions, allowedReports);
       onSaved(updated);
       onClose();
     } catch (err) {
@@ -48,7 +49,12 @@ export function EditPermissionsModal({ member, onClose, onSaved }: Props) {
         </div>
         <div className="party-modal__body team-modal__body">
           {error && <div className="form-error">{error}</div>}
-          <PermissionChecklist permissions={permissions} onChange={setPermissions} />
+          <PermissionChecklist
+            permissions={permissions}
+            onChange={setPermissions}
+            allowedReports={allowedReports}
+            onAllowedReportsChange={setAllowedReports}
+          />
         </div>
         <div className="party-modal__footer">
           <button type="button" className="party-modal__btn-ghost" onClick={onClose}>Cancel</button>

@@ -17,7 +17,7 @@ export class TeamService {
       orderBy: { createdAt: "asc" },
       select: {
         id: true, tenantId: true, name: true, contact: true, email: true,
-        role: true, permissions: true, status: true, createdAt: true, updatedAt: true,
+        role: true, permissions: true, allowedReports: true, status: true, createdAt: true, updatedAt: true,
       },
     });
   }
@@ -36,6 +36,7 @@ export class TeamService {
         contact: dto.contact ?? "",
         role: dto.role,
         permissions: JSON.stringify(dto.permissions ?? []),
+        allowedReports: JSON.stringify(dto.allowedReports ?? []),
         status: "active",
       },
     });
@@ -75,12 +76,16 @@ export class TeamService {
     const permissions = (() => {
       try { return JSON.parse(member.permissions); } catch { return []; }
     })();
+    const allowedReports = (() => {
+      try { return JSON.parse(member.allowedReports); } catch { return []; }
+    })();
 
     const token = await this.jwt.signAsync({
       sub: member.tenantId,
       memberId: member.id,
       role: member.role,
       permissions,
+      allowedReports,
     });
 
     return {
@@ -92,6 +97,7 @@ export class TeamService {
         contact: member.contact,
         role: member.role,
         permissions,
+        allowedReports,
       },
       tenant: {
         id: member.tenant.id,
@@ -117,7 +123,10 @@ export class TeamService {
     if (existing.tenantId !== tenantId) throw new ForbiddenException();
     return this.prisma.teamMember.update({
       where: { id },
-      data: { permissions: JSON.stringify(dto.permissions) },
+      data: {
+        permissions: JSON.stringify(dto.permissions),
+        ...(dto.allowedReports !== undefined && { allowedReports: JSON.stringify(dto.allowedReports) }),
+      },
     });
   }
 
@@ -143,12 +152,16 @@ export class TeamService {
     const permissions = (() => {
       try { return JSON.parse(member.permissions); } catch { return []; }
     })();
+    const allowedReports = (() => {
+      try { return JSON.parse(member.allowedReports); } catch { return []; }
+    })();
 
     const jwtToken = await this.jwt.signAsync({
       sub: member.tenantId,
       memberId: member.id,
       role: member.role,
       permissions,
+      allowedReports,
     });
 
     return {
@@ -159,6 +172,7 @@ export class TeamService {
         contact: member.contact,
         role: member.role,
         permissions,
+        allowedReports,
       },
       tenant: {
         id: member.tenant.id,

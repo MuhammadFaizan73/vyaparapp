@@ -17,6 +17,7 @@ export function AddUserModal({ onClose, onSaved }: Props) {
   const [showPassword, setShowPassword] = useState(false);
   const [role, setRole] = useState<TeamRole>("salesman");
   const [permissions, setPermissions] = useState<string[]>(ROLE_DEFAULT_PERMISSIONS.salesman);
+  const [allowedReports, setAllowedReports] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -24,6 +25,7 @@ export function AddUserModal({ onClose, onSaved }: Props) {
   function selectRole(r: TeamRole) {
     setRole(r);
     setPermissions(ROLE_DEFAULT_PERMISSIONS[r]);
+    setAllowedReports([]);
   }
 
   async function save() {
@@ -49,6 +51,7 @@ export function AddUserModal({ onClose, onSaved }: Props) {
         password,
         role,
         permissions,
+        allowedReports,
       });
       setSuccess(true);
     } catch (err) {
@@ -136,7 +139,12 @@ export function AddUserModal({ onClose, onSaved }: Props) {
             Permissions are pre-filled based on the role. Customize individually below.
           </p>
 
-          <PermissionChecklist permissions={permissions} onChange={setPermissions} />
+          <PermissionChecklist
+            permissions={permissions}
+            onChange={setPermissions}
+            allowedReports={allowedReports}
+            onAllowedReportsChange={setAllowedReports}
+          />
         </div>
 
         <div className="party-modal__footer">

@@ -26,6 +26,22 @@ export function loadPermissions(): string[] | null {
   return Array.isArray(perms) ? perms : null;
 }
 
+// Empty array = no extra restriction beyond reports_view itself (show every report a
+// team member could otherwise see) — only a non-empty array narrows the list further.
+export function loadAllowedReports(): string[] {
+  const token = loadToken();
+  if (!token) return [];
+  const reports = decodeJwtPayload(token).allowedReports;
+  return Array.isArray(reports) ? reports : [];
+}
+
+export function canViewReport(reportKey: string, permissions: string[] | null, allowedReports: string[]): boolean {
+  if (permissions === null) return true;
+  if (!permissions.includes("reports_view")) return false;
+  if (allowedReports.length === 0) return true;
+  return allowedReports.includes(reportKey);
+}
+
 export function canEditSale(
   txn: { bookerId?: string | null; date: string },
   permissions: string[] | null,

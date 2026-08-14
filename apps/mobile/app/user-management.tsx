@@ -9,7 +9,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../src/theme";
 import { api } from "../src/auth";
 import type { TeamMember } from "@vyapar/api-client";
-import { ALL_PERMISSIONS, type Permission } from "./add-user";
+import { ALL_PERMISSIONS, type Permission, ReportChecklist } from "./add-user";
 
 const ROLES = [
   { id: "all",              label: "All",              icon: "people-outline" as const,       tint: "#f1f5f9", fg: colors.text },
@@ -51,6 +51,16 @@ function parseMemberPermissions(member: TeamMember): string[] {
   }
 }
 
+function parseMemberAllowedReports(member: TeamMember): string[] {
+  try {
+    const raw = (member as any).allowedReports;
+    if (!raw) return [];
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
+}
+
 export default function UserManagementScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -69,6 +79,7 @@ export default function UserManagementScreen() {
   const [permTarget, setPermTarget] = useState<TeamMember | null>(null);
   const [permSheetVisible, setPermSheetVisible] = useState(false);
   const [editingPerms, setEditingPerms] = useState<string[]>([]);
+  const [editingAllowedReports, setEditingAllowedReports] = useState<string[]>([]);
   const [savingPerms, setSavingPerms] = useState(false);
 
   async function fetchMembers() {
@@ -122,6 +133,7 @@ export default function UserManagementScreen() {
   function openPermSheet(member: TeamMember) {
     setPermTarget(member);
     setEditingPerms(parseMemberPermissions(member));
+    setEditingAllowedReports(parseMemberAllowedReports(member));
     setPermSheetVisible(true);
   }
 
@@ -145,7 +157,7 @@ export default function UserManagementScreen() {
     if (!permTarget) return;
     setSavingPerms(true);
     try {
-      const updated = await api.updateTeamMemberPermissions(permTarget.id, editingPerms);
+      const updated = await api.updateTeamMemberPermissions(permTarget.id, editingPerms, editingAllowedReports);
       setMembers((prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
       setPermSheetVisible(false);
       setPermTarget(null);
@@ -423,6 +435,9 @@ export default function UserManagementScreen() {
                       </View>
                     </TouchableOpacity>
                   ))}
+                  {group === "Reports" && editingPerms.includes("reports_view") && (
+                    <ReportChecklist allowedReports={editingAllowedReports} onChange={setEditingAllowedReports} />
+                  )}
                 </View>
               );
             })}

@@ -249,6 +249,7 @@ model TeamMember {
   passwordHash  String?
   role          String        @default("salesman")
   permissions   String        @default("[]")
+  allowedReports String       @default("[]")
   status        String        @default("active")
   inviteToken   String        @unique @default(uuid())
   locationPings LocationPing[]

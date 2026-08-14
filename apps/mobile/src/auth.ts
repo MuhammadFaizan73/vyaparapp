@@ -85,6 +85,19 @@ export async function getPermissions(): Promise<string[] | null> {
   }
 }
 
+// Empty array = no extra restriction beyond reports_view itself (every report it allows
+// stays visible) — only a non-empty array narrows the Reports list down further.
+export async function getAllowedReports(): Promise<string[]> {
+  const token = await SecureStore.getItemAsync(TOKEN_KEY);
+  if (!token) return [];
+  try {
+    const payload = decodeJwtPayload(token);
+    return Array.isArray(payload.allowedReports) ? (payload.allowedReports as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
 // Returns null for an owner JWT (no team-member row, nothing to assign) or on any error.
 export async function getMemberId(): Promise<string | null> {
   const token = await SecureStore.getItemAsync(TOKEN_KEY);

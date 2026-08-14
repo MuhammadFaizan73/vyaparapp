@@ -17,6 +17,7 @@ export class CreateTeamMemberDto {
   @IsOptional() @IsString() contact?: string;
   @IsString() @IsIn(VALID_ROLES) role!: string;
   @IsOptional() @IsArray() permissions?: string[];
+  @IsOptional() @IsArray() allowedReports?: string[];
 }
 
 export class UpdateRoleDto {
@@ -25,6 +26,7 @@ export class UpdateRoleDto {
 
 export class UpdatePermissionsDto {
   @IsArray() permissions!: string[];
+  @IsOptional() @IsArray() allowedReports?: string[];
 }
 
 export class AcceptInviteDto {

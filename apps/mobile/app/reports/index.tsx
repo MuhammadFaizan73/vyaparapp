@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   View, Text, TextInput, TouchableOpacity, SectionList,
   StyleSheet, StatusBar,
@@ -7,6 +7,8 @@ import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../src/theme";
+import { getPermissions, getAllowedReports } from "../../src/auth";
+import { canViewReport } from "../../src/permissions";
 
 type ReportItem  = { key: string; label: string; icon: string };
 type ReportGroup = { title: string; groupColor: string; data: ReportItem[] };
@@ -80,14 +82,29 @@ export default function ReportsIndexScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [search, setSearch] = useState("");
+  const [permissions, setPermissions] = useState<string[] | null>(null);
+  const [allowedReports, setAllowedReports] = useState<string[]>([]);
+
+  useEffect(() => {
+    getPermissions().then(setPermissions).catch(() => {});
+    getAllowedReports().then(setAllowedReports).catch(() => {});
+  }, []);
+
+  const visibleGroups = useMemo<ReportGroup[]>(
+    () =>
+      REPORT_GROUPS
+        .map(g => ({ ...g, data: g.data.filter(i => canViewReport(i.key, permissions, allowedReports)) }))
+        .filter(g => g.data.length > 0),
+    [permissions, allowedReports],
+  );
 
   const filtered = useMemo<ReportGroup[]>(() => {
-    if (!search.trim()) return REPORT_GROUPS;
+    if (!search.trim()) return visibleGroups;
     const q = search.toLowerCase();
-    return REPORT_GROUPS
+    return visibleGroups
       .map(g => ({ ...g, data: g.data.filter(i => i.label.toLowerCase().includes(q)) }))
       .filter(g => g.data.length > 0);
-  }, [search]);
+  }, [search, visibleGroups]);
 
   return (
     <View style={[s.screen, { paddingTop: insets.top }]}>
