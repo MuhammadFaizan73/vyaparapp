@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import * as XLSX from "xlsx";
 
 import { api } from "../lib/api";
+import { loadMemberId, loadPermissions, canEditSale, canDeleteSale } from "../lib/permissions";
 import type { Transaction, Party, Item, Company, TeamMember, TaxRate } from "@vyapar/api-client";
 import { useCompany } from "../lib/CompanyContext";
 import { AddPartyModal } from "./AddPartyModal";
@@ -199,6 +200,12 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
   const [items, setItems] = useState<Item[]>([]);
   const { companies, selectedCompanyId, companyFilter } = useCompany();
   const [loading, setLoading] = useState(true);
+  // Loaded once per session (the JWT doesn't change without a fresh login) — governs
+  // whether View/Edit/Delete show at all in the row menu below, matching mobile's
+  // identical canEditSale() gating so a staff member without rights isn't shown an
+  // option that would only fail once they hit Save.
+  const [currentMemberId] = useState(loadMemberId);
+  const [currentPermissions] = useState(loadPermissions);
 
   /* form visibility */
   const [showForm, setShowForm] = useState(false);
@@ -760,22 +767,24 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
       {menuId && (() => {
         const sale = sales.find((s) => s.id === menuId);
         if (!sale) return null;
+        const editAllowed = canEditSale(sale, currentPermissions, currentMemberId);
+        const deleteAllowed = canDeleteSale(currentPermissions);
         return (
           <div className="sale-row-menu" style={{ position: "fixed", top: menuPos.top, left: menuPos.left }} onClick={(e) => e.stopPropagation()}>
             {[
-              { label: "View/Edit",               action: () => { setEditSale(sale); setShowForm(true); setMenuId(null); } },
+              editAllowed && { label: "View/Edit",               action: () => { setEditSale(sale); setShowForm(true); setMenuId(null); } },
               { label: "Receive Payment",          action: () => { setReceivePaymentSale(sale); setMenuId(null); } },
               { label: "Convert To Return",        action: () => setMenuId(null) },
               { label: "Preview Delivery Challan", action: () => { setChallanSale(sale); setMenuId(null); } },
               { label: "Payment History",          action: () => { setPaymentHistorySale(sale); setMenuId(null); } },
-              { label: "Cancel Invoice",           action: () => { void api.updateTransaction(sale.id, { balance: 0 }); setMenuId(null); void loadSales(); } },
-              { label: "Delete",                   action: () => { setDeleteConfirmSale(sale); setMenuId(null); } },
+              editAllowed && { label: "Cancel Invoice",           action: () => { void api.updateTransaction(sale.id, { balance: 0 }); setMenuId(null); void loadSales(); } },
+              deleteAllowed && { label: "Delete",                   action: () => { setDeleteConfirmSale(sale); setMenuId(null); } },
               { label: "Duplicate",                action: () => { setMenuId(null); handleDuplicate(sale); } },
               { label: "Open PDF",                 action: () => { setMenuId(null); window.print(); } },
               { label: "Preview",                  action: () => { setPreviewSale(sale); setPreviewIdx(sales.indexOf(sale) + 1); setMenuId(null); } },
               { label: "Print",                    action: () => { setMenuId(null); window.print(); } },
               { label: "View History",             action: () => { setViewHistorySale(sale); setMenuId(null); } },
-            ].map(({ label, action }) => (
+            ].filter((item): item is { label: string; action: () => void } => Boolean(item)).map(({ label, action }) => (
               <button key={label} type="button" className="sale-row-menu__item" onClick={action}>{label}</button>
             ))}
           </div>
