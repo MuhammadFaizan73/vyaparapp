@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
   StyleSheet, KeyboardAvoidingView, Platform, Alert, Modal,
@@ -243,34 +243,46 @@ export default function NewSaleScreen() {
     setLinkedTxnIds([]);
   }, [selectedParty?.id]);
 
-  const filteredParties = parties
-    .filter((p) => p.partyType === "customer" || p.partyType === "both" || p.isSystem)
-    .filter((p) =>
-      matchesAllWords(p.name, customer) ||
-      (p.phone && p.phone.includes(customer))
-    );
+  // Recomputing these over the full parties/catalog list (900+ parties on this tenant)
+  // on every render — including renders that have nothing to do with search, like the
+  // setSaving() toggles around a Save — was the actual cause of the app freezing while
+  // saving an invoice. Only recompute when what they actually depend on changes.
+  const filteredParties = useMemo(
+    () =>
+      parties
+        .filter((p) => p.partyType === "customer" || p.partyType === "both" || p.isSystem)
+        .filter((p) =>
+          matchesAllWords(p.name, customer) ||
+          (p.phone && p.phone.includes(customer))
+        ),
+    [parties, customer],
+  );
   const itemSearchQuery = itemSearch.trim().toLowerCase();
-  const filteredCatalog = catalog
-    .filter((c) => {
-      const matchesCompany =
-        selectedCompanyFilters.length === 0 ||
-        selectedCompanyFilters.some((id) => (c as any).companyId === id);
-      if (!matchesCompany) return false;
-      if (!itemSearchQuery) return true;
-      // Match on word start rather than "contains anywhere" — a query like "b" would
-      // otherwise surface unrelated items such as "Vegetable Masala" just because a
-      // "b" appears mid-word. Every typed word (e.g. "bombay biryani") must match some
-      // word in the name, not the whole query against a single word.
-      const matchesName = matchesAllWords(c.name, itemSearchQuery);
-      const matchesSku = (c.sku ?? "").toLowerCase().startsWith(itemSearchQuery);
-      return matchesName || matchesSku;
-    })
-    .sort((a, b) => {
-      if (!itemSearchQuery) return 0;
-      const aStarts = a.name.toLowerCase().startsWith(itemSearchQuery) ? 0 : 1;
-      const bStarts = b.name.toLowerCase().startsWith(itemSearchQuery) ? 0 : 1;
-      return aStarts - bStarts;
-    });
+  const filteredCatalog = useMemo(
+    () =>
+      catalog
+        .filter((c) => {
+          const matchesCompany =
+            selectedCompanyFilters.length === 0 ||
+            selectedCompanyFilters.some((id) => (c as any).companyId === id);
+          if (!matchesCompany) return false;
+          if (!itemSearchQuery) return true;
+          // Match on word start rather than "contains anywhere" — a query like "b" would
+          // otherwise surface unrelated items such as "Vegetable Masala" just because a
+          // "b" appears mid-word. Every typed word (e.g. "bombay biryani") must match some
+          // word in the name, not the whole query against a single word.
+          const matchesName = matchesAllWords(c.name, itemSearchQuery);
+          const matchesSku = (c.sku ?? "").toLowerCase().startsWith(itemSearchQuery);
+          return matchesName || matchesSku;
+        })
+        .sort((a, b) => {
+          if (!itemSearchQuery) return 0;
+          const aStarts = a.name.toLowerCase().startsWith(itemSearchQuery) ? 0 : 1;
+          const bStarts = b.name.toLowerCase().startsWith(itemSearchQuery) ? 0 : 1;
+          return aStarts - bStarts;
+        }),
+    [catalog, itemSearchQuery, selectedCompanyFilters],
+  );
 
   const subtotal = items.reduce((s, i) => s + rowAmount(i), 0);
   const totalQty = items.reduce((s, i) => s + i.qty, 0);
