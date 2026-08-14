@@ -84,7 +84,9 @@ export default function NewPaymentInScreen() {
     prefillPartyName?: string;
     prefillAmount?: string;
     prefillSaleId?: string;
+    editId?: string;
   }>();
+  const isEdit = Boolean(params.editId);
 
   const [customer, setCustomer] = useState(params.prefillPartyName ?? "");
   const [selectedPartyId, setSelectedPartyId] = useState<string | null>(params.prefillPartyId ?? null);
@@ -108,10 +110,11 @@ export default function NewPaymentInScreen() {
   const PAYMENT_TYPES = ["Cash", "Card", "UPI", "Bank Transfer", "Cheque", "Online"];
 
   useEffect(() => {
+    if (isEdit) return;
     api.getTransactionsByType("payment_in")
       .then((txns) => setReceiptNo(txns.length + 1))
       .catch(() => {});
-  }, []);
+  }, [isEdit]);
 
   // Auto-select party from prefill once parties load
   useEffect(() => {
@@ -120,6 +123,26 @@ export default function NewPaymentInScreen() {
       if (p) { setCustomer(p.name); setSelectedPartyId(p.id); }
     }
   }, [parties]);
+
+  // Load the existing entry once parties are available (need the list to resolve
+  // partyId -> name, since the transaction record itself only carries the id).
+  useEffect(() => {
+    if (!params.editId || parties.length === 0) return;
+    api.getTransaction(params.editId).then((txn) => {
+      const party = parties.find((p) => p.id === txn.partyId);
+      if (party) { setCustomer(party.name); setSelectedPartyId(party.id); }
+      setReceived(String(txn.total));
+      setDateObj(new Date(txn.date));
+      setReceiptNo(txn.number ? parseInt(txn.number, 10) || 1 : 1);
+      try {
+        const notes = JSON.parse(txn.notes ?? "{}");
+        if (notes.paymentType) setPaymentType(notes.paymentType);
+      } catch { /* ignore */ }
+    }).catch(() => {
+      Alert.alert("Error", "Could not load this payment-in entry.");
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.editId, parties.length]);
 
   const filtered = parties.filter((p) =>
     p.name.toLowerCase().includes(customer.toLowerCase())
@@ -133,6 +156,17 @@ export default function NewPaymentInScreen() {
     if (receivedAmt <= 0) { Alert.alert("Enter received amount"); return; }
     setSaving(true);
     try {
+      if (isEdit && params.editId) {
+        await api.updateTransaction(params.editId, {
+          partyId: selectedPartyId,
+          date: dateObj.toISOString(),
+          total: receivedAmt,
+          notes: JSON.stringify({ paymentType }),
+        });
+        router.back();
+        return;
+      }
+
       await api.createTransaction({
         partyId: selectedPartyId,
         type: "payment_in",
@@ -175,7 +209,7 @@ export default function NewPaymentInScreen() {
         <TouchableOpacity onPress={() => router.back()} hitSlop={8}>
           <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.appBarTitle}>{params.prefillSaleId ? "Receive Payment" : "Payment-In"}</Text>
+        <Text style={styles.appBarTitle}>{isEdit ? "Edit Payment-In" : params.prefillSaleId ? "Receive Payment" : "Payment-In"}</Text>
         <TouchableOpacity hitSlop={8} onPress={() => router.push("/transaction-settings" as never)}>
           <Ionicons name="settings-outline" size={20} color={colors.textMuted} />
         </TouchableOpacity>
@@ -336,15 +370,17 @@ export default function NewPaymentInScreen() {
 
       {/* Footer */}
       <View style={[styles.footer, { paddingBottom: insets.bottom + 8 }]}>
-        <TouchableOpacity style={styles.footerSaveNew} onPress={() => handleSave(true)} disabled={saving}>
-          <Text style={styles.footerSaveNewTxt}>Save & New</Text>
-        </TouchableOpacity>
+        {!isEdit && (
+          <TouchableOpacity style={styles.footerSaveNew} onPress={() => handleSave(true)} disabled={saving}>
+            <Text style={styles.footerSaveNewTxt}>Save & New</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity
           style={[styles.footerSave, saving && { opacity: 0.6 }]}
           onPress={() => handleSave(false)}
           disabled={saving}
         >
-          <Text style={styles.footerSaveTxt}>{saving ? "Saving…" : "Save"}</Text>
+          <Text style={styles.footerSaveTxt}>{saving ? "Saving…" : isEdit ? "Update" : "Save"}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.footerMore} hitSlop={8} onPress={() => setShowMore(true)}>
           <Ionicons name="ellipsis-vertical" size={18} color={colors.textMuted} />

@@ -193,7 +193,11 @@ export default function PaymentInListScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingBottom: insets.bottom + 90 }}
           renderItem={({ item, index }) => (
-            <TouchableOpacity activeOpacity={0.7} style={styles.txnRow}>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              style={styles.txnRow}
+              onPress={() => router.push(`/txn/${item.id}` as never)}
+            >
               {/* Left color bar */}
               <View style={[styles.colorBar, { backgroundColor: ROW_COLORS[item.colorIdx] }]} />
 
