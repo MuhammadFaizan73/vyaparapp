@@ -11,6 +11,32 @@ export class RegisterDto {
   phone!: string;
 }
 
+export class SendOtpDto {
+  @IsString()
+  @Matches(/^\+\d{1,4}$/, { message: "countryCode must be like +92" })
+  countryCode!: string;
+
+  @IsString()
+  @Length(6, 15)
+  @Matches(/^\d+$/, { message: "phone must contain only digits" })
+  phone!: string;
+}
+
+export class VerifyOtpDto {
+  @IsString()
+  @Matches(/^\+\d{1,4}$/, { message: "countryCode must be like +92" })
+  countryCode!: string;
+
+  @IsString()
+  @Length(6, 15)
+  @Matches(/^\d+$/, { message: "phone must contain only digits" })
+  phone!: string;
+
+  @IsString()
+  @Length(4, 8)
+  otp!: string;
+}
+
 export class UpdateTenantDto {
   @IsOptional() @IsString() companyName?: string;
   @IsOptional() @IsString() businessType?: string;

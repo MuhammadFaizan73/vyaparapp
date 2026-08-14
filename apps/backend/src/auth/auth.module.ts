@@ -4,6 +4,7 @@ import { ConfigModule, ConfigService } from "@nestjs/config";
 import { AuthService } from "./auth.service";
 import { AuthController } from "./auth.controller";
 import { JwtGuard } from "./jwt.guard";
+import { SmsModule } from "../sms/sms.module";
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { JwtGuard } from "./jwt.guard";
         signOptions: { expiresIn: "30d" },
       }),
     }),
+    SmsModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtGuard],
