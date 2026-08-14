@@ -3,6 +3,7 @@ import * as XLSX from "xlsx";
 import { api } from "../lib/api";
 import type { Item } from "@vyapar/api-client";
 import { useCompany } from "../lib/CompanyContext";
+import { formatStockQty } from "../lib/quantity";
 import { TARGET_FIELDS as ITEM_IMPORT_FIELDS } from "./ImportItemsPage";
 
 type TabKey = "products" | "services" | "category" | "units";
@@ -84,6 +85,7 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
   const [showSecondaryPicker, setShowSecondaryPicker] = useState(false);
   const [showTertiaryPicker, setShowTertiaryPicker] = useState(false);
   const [txnSearch, setTxnSearch] = useState("");
+  const [search, setSearch] = useState("");
   const [dotsMenuId, setDotsMenuId] = useState<string | null>(null);
   const [dotsMenuPos, setDotsMenuPos] = useState({ top: 0, left: 0 });
 
@@ -130,10 +132,22 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
   }, []);
 
   const displayedItems = useMemo(() => {
-    if (!companyFilter) return items;
-    const ids = new Set(companyFilter.split(","));
-    return items.filter((i) => (i as any).companyId && ids.has((i as any).companyId));
-  }, [items, companyFilter]);
+    let list = items;
+    if (companyFilter) {
+      const ids = new Set(companyFilter.split(","));
+      list = list.filter((i) => (i as any).companyId && ids.has((i as any).companyId));
+    }
+    const q = search.trim().toLowerCase();
+    if (q) {
+      list = list.filter(
+        (i) =>
+          i.name.toLowerCase().includes(q) ||
+          (i.sku ?? "").toLowerCase().includes(q) ||
+          (i.category ?? "").toLowerCase().includes(q),
+      );
+    }
+    return list;
+  }, [items, companyFilter, search]);
 
   useEffect(() => {
     if (!dotsMenuId) return;
@@ -734,10 +748,21 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
 
         {/* List header */}
         <div className="items-list-header">
-          {/* Search icon button */}
-          <button type="button" className="items-icon-btn" aria-label="Search">
+          {/* Search box */}
+          <div className="items-search">
             <SearchIcon />
-          </button>
+            <input
+              type="text"
+              placeholder="Search Items"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            {search && (
+              <button type="button" className="items-search__clear" aria-label="Clear search" onClick={() => setSearch("")}>
+                ×
+              </button>
+            )}
+          </div>
 
           {/* Add Item button with dropdown */}
           <div className="items-add-btn-wrap" style={{ position: "relative" }}>
@@ -804,6 +829,8 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
             <div style={{ padding: "32px 16px", textAlign: "center", color: "#94a3b8", fontSize: 13 }}>
               {items.length === 0
                 ? "No items yet. Click + Add Item to get started."
+                : search
+                ? "No items match your search."
                 : "No items for this company. Switch the company filter or add one."}
             </div>
           )}
@@ -816,7 +843,14 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
             >
               <span className="items-row__name">{item.name}</span>
               <span className={`items-row__qty${(item.openingStock ?? 0) < 0 ? " items-row__qty--neg" : ""}`}>
-                {item.openingStock ?? 0} {item.unit ?? ""}
+                {formatStockQty(
+                  item.openingStock ?? 0,
+                  item.unit ?? "",
+                  item.secondaryUnit ?? null,
+                  item.conversionRate ? Number(item.conversionRate) : null,
+                  item.tertiaryUnit ?? null,
+                  item.tertiaryConversionRate ? Number(item.tertiaryConversionRate) : null,
+                )}
               </span>
               <div className="items-row__dots-wrap">
                 <button
@@ -877,7 +911,16 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
               <div className="items-stat__divider" />
               <div className="items-stat">
                 <span className="items-stat__label">STOCK QUANTITY</span>
-                <span className="items-stat__value items-stat__value--red">{selectedItem.openingStock ?? 0} {selectedItem.unit ?? ""}</span>
+                <span className="items-stat__value items-stat__value--red">
+                  {formatStockQty(
+                    selectedItem.openingStock ?? 0,
+                    selectedItem.unit ?? "",
+                    selectedItem.secondaryUnit ?? null,
+                    selectedItem.conversionRate ? Number(selectedItem.conversionRate) : null,
+                    selectedItem.tertiaryUnit ?? null,
+                    selectedItem.tertiaryConversionRate ? Number(selectedItem.tertiaryConversionRate) : null,
+                  )}
+                </span>
               </div>
               <div className="items-stat__divider" />
               <div className="items-stat">
