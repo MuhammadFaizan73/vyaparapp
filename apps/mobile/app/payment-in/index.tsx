@@ -76,6 +76,8 @@ export default function PaymentInListScreen() {
   );
 
   const filtered = rows.filter((r) => isWithinRange(r.date, range));
+  const filteredTotal = filtered.reduce((s, r) => s + r.total, 0);
+  const filteredBalance = filtered.reduce((s, r) => s + r.balance, 0);
 
   function startMicPulse() {
     Animated.loop(
@@ -140,6 +142,19 @@ export default function PaymentInListScreen() {
           </TouchableOpacity>
         </View>
       </View>
+
+      {!loading && rows.length > 0 && (
+        <View style={styles.summaryBar}>
+          <View style={styles.summaryCol}>
+            <Text style={styles.summaryLabel}>Total Amount</Text>
+            <Text style={styles.summaryValue}>Rs {fmt4(filteredTotal)}</Text>
+          </View>
+          <View style={styles.summaryCol}>
+            <Text style={styles.summaryLabel}>Balance</Text>
+            <Text style={styles.summaryValue}>Rs {fmt4(filteredBalance)}</Text>
+          </View>
+        </View>
+      )}
 
       {/* List */}
       {loading ? (
@@ -257,6 +272,15 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderBottomWidth: 1, borderBottomColor: colors.border,
   },
+  summaryBar: {
+    flexDirection: "row",
+    backgroundColor: "#fff",
+    borderBottomWidth: 1, borderBottomColor: colors.border,
+    paddingVertical: 12,
+  },
+  summaryCol: { flex: 1, alignItems: "center" },
+  summaryLabel: { fontSize: 12, color: colors.textMuted, marginBottom: 3 },
+  summaryValue: { fontSize: 15, fontWeight: "700", color: colors.primary },
   filterRow: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     paddingHorizontal: 14, paddingVertical: 11,
