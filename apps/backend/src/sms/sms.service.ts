@@ -1,58 +1,94 @@
 import { Injectable, InternalServerErrorException } from "@nestjs/common";
 
-// MSG91's OTP API (v5) — chosen for cost on Pakistan routes over Twilio/Firebase (see the
-// conversation this was requested in). Swapping providers later only means rewriting the
-// two calls below; nothing outside this file needs to know which SMS vendor is behind it.
+// D7 Networks — cheaper than MSG91/Twilio on Pakistan local routes (flat per-SMS, no
+// monthly platform fee; see the conversation this was requested in). Swapping providers
+// later only means rewriting the calls below; nothing outside this file needs to know
+// which SMS vendor is behind it.
 //
-// Docs: https://docs.msg91.com/p/tf9GTb4mQ/e/Vt8O5qXPYU/MSG91
-// Env vars required: MSG91_AUTH_KEY, MSG91_TEMPLATE_ID (an approved OTP template in the
-// MSG91 dashboard — the template's placeholder is filled with the OTP automatically).
-const MSG91_BASE = "https://control.msg91.com/api/v5/otp";
+// Docs: https://d7networks.com/docs/verify/overview/
+// Env vars required: D7_API_TOKEN. D7_ORIGINATOR is optional (sender name shown to the
+// recipient, defaults to "VyaparPK").
+//
+// D7's verify API is request-id based (send-otp returns an otp_id that verify-otp needs),
+// unlike MSG91's phone-keyed flow the rest of this module was originally shaped around.
+// To keep auth.controller.ts and its DTOs untouched, the otp_id is cached here in-memory
+// per phone number for the OTP's lifetime instead of threading it through the API surface.
+const D7_BASE_URL = "https://api.d7networks.com/verify/v1";
+const OTP_TTL_MS = 5 * 60 * 1000;
+
+interface PendingOtp {
+  requestId: string;
+  expiresAt: number;
+}
 
 @Injectable()
 export class SmsService {
-  private get authKey(): string {
-    const key = process.env.MSG91_AUTH_KEY;
-    if (!key) throw new InternalServerErrorException("SMS provider is not configured (MSG91_AUTH_KEY missing).");
-    return key;
+  private readonly pending = new Map<string, PendingOtp>();
+
+  private get apiToken(): string {
+    const token = process.env.D7_API_TOKEN;
+    if (!token) throw new InternalServerErrorException("SMS provider is not configured (D7_API_TOKEN missing).");
+    return token;
   }
 
-  private get templateId(): string {
-    const id = process.env.MSG91_TEMPLATE_ID;
-    if (!id) throw new InternalServerErrorException("SMS provider is not configured (MSG91_TEMPLATE_ID missing).");
-    return id;
+  private get originator(): string {
+    return process.env.D7_ORIGINATOR || "VyaparPK";
   }
 
-  // MSG91 wants the number as countrycode+number with no "+" and no spaces, e.g. "923001234567".
+  // Mirrors AuthService.register's normalization so the same phone number always maps to
+  // the same key here, regardless of a leading "0" on the local part.
   private normalize(countryCode: string, phone: string): string {
-    return `${countryCode}${phone}`.replace(/[^\d]/g, "");
+    return `${countryCode}${phone.replace(/^0+/, "")}`;
   }
 
   async sendOtp(countryCode: string, phone: string): Promise<void> {
-    const mobile = this.normalize(countryCode, phone);
-    const url = `${MSG91_BASE}?template_id=${this.templateId}&mobile=${mobile}&authkey=${this.authKey}`;
-    const res = await fetch(url, { method: "POST" });
+    const recipient = this.normalize(countryCode, phone);
+    const res = await fetch(`${D7_BASE_URL}/otp/send-otp`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.apiToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        originator: this.originator,
+        recipient,
+        content: "Your Vyapar verification code is: {}",
+        expiry: OTP_TTL_MS / 1000,
+        channel: "SMS",
+        otp_code_length: 6,
+        otp_type: "numeric",
+      }),
+    });
+
     const data = await res.json().catch(() => ({}));
-    if (data.type !== "success") {
+    if (!res.ok || !data.request_id) {
       throw new InternalServerErrorException(data.message || "Could not send verification code.");
     }
+
+    this.pending.set(recipient, { requestId: data.request_id, expiresAt: Date.now() + OTP_TTL_MS });
   }
 
   async verifyOtp(countryCode: string, phone: string, otp: string): Promise<boolean> {
-    const mobile = this.normalize(countryCode, phone);
-    const url = `${MSG91_BASE}/verify?otp=${encodeURIComponent(otp)}&mobile=${mobile}`;
-    const res = await fetch(url, { method: "GET", headers: { authkey: this.authKey } });
+    const recipient = this.normalize(countryCode, phone);
+    const entry = this.pending.get(recipient);
+    if (!entry || entry.expiresAt < Date.now()) return false;
+
+    const res = await fetch(`${D7_BASE_URL}/verify-otp`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.apiToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ otp_id: entry.requestId, otp_code: otp }),
+    });
+
     const data = await res.json().catch(() => ({}));
-    return data.type === "success";
+    const approved = res.ok && data.status === "APPROVED";
+    if (approved) this.pending.delete(recipient);
+    return approved;
   }
 
-  async resendOtp(countryCode: string, phone: string, via: "text" | "voice" = "text"): Promise<void> {
-    const mobile = this.normalize(countryCode, phone);
-    const url = `${MSG91_BASE}/retry?authkey=${this.authKey}&mobile=${mobile}&retrytype=${via}`;
-    const res = await fetch(url, { method: "POST" });
-    const data = await res.json().catch(() => ({}));
-    if (data.type !== "success") {
-      throw new InternalServerErrorException(data.message || "Could not resend verification code.");
-    }
+  async resendOtp(countryCode: string, phone: string): Promise<void> {
+    await this.sendOtp(countryCode, phone);
   }
 }

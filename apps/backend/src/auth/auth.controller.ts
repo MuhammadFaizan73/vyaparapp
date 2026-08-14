@@ -18,7 +18,7 @@ export class AuthController {
 
   // Additive: doesn't touch /auth/register, which stays exactly as it works today.
   // Wiring OTP into the actual onboarding flow (mobile's onboarding.tsx) is a separate
-  // decision once MSG91's delivery to Pakistani numbers is verified live.
+  // decision once D7's delivery to Pakistani numbers is verified live.
   @Post("send-otp")
   async sendOtp(@Body() dto: SendOtpDto) {
     await this.smsService.sendOtp(dto.countryCode, dto.phone);
