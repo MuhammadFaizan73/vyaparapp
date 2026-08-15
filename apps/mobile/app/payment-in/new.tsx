@@ -16,6 +16,10 @@ function fmt4(n: number) {
   return n.toLocaleString("en-PK", { minimumFractionDigits: 4, maximumFractionDigits: 4 });
 }
 
+function fmt2(n: number) {
+  return n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 function generateIdempotencyKey(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
@@ -111,10 +115,11 @@ export default function NewPaymentInScreen() {
   const [showMore, setShowMore] = useState(false);
 
   // Link Payment — lets this payment be allocated against one or more of the party's
-  // outstanding sale invoices, reducing each linked invoice's balance on save. Mirrors
-  // desktop's LinkPaymentToInvoicesModal (packages/ui/src/screens/PaymentInScreen.tsx).
+  // outstanding sale invoices, reducing each linked invoice's balance on save. Each
+  // invoice gets an explicit, user-editable linked amount (not just an auto-split),
+  // keyed by invoice id.
   const [partyInvoices, setPartyInvoices] = useState<Transaction[]>([]);
-  const [linkedInvoiceIds, setLinkedInvoiceIds] = useState<Set<string>>(new Set());
+  const [linkedAmounts, setLinkedAmounts] = useState<Record<string, number>>({});
   const [showLinkModal, setShowLinkModal] = useState(false);
   const prefillSeededRef = useRef(false);
 
@@ -173,38 +178,37 @@ export default function NewPaymentInScreen() {
   // modal has something to show. When this screen was opened from a Sale row's "Receive
   // Payment" menu (prefillSaleId set), pre-link that one invoice once it shows up here.
   useEffect(() => {
-    if (!selectedPartyId) { setPartyInvoices([]); setLinkedInvoiceIds(new Set()); return; }
+    if (!selectedPartyId) { setPartyInvoices([]); setLinkedAmounts({}); return; }
     api.getPartyTransactions(selectedPartyId)
       .then((txns) => {
         const outstanding = txns.filter((t) => t.type === "sale" && t.balance > 0);
         setPartyInvoices(outstanding);
-        if (!isEdit && params.prefillSaleId && !prefillSeededRef.current
-          && outstanding.some((t) => t.id === params.prefillSaleId)) {
-          setLinkedInvoiceIds(new Set([params.prefillSaleId]));
-          prefillSeededRef.current = true;
+        if (!isEdit && params.prefillSaleId && !prefillSeededRef.current) {
+          const inv = outstanding.find((t) => t.id === params.prefillSaleId);
+          if (inv) {
+            setLinkedAmounts({ [inv.id]: Math.min(inv.balance, receivedAmt) });
+            prefillSeededRef.current = true;
+          }
         }
       })
       .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPartyId]);
 
-  const linkedTotal = partyInvoices
-    .filter((t) => linkedInvoiceIds.has(t.id))
-    .reduce((s, t) => s + Math.min(t.balance, receivedAmt), 0);
+  const linkedTotal = Object.values(linkedAmounts).reduce((s, v) => s + v, 0);
   const unusedAmt = Math.max(0, receivedAmt - linkedTotal);
 
-  // Reduces each linked invoice's balance by its allocated share of the received amount —
-  // same order-of-invoices walk desktop uses, so behavior matches across platforms.
+  // Deducts each invoice's own entered link amount from its balance (capped at that
+  // invoice's balance, in case it changed since the modal was closed).
   async function applyLinkedInvoiceDeductions() {
-    let remaining = linkedTotal;
-    for (const invId of Array.from(linkedInvoiceIds)) {
-      if (remaining <= 0) break;
+    for (const [invId, amt] of Object.entries(linkedAmounts)) {
+      if (amt <= 0) continue;
       const inv = partyInvoices.find((t) => t.id === invId);
       if (!inv) continue;
-      const deduct = Math.min(inv.balance, remaining);
+      const deduct = Math.min(inv.balance, amt);
       try {
         await api.updateTransaction(invId, { balance: Math.max(0, inv.balance - deduct) });
       } catch { /* non-fatal — other linked invoices should still get deducted */ }
-      remaining -= deduct;
     }
   }
 
@@ -221,7 +225,7 @@ export default function NewPaymentInScreen() {
           balance: unusedAmt,
           notes: JSON.stringify({ paymentType }),
         });
-        if (linkedInvoiceIds.size > 0) await applyLinkedInvoiceDeductions();
+        if (Object.keys(linkedAmounts).length > 0) await applyLinkedInvoiceDeductions();
         router.back();
         return;
       }
@@ -244,14 +248,14 @@ export default function NewPaymentInScreen() {
       // this really is a fresh row; otherwise the first successful call already did it,
       // and doing it again on the replay would deduct the same amount twice.
       const isFreshlyCreated = Date.now() - new Date(payment.createdAt).getTime() < 10000;
-      if (linkedInvoiceIds.size > 0 && isFreshlyCreated) {
+      if (Object.keys(linkedAmounts).length > 0 && isFreshlyCreated) {
         await applyLinkedInvoiceDeductions();
       }
 
       if (goNew) {
         idempotencyKeyRef.current = generateIdempotencyKey();
         setCustomer(""); setSelectedPartyId(null); setReceived("");
-        setLinkedInvoiceIds(new Set());
+        setLinkedAmounts({});
         prefillSeededRef.current = false;
         setReceiptNo((n) => n + 1);
       } else {
@@ -405,7 +409,7 @@ export default function NewPaymentInScreen() {
               }}
             >
               <Ionicons name="link" size={13} color="#1976d2" />
-              <Text style={styles.linkTxt}>Link{linkedInvoiceIds.size > 0 ? ` (${linkedInvoiceIds.size})` : ""}</Text>
+              <Text style={styles.linkTxt}>Link{Object.keys(linkedAmounts).length > 0 ? ` (${Object.keys(linkedAmounts).length})` : ""}</Text>
             </TouchableOpacity>
             <Text style={styles.rsLabel}>Rs</Text>
             <TextInput
@@ -508,11 +512,11 @@ export default function NewPaymentInScreen() {
       {/* Link Payment to Invoices Modal */}
       <LinkPaymentModal
         visible={showLinkModal}
-        partyName={selectedParty?.name ?? customer}
         receivedAmount={receivedAmt}
+        onChangeReceived={setReceived}
         invoices={partyInvoices}
-        linkedIds={linkedInvoiceIds}
-        onDone={(ids) => { setLinkedInvoiceIds(ids); setShowLinkModal(false); }}
+        linkedAmounts={linkedAmounts}
+        onDone={(amounts) => { setLinkedAmounts(amounts); setShowLinkModal(false); }}
         onClose={() => setShowLinkModal(false)}
       />
 
@@ -565,26 +569,35 @@ export default function NewPaymentInScreen() {
 }
 
 /* ─── Link Payment to Invoices Modal ───────────────────────────────────────
-   Mirrors desktop's LinkPaymentToInvoicesModal (packages/ui/src/screens/PaymentInScreen.tsx):
-   pick outstanding sale invoices to allocate this payment against, with an auto-link
-   shortcut that greedily fills invoices oldest-first until the received amount runs out. */
+   Full-screen picker: each outstanding sale invoice is a card showing its Invoice
+   Number/Total Amount/Current Balance, with an editable "Link Amount" the user can
+   type directly (or auto-fill via the checkmark toggle) to allocate this payment
+   against it. The header's checkmark icon auto-links everything / clears all; the
+   filter icon reveals a search-by-invoice-number bar. */
 function LinkPaymentModal({
-  visible, partyName, receivedAmount, invoices, linkedIds, onDone, onClose,
+  visible, receivedAmount, onChangeReceived, invoices, linkedAmounts, onDone, onClose,
 }: {
   visible: boolean;
-  partyName: string;
   receivedAmount: number;
+  onChangeReceived: (text: string) => void;
   invoices: Transaction[];
-  linkedIds: Set<string>;
-  onDone: (ids: Set<string>) => void;
+  linkedAmounts: Record<string, number>;
+  onDone: (amounts: Record<string, number>) => void;
   onClose: () => void;
 }) {
-  const [selected, setSelected] = useState<Set<string>>(new Set(linkedIds));
+  const [amounts, setAmounts] = useState<Record<string, string>>({});
+  const [showSearch, setShowSearch] = useState(false);
   const [search, setSearch] = useState("");
+  const [editingReceived, setEditingReceived] = useState(false);
+  const [receivedInput, setReceivedInput] = useState("");
 
-  // Reflect the currently-linked set each time the modal is (re)opened.
+  // Reflect the currently-linked amounts each time the modal is (re)opened.
   useEffect(() => {
-    if (visible) setSelected(new Set(linkedIds));
+    if (!visible) return;
+    const init: Record<string, string> = {};
+    for (const [id, amt] of Object.entries(linkedAmounts)) init[id] = String(amt);
+    setAmounts(init);
+    setEditingReceived(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
@@ -592,129 +605,162 @@ function LinkPaymentModal({
     ? invoices.filter((t) => (t.number ?? "").toLowerCase().includes(search.toLowerCase()))
     : invoices;
 
-  function computeAllocations(sel: Set<string>) {
-    let remaining = receivedAmount;
-    const alloc: Record<string, number> = {};
-    for (const inv of invoices) {
-      if (!sel.has(inv.id)) continue;
-      const take = Math.min(inv.balance, remaining);
-      alloc[inv.id] = take;
-      remaining -= take;
-      if (remaining <= 0) break;
-    }
-    return alloc;
-  }
+  const allLinked = invoices.length > 0 && invoices.every((inv) => amounts[inv.id] !== undefined);
 
-  const allocations = computeAllocations(selected);
-  const linkedTotal = Object.values(allocations).reduce((s, v) => s + v, 0);
-  const unusedAmount = Math.max(0, receivedAmount - linkedTotal);
-
-  function toggle(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
+  function toggle(inv: Transaction) {
+    setAmounts((prev) => {
+      const next = { ...prev };
+      if (next[inv.id] !== undefined) {
+        delete next[inv.id];
+      } else {
+        const usedSoFar = Object.values(next).reduce((s, v) => s + (parseFloat(v) || 0), 0);
+        const suggested = Math.max(0, Math.min(inv.balance, receivedAmount - usedSoFar));
+        next[inv.id] = suggested > 0 ? String(suggested) : "";
+      }
       return next;
     });
   }
 
-  function autoLink() {
-    const ids = new Set<string>();
+  // Header checkmark — link everything (greedily, oldest-first) if not all linked
+  // yet, otherwise clear all. A quick "select all" / "reset" combined into one tap.
+  function toggleAll() {
+    if (allLinked) { setAmounts({}); return; }
+    const next: Record<string, string> = {};
     let left = receivedAmount;
     for (const inv of invoices) {
-      if (left <= 0) break;
-      ids.add(inv.id);
-      left -= Math.min(inv.balance, left);
+      const take = Math.max(0, Math.min(inv.balance, left));
+      next[inv.id] = take > 0 ? String(take) : "";
+      left -= take;
     }
-    setSelected(ids);
+    setAmounts(next);
+  }
+
+  function handleDone() {
+    const result: Record<string, number> = {};
+    for (const [id, v] of Object.entries(amounts)) {
+      const n = parseFloat(v) || 0;
+      if (n > 0) result[id] = n;
+    }
+    onDone(result);
   }
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <TouchableOpacity style={lpmStyles.overlay} activeOpacity={1} onPress={onClose} />
-      <View style={lpmStyles.sheet}>
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+      <View style={lpmStyles.screen}>
         <View style={lpmStyles.header}>
-          <Text style={lpmStyles.title}>Link Payment to Txns</Text>
-          <TouchableOpacity onPress={onClose} hitSlop={8}>
-            <Ionicons name="close" size={22} color={colors.textMuted} />
-          </TouchableOpacity>
+          <Text style={lpmStyles.title}>Link Payment To Txns</Text>
+          <View style={lpmStyles.headerIcons}>
+            <TouchableOpacity onPress={toggleAll} hitSlop={8}>
+              <Ionicons name="checkmark-circle" size={22} color={allLinked ? colors.primary : "#b7c0cc"} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setShowSearch((v) => !v)} hitSlop={8}>
+              <Ionicons name="filter" size={20} color={colors.textMuted} />
+            </TouchableOpacity>
+          </View>
         </View>
 
-        <View style={lpmStyles.metaRow}>
+        <View style={lpmStyles.totalRow}>
           <View>
-            <Text style={lpmStyles.metaLbl}>Party</Text>
-            <Text style={lpmStyles.metaVal} numberOfLines={1}>{partyName}</Text>
+            <Text style={lpmStyles.totalLbl}>Total Received:</Text>
+            {editingReceived ? (
+              <TextInput
+                style={lpmStyles.totalInput}
+                value={receivedInput}
+                onChangeText={setReceivedInput}
+                keyboardType="numeric"
+                autoFocus
+                onBlur={() => { onChangeReceived(receivedInput); setEditingReceived(false); }}
+              />
+            ) : (
+              <Text style={lpmStyles.totalVal}>{fmt2(receivedAmount)}</Text>
+            )}
           </View>
-          <View style={{ alignItems: "flex-end" }}>
-            <Text style={[lpmStyles.metaLbl, { color: colors.primary }]}>Received</Text>
-            <Text style={lpmStyles.metaVal}>Rs {fmt4(receivedAmount)}</Text>
-          </View>
+          <TouchableOpacity
+            hitSlop={8}
+            onPress={() => { setReceivedInput(receivedAmount ? String(receivedAmount) : ""); setEditingReceived(true); }}
+          >
+            <Ionicons name="pencil" size={17} color={colors.textMuted} />
+          </TouchableOpacity>
         </View>
 
-        <View style={lpmStyles.actionsRow}>
-          <TouchableOpacity style={lpmStyles.autoBtn} onPress={autoLink}>
-            <Text style={lpmStyles.autoBtnTxt}>AUTO LINK</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={lpmStyles.resetBtn} onPress={() => setSelected(new Set())}>
-            <Text style={lpmStyles.resetBtnTxt}>↺ RESET</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={lpmStyles.searchRow}>
-          <Ionicons name="search" size={15} color={colors.textMuted} />
-          <TextInput
-            style={lpmStyles.searchInput}
-            placeholder="Search invoice no..."
-            placeholderTextColor={colors.textLight}
-            value={search}
-            onChangeText={setSearch}
-          />
-        </View>
+        {showSearch && (
+          <View style={lpmStyles.searchRow}>
+            <Ionicons name="search" size={15} color={colors.textMuted} />
+            <TextInput
+              style={lpmStyles.searchInput}
+              placeholder="Search invoice no..."
+              placeholderTextColor={colors.textLight}
+              value={search}
+              onChangeText={setSearch}
+              autoFocus
+            />
+          </View>
+        )}
 
         <FlatList
           data={filtered}
           keyExtractor={(t) => t.id}
-          style={lpmStyles.list}
+          contentContainerStyle={lpmStyles.list}
+          keyboardShouldPersistTaps="handled"
           ListEmptyComponent={<Text style={lpmStyles.emptyTxt}>No outstanding invoices found</Text>}
           renderItem={({ item: t }) => {
-            const isChecked = selected.has(t.id);
-            const linkAmt = allocations[t.id] ?? 0;
+            const isSelected = amounts[t.id] !== undefined;
             return (
-              <TouchableOpacity
-                style={[lpmStyles.row, isChecked && lpmStyles.rowSelected]}
-                onPress={() => toggle(t.id)}
-              >
-                <Ionicons
-                  name={isChecked ? "checkbox" : "square-outline"}
-                  size={20}
-                  color={isChecked ? colors.primary : colors.textLight}
-                />
-                <View style={{ flex: 1 }}>
-                  <Text style={lpmStyles.rowNumber}>{t.number ?? "Sale Invoice"}</Text>
-                  <Text style={lpmStyles.rowDate}>
-                    {new Date(t.date).toLocaleDateString("en-PK", { day: "2-digit", month: "2-digit", year: "numeric" })}
-                  </Text>
+              <View style={lpmStyles.cardWrap}>
+                <TouchableOpacity style={lpmStyles.checkBtn} onPress={() => toggle(t)} hitSlop={6}>
+                  <Ionicons
+                    name={isSelected ? "checkmark-circle" : "checkmark-circle-outline"}
+                    size={26}
+                    color={isSelected ? colors.primary : "#c7ced6"}
+                  />
+                </TouchableOpacity>
+                <View style={[lpmStyles.card, isSelected && lpmStyles.cardSelected]}>
+                  <View style={lpmStyles.cardTopRow}>
+                    <Text style={lpmStyles.cardType}>Sale</Text>
+                    <Text style={lpmStyles.cardDate}>
+                      {new Date(t.date).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                    </Text>
+                  </View>
+                  <View style={lpmStyles.cardGridRow}>
+                    <View style={lpmStyles.cardCol}>
+                      <Text style={lpmStyles.cardLbl}>Invoice Number</Text>
+                      <Text style={lpmStyles.cardVal}>{t.number ?? "–"}</Text>
+                    </View>
+                    <View style={lpmStyles.cardCol}>
+                      <Text style={lpmStyles.cardLbl}>Total Amount</Text>
+                      <Text style={lpmStyles.cardVal}>{fmt2(t.total)}</Text>
+                    </View>
+                  </View>
+                  <View style={lpmStyles.cardGridRow}>
+                    <View style={lpmStyles.cardCol}>
+                      <Text style={lpmStyles.cardLbl}>Current Balance</Text>
+                      <Text style={lpmStyles.cardVal}>{fmt2(t.balance)}</Text>
+                    </View>
+                    <View style={lpmStyles.cardCol}>
+                      <Text style={lpmStyles.cardLbl}>Link Amount</Text>
+                      <TextInput
+                        style={lpmStyles.linkAmtInput}
+                        value={amounts[t.id] ?? ""}
+                        onChangeText={(txt) => setAmounts((prev) => ({ ...prev, [t.id]: txt }))}
+                        keyboardType="numeric"
+                        placeholder="0.00"
+                        placeholderTextColor={colors.textLight}
+                      />
+                    </View>
+                  </View>
                 </View>
-                <View style={{ alignItems: "flex-end" }}>
-                  <Text style={lpmStyles.rowBalance}>Bal Rs {fmt4(t.balance)}</Text>
-                  {linkAmt > 0 && <Text style={lpmStyles.rowLinked}>Linked Rs {fmt4(linkAmt)}</Text>}
-                </View>
-              </TouchableOpacity>
+              </View>
             );
           }}
         />
 
         <View style={lpmStyles.footer}>
-          <Text style={lpmStyles.unusedTxt}>
-            Unused: <Text style={lpmStyles.unusedAmt}>Rs {fmt4(unusedAmount)}</Text>
-          </Text>
-          <View style={{ flexDirection: "row", gap: 10 }}>
-            <TouchableOpacity style={lpmStyles.cancelBtn} onPress={onClose}>
-              <Text style={lpmStyles.cancelBtnTxt}>CANCEL</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={lpmStyles.doneBtn} onPress={() => onDone(selected)}>
-              <Text style={lpmStyles.doneBtnTxt}>DONE</Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity style={lpmStyles.cancelBtn} onPress={onClose}>
+            <Text style={lpmStyles.cancelBtnTxt}>CANCEL</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={lpmStyles.doneBtn} onPress={handleDone}>
+            <Text style={lpmStyles.doneBtnTxt}>DONE</Text>
+          </TouchableOpacity>
         </View>
       </View>
     </Modal>
@@ -722,65 +768,64 @@ function LinkPaymentModal({
 }
 
 const lpmStyles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)" },
-  sheet: {
-    backgroundColor: "#fff", borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    maxHeight: "82%", paddingTop: 16,
-  },
+  screen: { flex: 1, backgroundColor: "#fff" },
   header: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    paddingHorizontal: 20, paddingBottom: 14,
+    backgroundColor: "#eef1f4", paddingHorizontal: 18, paddingVertical: 16,
   },
-  title: { fontSize: 16, fontWeight: "700", color: colors.text },
+  title: { fontSize: 16, fontWeight: "700", color: "#374151" },
+  headerIcons: { flexDirection: "row", gap: 18, alignItems: "center" },
 
-  metaRow: {
-    flexDirection: "row", justifyContent: "space-between",
-    paddingHorizontal: 20, paddingBottom: 14,
+  totalRow: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 18, paddingVertical: 14,
+    borderBottomWidth: 1, borderBottomColor: "#f1f5f9",
   },
-  metaLbl: { fontSize: 11, color: colors.textLight, fontWeight: "600", marginBottom: 3 },
-  metaVal: { fontSize: 14, fontWeight: "700", color: colors.text },
-
-  actionsRow: { flexDirection: "row", gap: 10, paddingHorizontal: 20, paddingBottom: 12 },
-  autoBtn: {
-    borderWidth: 1.5, borderColor: colors.primary, borderRadius: 8,
-    paddingHorizontal: 14, paddingVertical: 8,
+  totalLbl: { fontSize: 13, color: "#6b7280", marginBottom: 2 },
+  totalVal: { fontSize: 20, fontWeight: "700", color: colors.text },
+  totalInput: {
+    fontSize: 20, fontWeight: "700", color: colors.text,
+    borderBottomWidth: 1.5, borderBottomColor: colors.primary, minWidth: 100, paddingVertical: 0,
   },
-  autoBtnTxt: { fontSize: 12, fontWeight: "700", color: colors.primary },
-  resetBtn: { justifyContent: "center", paddingHorizontal: 6 },
-  resetBtnTxt: { fontSize: 12, fontWeight: "600", color: colors.textMuted },
 
   searchRow: {
     flexDirection: "row", alignItems: "center", gap: 8,
-    marginHorizontal: 20, marginBottom: 8, paddingHorizontal: 12, paddingVertical: 9,
+    marginHorizontal: 18, marginTop: 10, paddingHorizontal: 12, paddingVertical: 9,
     backgroundColor: "#f8fafc", borderRadius: 8, borderWidth: 1, borderColor: colors.border,
   },
   searchInput: { flex: 1, fontSize: 13, color: colors.text, padding: 0 },
 
-  list: { paddingHorizontal: 20 },
+  list: { padding: 14, gap: 14 },
   emptyTxt: { textAlign: "center", color: colors.textLight, fontSize: 13, paddingVertical: 28 },
-  row: {
-    flexDirection: "row", alignItems: "center", gap: 12,
-    paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#f1f5f9",
-  },
-  rowSelected: { backgroundColor: "#f0f9ff" },
-  rowNumber: { fontSize: 13.5, fontWeight: "600", color: colors.text },
-  rowDate: { fontSize: 11.5, color: colors.textLight, marginTop: 2 },
-  rowBalance: { fontSize: 12.5, fontWeight: "600", color: colors.text },
-  rowLinked: { fontSize: 11.5, color: colors.primary, fontWeight: "600", marginTop: 2 },
 
-  footer: {
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    paddingHorizontal: 20, paddingVertical: 14, borderTopWidth: 1, borderTopColor: "#f1f5f9",
+  cardWrap: { flexDirection: "row", alignItems: "stretch" },
+  checkBtn: {
+    width: 24, marginLeft: -12, marginTop: 14, zIndex: 2,
+    alignItems: "center", justifyContent: "flex-start",
   },
-  unusedTxt: { fontSize: 13, color: colors.textMuted },
-  unusedAmt: { fontWeight: "700", color: colors.text },
-  cancelBtn: {
-    borderWidth: 1.5, borderColor: colors.border, borderRadius: 8,
-    paddingHorizontal: 16, paddingVertical: 9,
+  card: {
+    flex: 1, backgroundColor: "#eef2f4", borderRadius: 10,
+    paddingVertical: 14, paddingLeft: 22, paddingRight: 14, gap: 10,
   },
-  cancelBtnTxt: { fontSize: 12.5, fontWeight: "700", color: colors.textMuted },
-  doneBtn: { backgroundColor: colors.primary, borderRadius: 8, paddingHorizontal: 18, paddingVertical: 9 },
-  doneBtnTxt: { fontSize: 12.5, fontWeight: "700", color: "#fff" },
+  cardSelected: { backgroundColor: "#e3edf3" },
+  cardTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  cardType: { fontSize: 14.5, fontWeight: "700", color: colors.text },
+  cardDate: { fontSize: 13, color: "#4b5563" },
+  cardGridRow: { flexDirection: "row" },
+  cardCol: { flex: 1 },
+  cardLbl: { fontSize: 12, color: "#6b7280", marginBottom: 3 },
+  cardVal: { fontSize: 14, color: colors.text },
+  linkAmtInput: {
+    borderWidth: 1, borderColor: "#94a3b8", borderRadius: 4, backgroundColor: "#fff",
+    paddingHorizontal: 10, paddingVertical: 6, fontSize: 14, color: colors.text,
+    maxWidth: 130,
+  },
+
+  footer: { flexDirection: "row" },
+  cancelBtn: { flex: 1, backgroundColor: "#0d4f73", paddingVertical: 16, alignItems: "center" },
+  cancelBtnTxt: { color: "#fff", fontWeight: "700", fontSize: 14, letterSpacing: 0.3 },
+  doneBtn: { flex: 1, backgroundColor: colors.primary, paddingVertical: 16, alignItems: "center" },
+  doneBtnTxt: { color: "#fff", fontWeight: "700", fontSize: 14, letterSpacing: 0.3 },
 });
 
 const styles = StyleSheet.create({
