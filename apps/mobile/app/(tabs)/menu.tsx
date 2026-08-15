@@ -347,8 +347,10 @@ const styles = StyleSheet.create({
   subIcon: { marginRight: 10 },
   subLabel: { flex: 1, fontSize: 13.5, color: colors.text },
 
-  // Footer
-  footer: { alignItems: "center", paddingVertical: 28, gap: 12 },
+  // Footer — top padding only for breathing room above Sign Out; bottom clearance
+  // above the tab bar is already handled by `body.paddingBottom`, so a bottom value
+  // here too just doubled up as dead empty space for screens with shorter content.
+  footer: { alignItems: "center", paddingTop: 28, gap: 12 },
   signOutBtn: {
     flexDirection: "row", alignItems: "center", gap: 8,
     borderWidth: 1.5, borderColor: colors.red,
