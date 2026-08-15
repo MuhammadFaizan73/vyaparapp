@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Tabs, router } from "expo-router";
 import { Platform, View, StyleSheet, Text, TouchableOpacity } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { colors } from "../../src/theme";
 import { getRole, getPermissions } from "../../src/auth";
@@ -18,10 +19,11 @@ function hasPerm(permissions: string[] | null, perm: string): boolean {
 
 function ReadOnlyBanner() {
   const { isReadOnly } = useDevice();
+  const insets = useSafeAreaInsets();
   if (!isReadOnly) return null;
   return (
     <TouchableOpacity
-      style={styles.readOnlyBanner}
+      style={[styles.readOnlyBanner, { paddingTop: insets.top + 7 }]}
       onPress={() => router.push("/manage-devices")}
       activeOpacity={0.85}
     >

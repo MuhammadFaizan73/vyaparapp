@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, Modal, ScrollView } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import type { Distributor, Branch } from "@vyapar/api-client";
 import { colors } from "../theme";
 import { useSelectedCompany } from "../useSelectedCompany";
+import { useDevice } from "../useDeviceSession";
 
 // Shared by the tab bar (every tab screen) and any stack screen that creates/edits a
 // record tied to a specific Company — e.g. Add Sale — since the tab-bar banner doesn't
@@ -25,6 +27,13 @@ export function CompanySwitcherBar() {
   } = useSelectedCompany();
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<CompanyView>({ level: "root" });
+  const insets = useSafeAreaInsets();
+  // ReadOnlyBanner (rendered above this in (tabs)/_layout.tsx) already accounts for the
+  // status bar when it's visible — only add our own top inset when we're the first thing
+  // painted, otherwise the two would stack and push everything down twice as far.
+  const { isReadOnly } = useDevice();
+  const topInset = isReadOnly ? 0 : insets.top;
+
   // Desktop's equivalent dropdown is always visible, even for a single-company tenant —
   // it's the only way to confirm/select that company. Only hide here if there's truly
   // nothing to pick (a brand-new tenant whose default Company row hasn't loaded yet).
@@ -35,7 +44,7 @@ export function CompanySwitcherBar() {
     if (companiesError) {
       return (
         <TouchableOpacity
-          style={s.errorBanner}
+          style={[s.errorBanner, { paddingTop: topInset + 8 }]}
           onPress={() => void refreshCompanies()}
           activeOpacity={0.85}
           disabled={loading}
@@ -53,7 +62,7 @@ export function CompanySwitcherBar() {
     // a retry affordance instead of nothing rather than assume that guarantee holds.
     if (!loading) {
       return (
-        <TouchableOpacity style={s.errorBanner} onPress={() => void refreshCompanies()} activeOpacity={0.85}>
+        <TouchableOpacity style={[s.errorBanner, { paddingTop: topInset + 8 }]} onPress={() => void refreshCompanies()} activeOpacity={0.85}>
           <Ionicons name="alert-circle-outline" size={14} color="#b91c1c" />
           <Text style={s.errorBannerText} numberOfLines={2}>No companies found — tap to retry</Text>
           <Ionicons name="refresh" size={14} color="#b91c1c" />
@@ -75,7 +84,7 @@ export function CompanySwitcherBar() {
 
   return (
     <>
-      <TouchableOpacity style={s.banner} onPress={() => setOpen(true)} activeOpacity={0.85}>
+      <TouchableOpacity style={[s.banner, { paddingTop: topInset + 8 }]} onPress={() => setOpen(true)} activeOpacity={0.85}>
         <Ionicons name="business-outline" size={14} color={colors.primary} />
         <Text style={s.bannerText} numberOfLines={1}>{filterLabel}</Text>
         <Ionicons name="chevron-down" size={14} color={colors.primary} />
