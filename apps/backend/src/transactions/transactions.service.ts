@@ -3,6 +3,8 @@ import { PrismaService } from "../prisma/prisma.service";
 import { CreateTransactionDto, UpdateTransactionDto } from "./transactions.dto";
 import { companyIdWhere } from "../common/company-filter.util";
 
+const MAX_TRANSACTIONS_PER_PAGE = 200;
+
 export type TransactionRow = {
   id: string;
   partyId: string;
@@ -95,7 +97,7 @@ export class TransactionsService {
     const rows = await this.prisma.transaction.findMany({
       where: { tenantId, ...companyIdWhere(companyId) },
       orderBy: { date: "desc" },
-      take: 200,
+      take: MAX_TRANSACTIONS_PER_PAGE,
     });
     return rows.map(toRow);
   }
@@ -113,8 +115,11 @@ export class TransactionsService {
     };
   }
 
-  // take/skip/from/to are all optional and additive — omitting them preserves the exact
-  // previous behavior (return every matching row) for any caller that hasn't opted in yet.
+  // skip is optional and additive (no skip = start from the top). take is NOT optional in
+  // effect — a caller that omits it still gets capped at MAX_TRANSACTIONS_PER_PAGE rather than
+  // every matching row, since an uncapped query here previously let a tenant with a very large
+  // transaction history (e.g. via bulk import) fetch/render its entire history in one response,
+  // which was slow enough on mobile to look like a stuck spinner and could crash the app.
   async listByType(
     tenantId: string,
     type: string,
@@ -128,7 +133,7 @@ export class TransactionsService {
         ...companyIdWhere(opts?.companyId),
       },
       orderBy: { date: "desc" },
-      ...(opts?.take !== undefined && { take: opts.take }),
+      take: opts?.take ?? MAX_TRANSACTIONS_PER_PAGE,
       ...(opts?.skip !== undefined && { skip: opts.skip }),
     });
     return rows.map(toRow);

@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet,
+  View, Text, ScrollView, FlatList, TouchableOpacity, StyleSheet,
   ActivityIndicator, RefreshControl, Modal, Alert, Animated, TextInput,
 } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
@@ -29,6 +29,7 @@ interface VoiceFilter {
 }
 
 const FILTERS = ["All", "Unpaid", "Paid"];
+const PAGE_SIZE = 50;
 
 const PARTY_COLORS: Record<string, { tint: string; fg: string }> = {};
 const TINTS = [
@@ -108,6 +109,14 @@ export default function SaleListScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+  // Pagination — a tenant with a very large sale history (e.g. from bulk Excel import) would
+  // otherwise have its entire history fetched and rendered in one go, which is what caused the
+  // stuck spinner + crash this replaces. partyMap is kept in state (not refetched per page) since
+  // it only needs to be loaded once.
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [partyMap, setPartyMap] = useState<Record<string, string>>({});
   const [canCreate, setCanCreate] = useState(true);
   const [permissions, setPermissions] = useState<string[] | null>(null);
   const [memberId, setMemberId] = useState<string | null>(null);
@@ -218,6 +227,8 @@ export default function SaleListScreen() {
     setVoicePartial("");
   }
 
+  // Fresh load of the first page — resets pagination and refetches parties. Used on initial
+  // mount, screen focus, and pull-to-refresh.
   async function fetchSales() {
     try {
       // A hard JS-level backstop in addition to the API client's own axios timeout — if
@@ -228,15 +239,38 @@ export default function SaleListScreen() {
         setTimeout(() => reject(new Error("Sale list load timed out")), 15000);
       });
       const [txns, parties] = await Promise.race([
-        Promise.all([api.getTransactionsByType("sale"), api.getParties()]),
+        Promise.all([
+          api.getTransactionsByType("sale", { take: PAGE_SIZE, skip: 0 }),
+          api.getParties(),
+        ]),
         timeout,
       ]);
-      const partyMap: Record<string, string> = {};
-      parties.forEach((p: Party) => { partyMap[p.id] = p.name; });
-      setSales(txns.map((t) => ({ ...t, partyName: partyMap[t.partyId] ?? "Unknown" })));
+      const map: Record<string, string> = {};
+      parties.forEach((p: Party) => { map[p.id] = p.name; });
+      setPartyMap(map);
+      setSales(txns.map((t) => ({ ...t, partyName: map[t.partyId] ?? "Unknown" })));
+      setPage(0);
+      setHasMore(txns.length === PAGE_SIZE);
       setError("");
     } catch {
       setError("Could not load sales. Pull down to retry.");
+    }
+  }
+
+  // Fetches the next page and appends it — triggered by scrolling to the end of the list.
+  async function loadMoreSales() {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const nextPage = page + 1;
+      const txns = await api.getTransactionsByType("sale", { take: PAGE_SIZE, skip: nextPage * PAGE_SIZE });
+      setSales((prev) => [...prev, ...txns.map((t) => ({ ...t, partyName: partyMap[t.partyId] ?? "Unknown" }))]);
+      setPage(nextPage);
+      setHasMore(txns.length === PAGE_SIZE);
+    } catch {
+      // Leave hasMore as-is — the user can scroll again to retry; the already-loaded pages stay intact.
+    } finally {
+      setLoadingMore(false);
     }
   }
 
@@ -342,7 +376,9 @@ export default function SaleListScreen() {
     );
   }
 
-  // Apply status chip filter + date range + voice filter
+  // Apply status chip filter + date range + voice filter — note this only searches/filters
+  // over the pages of `sales` already loaded, not the tenant's entire history, since that's
+  // fetched a page at a time now (see fetchSales/loadMoreSales above).
   const filtered = sales.filter((s) => {
     if (!isWithinRange(s.date, range)) return false;
     if (activeFilter === 1 && s.balance <= 0) return false;
@@ -424,24 +460,27 @@ export default function SaleListScreen() {
           <Text style={styles.errorTxt}>{error}</Text>
         </View>
       ) : (
-        <ScrollView
+        <FlatList
+          data={filtered}
+          keyExtractor={(sale) => sale.id}
           contentContainerStyle={styles.body}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
-        >
-          {/* Summary */}
-          <View style={styles.summaryCard}>
-            <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>Total Sale</Text>
-              <Text style={styles.summaryValue}>Rs {fmt(totalSale)}</Text>
+          onEndReached={loadMoreSales}
+          onEndReachedThreshold={0.4}
+          ListHeaderComponent={
+            <View style={styles.summaryCard}>
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryLabel}>Total Sale</Text>
+                <Text style={styles.summaryValue}>Rs {fmt(totalSale)}</Text>
+              </View>
+              <View style={styles.summaryDivider} />
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryLabel}>Balance Due</Text>
+                <Text style={[styles.summaryValue, { color: colors.orange }]}>Rs {fmt(totalPending)}</Text>
+              </View>
             </View>
-            <View style={styles.summaryDivider} />
-            <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>Balance Due</Text>
-              <Text style={[styles.summaryValue, { color: colors.orange }]}>Rs {fmt(totalPending)}</Text>
-            </View>
-          </View>
-
-          {filtered.length === 0 ? (
+          }
+          ListEmptyComponent={
             <View style={styles.empty}>
               <Ionicons name="receipt-outline" size={48} color={colors.textLight} />
               <Text style={styles.emptyTxt}>
@@ -458,52 +497,58 @@ export default function SaleListScreen() {
                 </TouchableOpacity>
               )}
             </View>
-          ) : (
-            filtered.map((sale, idx) => {
-              const isPaid = sale.balance === 0;
-              const isPartial = sale.balance > 0 && sale.balance < sale.total;
-              const statusStyle = isPaid ? styles.statusPaid : isPartial ? styles.statusPartial : styles.statusUnpaid;
-              const statusTxtStyle = isPaid ? styles.statusTxtPaid : isPartial ? styles.statusTxtPartial : styles.statusTxtUnpaid;
-              const statusLabel = isPaid ? "PAID" : isPartial ? "PARTIAL" : "UNPAID";
-              return (
-                <TouchableOpacity key={sale.id} style={styles.saleCard} activeOpacity={0.8} onPress={() => handleView(sale)}>
-                  <View style={styles.saleTop}>
-                    <View style={styles.saleMid}>
-                      <View style={styles.saleNameRow}>
-                        <Text style={styles.partyName}>{sale.partyName}</Text>
-                        <View style={[styles.statusBadge, statusStyle]}>
-                          <Text style={[styles.statusTxt, statusTxtStyle]}>{statusLabel}</Text>
-                        </View>
+          }
+          ListFooterComponent={
+            loadingMore ? (
+              <View style={styles.listFooter}>
+                <ActivityIndicator size="small" color={colors.primary} />
+              </View>
+            ) : null
+          }
+          renderItem={({ item: sale, index: idx }) => {
+            const isPaid = sale.balance === 0;
+            const isPartial = sale.balance > 0 && sale.balance < sale.total;
+            const statusStyle = isPaid ? styles.statusPaid : isPartial ? styles.statusPartial : styles.statusUnpaid;
+            const statusTxtStyle = isPaid ? styles.statusTxtPaid : isPartial ? styles.statusTxtPartial : styles.statusTxtUnpaid;
+            const statusLabel = isPaid ? "PAID" : isPartial ? "PARTIAL" : "UNPAID";
+            return (
+              <TouchableOpacity style={styles.saleCard} activeOpacity={0.8} onPress={() => handleView(sale)}>
+                <View style={styles.saleTop}>
+                  <View style={styles.saleMid}>
+                    <View style={styles.saleNameRow}>
+                      <Text style={styles.partyName}>{sale.partyName}</Text>
+                      <View style={[styles.statusBadge, statusStyle]}>
+                        <Text style={[styles.statusTxt, statusTxtStyle]}>{statusLabel}</Text>
                       </View>
-                      <Text style={styles.saleAmount}>Rs {fmt(sale.total)}</Text>
                     </View>
-                    <View style={styles.saleRight}>
-                      <Text style={styles.saleNumber}>Sale #{idx + 1}</Text>
-                      <Text style={styles.saleDate}>{formatDate(sale.date)}</Text>
-                    </View>
+                    <Text style={styles.saleAmount}>Rs {fmt(sale.total)}</Text>
                   </View>
+                  <View style={styles.saleRight}>
+                    <Text style={styles.saleNumber}>Sale #{idx + 1}</Text>
+                    <Text style={styles.saleDate}>{formatDate(sale.date)}</Text>
+                  </View>
+                </View>
 
-                  <View style={styles.saleBottom}>
-                    <Text style={styles.balanceTxt}>
-                      Balance: Rs {fmt(sale.balance)}
-                    </Text>
-                    <View style={styles.saleActions}>
-                      <TouchableOpacity hitSlop={8} onPress={() => handlePrint(sale, idx)}>
-                        <Ionicons name="print-outline" size={18} color={colors.textLight} />
-                      </TouchableOpacity>
-                      <TouchableOpacity hitSlop={8} onPress={() => setShareTarget({ sale, idx })}>
-                        <Ionicons name="share-social-outline" size={18} color={colors.textLight} />
-                      </TouchableOpacity>
-                      <TouchableOpacity hitSlop={8} onPress={() => setMenuTarget({ sale, idx })}>
-                        <Ionicons name="ellipsis-vertical" size={18} color={colors.textLight} />
-                      </TouchableOpacity>
-                    </View>
+                <View style={styles.saleBottom}>
+                  <Text style={styles.balanceTxt}>
+                    Balance: Rs {fmt(sale.balance)}
+                  </Text>
+                  <View style={styles.saleActions}>
+                    <TouchableOpacity hitSlop={8} onPress={() => handlePrint(sale, idx)}>
+                      <Ionicons name="print-outline" size={18} color={colors.textLight} />
+                    </TouchableOpacity>
+                    <TouchableOpacity hitSlop={8} onPress={() => setShareTarget({ sale, idx })}>
+                      <Ionicons name="share-social-outline" size={18} color={colors.textLight} />
+                    </TouchableOpacity>
+                    <TouchableOpacity hitSlop={8} onPress={() => setMenuTarget({ sale, idx })}>
+                      <Ionicons name="ellipsis-vertical" size={18} color={colors.textLight} />
+                    </TouchableOpacity>
                   </View>
-                </TouchableOpacity>
-              );
-            })
-          )}
-        </ScrollView>
+                </View>
+              </TouchableOpacity>
+            );
+          }}
+        />
       )}
 
       {/* FAB — only visible if user has sale_create permission */}
@@ -735,6 +780,7 @@ const styles = StyleSheet.create({
   centered: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, padding: 32 },
   errorTxt: { fontSize: 13, color: colors.textMuted, textAlign: "center" },
   body: { padding: 16, paddingBottom: 110, gap: 10 },
+  listFooter: { paddingVertical: 16, alignItems: "center" },
 
   summaryCard: { backgroundColor: "#fff", borderRadius: 14, borderWidth: 1, borderColor: colors.border, flexDirection: "row", overflow: "hidden" },
   summaryItem: { flex: 1, padding: 16 },
