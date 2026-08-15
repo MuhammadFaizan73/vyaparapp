@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet,
-  Alert, Animated, Modal, Platform,
+  Alert, Animated, Modal, Platform, BackHandler, ActivityIndicator,
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useRouter, useLocalSearchParams } from "expo-router";
@@ -13,6 +13,10 @@ import { api } from "../../src/auth";
 
 function fmt4(n: number) {
   return n.toLocaleString("en-PK", { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+}
+
+function generateIdempotencyKey(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
 
 function OutlinedInput({
@@ -87,6 +91,11 @@ export default function NewPaymentInScreen() {
     editId?: string;
   }>();
   const isEdit = Boolean(params.editId);
+
+  // One key per save attempt, stable across retries of that same attempt — a slow save
+  // that times out client-side while the write still lands server-side would otherwise
+  // create a second identical payment on retry (see the same fix on Sale's create screen).
+  const idempotencyKeyRef = useRef(generateIdempotencyKey());
 
   const [customer, setCustomer] = useState(params.prefillPartyName ?? "");
   const [selectedPartyId, setSelectedPartyId] = useState<string | null>(params.prefillPartyId ?? null);
@@ -167,7 +176,7 @@ export default function NewPaymentInScreen() {
         return;
       }
 
-      await api.createTransaction({
+      const payment: any = await api.createTransaction({
         partyId: selectedPartyId,
         type: "payment_in",
         number: String(receiptNo),
@@ -175,10 +184,19 @@ export default function NewPaymentInScreen() {
         total: receivedAmt,
         balance: 0,
         notes: JSON.stringify({ paymentType, linkedSaleId: params.prefillSaleId ?? null }),
+        idempotencyKey: idempotencyKeyRef.current,
       });
 
+      // A retry after a perceived failure reuses the same idempotencyKey and gets back
+      // the ORIGINAL payment row rather than a new one (see transactions.service.ts) —
+      // good, that's the point. But it means this createdAt could be from well before
+      // "now" if the first attempt actually succeeded. Only reduce the linked sale's
+      // balance when this really is a fresh row; otherwise the first successful call
+      // already did it, and doing it again on the replay would deduct receivedAmt twice.
+      const isFreshlyCreated = Date.now() - new Date(payment.createdAt).getTime() < 10000;
+
       // Reduce balance on linked sale invoice
-      if (params.prefillSaleId) {
+      if (params.prefillSaleId && isFreshlyCreated) {
         try {
           const sales = await api.getTransactionsByType("sale");
           const sale = sales.find((t: any) => t.id === params.prefillSaleId);
@@ -190,6 +208,7 @@ export default function NewPaymentInScreen() {
       }
 
       if (goNew) {
+        idempotencyKeyRef.current = generateIdempotencyKey();
         setCustomer(""); setSelectedPartyId(null); setReceived("");
         setReceiptNo((n) => n + 1);
       } else {
@@ -202,11 +221,32 @@ export default function NewPaymentInScreen() {
     }
   }
 
+  function handleBackPress() {
+    if (saving) {
+      Alert.alert("Please wait", "This entry is still being saved — leaving now could create a duplicate once it finishes.");
+      return;
+    }
+    router.back();
+  }
+
+  // Same fix as Sale's create screen: neither the header back chevron nor Android's
+  // hardware/gesture back button was blocked while a save was in flight, so a user
+  // leaving mid-save on a slow connection could believe it failed and re-enter it,
+  // while the original request kept running and landed too — two real payment rows.
+  useEffect(() => {
+    if (!saving) return;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      Alert.alert("Please wait", "This entry is still being saved — leaving now could create a duplicate once it finishes.");
+      return true;
+    });
+    return () => sub.remove();
+  }, [saving]);
+
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       {/* White app bar */}
       <View style={styles.appBar}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={8}>
+        <TouchableOpacity onPress={handleBackPress} hitSlop={8}>
           <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.appBarTitle}>{isEdit ? "Edit Payment-In" : params.prefillSaleId ? "Receive Payment" : "Payment-In"}</Text>
@@ -449,6 +489,13 @@ export default function NewPaymentInScreen() {
           </TouchableOpacity>
         </View>
       </Modal>
+
+      {saving && (
+        <View style={styles.savingOverlay} pointerEvents="auto">
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.savingOverlayTxt}>Saving…</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -578,4 +625,10 @@ const styles = StyleSheet.create({
     width: 42, height: 42, alignItems: "center", justifyContent: "center",
     borderWidth: 1, borderColor: colors.border, borderRadius: 8,
   },
+  savingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(255,255,255,0.85)",
+    alignItems: "center", justifyContent: "center", gap: 12,
+  },
+  savingOverlayTxt: { fontSize: 14, fontWeight: "600", color: colors.text },
 });

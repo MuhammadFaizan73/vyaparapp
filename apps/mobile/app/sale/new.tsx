@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
-  StyleSheet, KeyboardAvoidingView, Platform, Alert, Modal,
+  StyleSheet, KeyboardAvoidingView, Platform, Alert, Modal, BackHandler, ActivityIndicator,
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as DocumentPicker from "expo-document-picker";
@@ -614,15 +614,24 @@ export default function NewSaleScreen() {
       // Draw down whichever advance payments were linked — the invoice's own balance
       // above already accounts for linkedAmount; this marks that amount as consumed on
       // the advance side too, so it can't be linked again against a future invoice.
+      // Each one's deduction depends on how much of linkedAmount prior ones already
+      // absorbed, so that allocation has to be worked out in order first — but once every
+      // txn's final balance is known, there's no reason the actual network calls need to
+      // go one at a time; firing them together instead of awaiting each one in turn is
+      // what actually mattered for save time when more than one advance was linked.
       let remainingToDeduct = linkedAmount;
+      const deductions: Array<{ txnId: string; newBalance: number }> = [];
       for (const txnId of linkedTxnIds) {
         if (remainingToDeduct <= 0) break;
         const pmtTxn = partyTxns.find((t) => t.id === txnId);
         if (!pmtTxn) continue;
         const deduct = Math.min(pmtTxn.balance, remainingToDeduct);
-        await api.updateTransaction(txnId, { balance: Math.max(0, pmtTxn.balance - deduct) });
+        deductions.push({ txnId, newBalance: Math.max(0, pmtTxn.balance - deduct) });
         remainingToDeduct -= deduct;
       }
+      await Promise.all(
+        deductions.map(({ txnId, newBalance }) => api.updateTransaction(txnId, { balance: newBalance })),
+      );
 
       if (params.fromDeliveryNoteId) {
         try {
@@ -649,11 +658,35 @@ export default function NewSaleScreen() {
     }
   }
 
+  function handleBackPress() {
+    if (saving) {
+      Alert.alert("Please wait", "This invoice is still being saved — leaving now could create a duplicate once it finishes.");
+      return;
+    }
+    router.back();
+  }
+
+  // Neither the header's own back chevron nor Android's hardware/gesture back button was
+  // blocked while a save was still in flight — on a slow connection, a salesman leaving
+  // mid-save would land back on the Sale list before the create had actually landed
+  // server-side (so it looked missing), then create a genuine second invoice believing
+  // the first had failed, while the original request kept running in the background and
+  // eventually succeeded too — two real rows for the same sale. This closes the Android
+  // hardware/gesture path; the header chevron is closed via handleBackPress below.
+  useEffect(() => {
+    if (!saving) return;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      Alert.alert("Please wait", "This invoice is still being saved — leaving now could create a duplicate once it finishes.");
+      return true;
+    });
+    return () => sub.remove();
+  }, [saving]);
+
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       {/* ── App bar ── */}
       <View style={styles.appBar}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={8}>
+        <TouchableOpacity onPress={handleBackPress} hitSlop={8}>
           <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.appBarTitle}>{isEdit ? "Edit Sale" : "Sale"}</Text>
@@ -1124,7 +1157,7 @@ export default function NewSaleScreen() {
             { icon: "copy-outline" as const, label: "Duplicate Invoice", action: () => { setShowMore(false); Alert.alert("Duplicate", "Save this invoice first, then duplicate from the list."); } },
             { icon: "share-outline" as const, label: "Share as WhatsApp", action: () => { setShowMore(false); Alert.alert("Share", "Save the invoice first to share."); } },
             { icon: "print-outline" as const, label: "Print Invoice", action: () => { setShowMore(false); Alert.alert("Print", "Save the invoice first to print."); } },
-            { icon: "close-circle-outline" as const, label: "Cancel Invoice", action: () => { setShowMore(false); router.back(); } },
+            { icon: "close-circle-outline" as const, label: "Cancel Invoice", action: () => { setShowMore(false); handleBackPress(); } },
           ].map((opt) => (
             <TouchableOpacity key={opt.label} style={{ flexDirection: "row", alignItems: "center", gap: 14, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#f1f5f9" }} onPress={opt.action}>
               <Ionicons name={opt.icon} size={20} color={colors.text} />
@@ -1456,6 +1489,17 @@ export default function NewSaleScreen() {
           )}
         </View>
       </Modal>
+
+      {/* A "Saving…" button label alone was easy to miss, and with nothing blocking exit
+          (now fixed above via handleBackPress/BackHandler) a slow save read as the app
+          having silently frozen or lost the tap entirely. This makes it unmistakable that
+          something is actively happening and stays up for the full save, not just a blink. */}
+      {saving && (
+        <View style={styles.savingOverlay} pointerEvents="auto">
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.savingOverlayTxt}>Saving invoice…</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -1865,6 +1909,12 @@ const styles = StyleSheet.create({
     borderRadius: 4, alignItems: "center",
   },
   saveBtnTxt: { fontSize: 14, fontWeight: "700", color: "#fff" },
+  savingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(255,255,255,0.85)",
+    alignItems: "center", justifyContent: "center", gap: 12,
+  },
+  savingOverlayTxt: { fontSize: 14, fontWeight: "600", color: colors.text },
   moreBtn: { paddingHorizontal: 8, paddingVertical: 12 },
 
   chipRow: { flexDirection: "row", gap: 8, paddingVertical: 2 },

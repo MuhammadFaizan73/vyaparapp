@@ -39,7 +39,7 @@ export default function PaymentInListScreen() {
 
   const [rows, setRows] = useState<PiRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [range, setRange] = useState<DateRange>(() => getRange("all"));
+  const [range, setRange] = useState<DateRange>(() => getRange("today"));
 
   // FAB animation
   const micPulse = useRef(new Animated.Value(1)).current;
@@ -143,19 +143,6 @@ export default function PaymentInListScreen() {
         </View>
       </View>
 
-      {!loading && rows.length > 0 && (
-        <View style={styles.summaryBar}>
-          <View style={styles.summaryCol}>
-            <Text style={styles.summaryLabel}>Total Amount</Text>
-            <Text style={styles.summaryValue}>Rs {fmt4(filteredTotal)}</Text>
-          </View>
-          <View style={styles.summaryCol}>
-            <Text style={styles.summaryLabel}>Balance</Text>
-            <Text style={styles.summaryValue}>Rs {fmt4(filteredBalance)}</Text>
-          </View>
-        </View>
-      )}
-
       {/* List */}
       {loading ? (
         <View style={styles.centerWrap}>
@@ -191,7 +178,7 @@ export default function PaymentInListScreen() {
         <FlatList
           data={filtered}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={{ paddingBottom: insets.bottom + 90 }}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 142 }}
           renderItem={({ item, index }) => (
             <TouchableOpacity
               activeOpacity={0.7}
@@ -225,8 +212,30 @@ export default function PaymentInListScreen() {
         />
       )}
 
+      {/* Fixed summary footer — reflects whatever the current filters (date range etc.)
+          show, same as the list above it, not an all-time total. */}
+      {!loading && rows.length > 0 && (
+        <TouchableOpacity style={[styles.summaryBar, { paddingBottom: insets.bottom + 10 }]} activeOpacity={0.85}>
+          <View style={styles.summaryCol}>
+            <Text style={styles.summaryLabel}>No of Txn</Text>
+            <Text style={styles.summaryValue}>{filtered.length}</Text>
+          </View>
+          <View style={styles.summaryDivider} />
+          <View style={styles.summaryCol}>
+            <Text style={styles.summaryLabel}>Total Amount</Text>
+            <Text style={styles.summaryValue}>Rs {fmt4(filteredTotal)}</Text>
+          </View>
+          <View style={styles.summaryDivider} />
+          <View style={styles.summaryCol}>
+            <Text style={styles.summaryLabel}>Total Balance</Text>
+            <Text style={styles.summaryValue}>Rs {fmt4(filteredBalance)}</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color="#fff" style={{ marginLeft: 4 }} />
+        </TouchableOpacity>
+      )}
+
       {/* 3-button FAB bar */}
-      <View style={[styles.fabBar, { paddingBottom: insets.bottom + 12 }]}>
+      <View style={[styles.fabBar, { bottom: insets.bottom + 62, paddingBottom: 0 }]}>
         <TouchableOpacity style={styles.fabCirclePurple}>
           <Ionicons name="chevron-forward" size={20} color="#fff" />
         </TouchableOpacity>
@@ -277,14 +286,15 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: colors.border,
   },
   summaryBar: {
-    flexDirection: "row",
-    backgroundColor: "#fff",
-    borderBottomWidth: 1, borderBottomColor: colors.border,
-    paddingVertical: 12,
+    position: "absolute", bottom: 0, left: 0, right: 0,
+    flexDirection: "row", alignItems: "center",
+    backgroundColor: "#7c6fd1",
+    paddingVertical: 10, paddingHorizontal: 12,
   },
-  summaryCol: { flex: 1, alignItems: "center" },
-  summaryLabel: { fontSize: 12, color: colors.textMuted, marginBottom: 3 },
-  summaryValue: { fontSize: 15, fontWeight: "700", color: colors.primary },
+  summaryCol: { flex: 1, alignItems: "flex-start", paddingHorizontal: 6 },
+  summaryDivider: { width: 1, height: 26, backgroundColor: "rgba(255,255,255,0.3)" },
+  summaryLabel: { fontSize: 10.5, color: "rgba(255,255,255,0.85)", marginBottom: 2 },
+  summaryValue: { fontSize: 13.5, fontWeight: "700", color: "#fff" },
   filterRow: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     paddingHorizontal: 14, paddingVertical: 11,
