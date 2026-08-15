@@ -7,12 +7,17 @@
     "userInterfaceStyle": "automatic",
     "scheme": "vyapar",
     "newArchEnabled": false,
+    "icon": "./assets/icon.png",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "pk.vyapar.mobile"
     },
     "android": {
       "package": "pk.vyapar.mobile",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#3b82f6"
+      },
       "config": {
         "googleMaps": {
           "apiKey": "AIzaSyBUrHwBrB6K25A5joFqz9zM0zbi1T61nzU"
