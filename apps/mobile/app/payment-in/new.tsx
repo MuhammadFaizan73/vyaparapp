@@ -512,7 +512,6 @@ export default function NewPaymentInScreen() {
       {/* Link Payment to Invoices Modal */}
       <LinkPaymentModal
         visible={showLinkModal}
-        receivedAmount={receivedAmt}
         onChangeReceived={setReceived}
         invoices={partyInvoices}
         linkedAmounts={linkedAmounts}
@@ -575,10 +574,9 @@ export default function NewPaymentInScreen() {
    against it. The header's checkmark icon auto-links everything / clears all; the
    filter icon reveals a search-by-invoice-number bar. */
 function LinkPaymentModal({
-  visible, receivedAmount, onChangeReceived, invoices, linkedAmounts, onDone, onClose,
+  visible, onChangeReceived, invoices, linkedAmounts, onDone, onClose,
 }: {
   visible: boolean;
-  receivedAmount: number;
   onChangeReceived: (text: string) => void;
   invoices: Transaction[];
   linkedAmounts: Record<string, number>;
@@ -595,8 +593,6 @@ function LinkPaymentModal({
   const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [showSearch, setShowSearch] = useState(false);
   const [search, setSearch] = useState("");
-  const [editingReceived, setEditingReceived] = useState(false);
-  const [receivedInput, setReceivedInput] = useState("");
 
   // Reflect the currently-linked amounts each time the modal is (re)opened.
   useEffect(() => {
@@ -609,8 +605,6 @@ function LinkPaymentModal({
     }
     setAmounts(initAmounts);
     setSelected(initSelected);
-    setEditingReceived(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
   const filtered = search
@@ -619,6 +613,10 @@ function LinkPaymentModal({
 
   const allLinked = invoices.length > 0 && invoices.every((inv) => selected.has(inv.id));
 
+  // There's no separate "total received" budget to divide anymore — the received
+  // amount on the main form is now just the sum of whatever gets linked here (see
+  // handleDone). So checking a box with nothing typed yet suggests paying that
+  // invoice off in full; the user can lower it manually for a partial payment.
   function toggle(inv: Transaction) {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -626,16 +624,9 @@ function LinkPaymentModal({
         next.delete(inv.id);
       } else {
         next.add(inv.id);
-        // Only suggest a starting amount if the box is still empty — re-checking a
-        // row the user already typed into shouldn't clobber what they entered.
-        setAmounts((prevAmounts) => {
-          if (prevAmounts[inv.id]) return prevAmounts;
-          const usedSoFar = Array.from(next)
-            .filter((id) => id !== inv.id)
-            .reduce((s, id) => s + (parseFloat(prevAmounts[id] ?? "0") || 0), 0);
-          const suggested = Math.max(0, Math.min(inv.balance, receivedAmount - usedSoFar));
-          return { ...prevAmounts, [inv.id]: suggested > 0 ? String(suggested) : "" };
-        });
+        setAmounts((prevAmounts) => (
+          prevAmounts[inv.id] ? prevAmounts : { ...prevAmounts, [inv.id]: String(inv.balance) }
+        ));
       }
       return next;
     });
@@ -652,29 +643,26 @@ function LinkPaymentModal({
     });
   }
 
-  // Header checkmark — link everything (greedily, oldest-first) if not all linked
-  // yet, otherwise clear all. A quick "select all" / "reset" combined into one tap.
+  // Header checkmark — pay every invoice off in full if not all linked yet
+  // (leaving already-typed amounts alone), otherwise clear all.
   function toggleAll() {
     if (allLinked) { setSelected(new Set()); return; }
-    const nextSelected = new Set<string>();
     const nextAmounts: Record<string, string> = { ...amounts };
-    let left = receivedAmount;
     for (const inv of invoices) {
-      nextSelected.add(inv.id);
-      const take = Math.max(0, Math.min(inv.balance, left));
-      nextAmounts[inv.id] = take > 0 ? String(take) : "";
-      left -= take;
+      if (!nextAmounts[inv.id]) nextAmounts[inv.id] = String(inv.balance);
     }
-    setSelected(nextSelected);
+    setSelected(new Set(invoices.map((inv) => inv.id)));
     setAmounts(nextAmounts);
   }
 
   function handleDone() {
     const result: Record<string, number> = {};
+    let total = 0;
     for (const id of Array.from(selected)) {
       const n = parseFloat(amounts[id] ?? "0") || 0;
-      if (n > 0) result[id] = n;
+      if (n > 0) { result[id] = n; total += n; }
     }
+    onChangeReceived(String(total));
     onDone(result);
   }
 
@@ -691,30 +679,6 @@ function LinkPaymentModal({
               <Ionicons name="filter" size={20} color={colors.textMuted} />
             </TouchableOpacity>
           </View>
-        </View>
-
-        <View style={lpmStyles.totalRow}>
-          <View>
-            <Text style={lpmStyles.totalLbl}>Total Received:</Text>
-            {editingReceived ? (
-              <TextInput
-                style={lpmStyles.totalInput}
-                value={receivedInput}
-                onChangeText={setReceivedInput}
-                keyboardType="numeric"
-                autoFocus
-                onBlur={() => { onChangeReceived(receivedInput); setEditingReceived(false); }}
-              />
-            ) : (
-              <Text style={lpmStyles.totalVal}>{fmt2(receivedAmount)}</Text>
-            )}
-          </View>
-          <TouchableOpacity
-            hitSlop={8}
-            onPress={() => { setReceivedInput(receivedAmount ? String(receivedAmount) : ""); setEditingReceived(true); }}
-          >
-            <Ionicons name="pencil" size={17} color={colors.textMuted} />
-          </TouchableOpacity>
         </View>
 
         {showSearch && (
@@ -782,6 +746,13 @@ function LinkPaymentModal({
                       />
                     </View>
                   </View>
+                  {isSelected && (
+                    <Text style={lpmStyles.remainingTxt}>
+                      Remaining Balance: <Text style={lpmStyles.remainingVal}>
+                        {fmt2(Math.max(0, t.balance - (parseFloat(amounts[t.id] ?? "0") || 0)))}
+                      </Text>
+                    </Text>
+                  )}
                 </View>
               </View>
             );
@@ -809,18 +780,6 @@ const lpmStyles = StyleSheet.create({
   },
   title: { fontSize: 16, fontWeight: "700", color: "#374151" },
   headerIcons: { flexDirection: "row", gap: 18, alignItems: "center" },
-
-  totalRow: {
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    paddingHorizontal: 18, paddingVertical: 14,
-    borderBottomWidth: 1, borderBottomColor: "#f1f5f9",
-  },
-  totalLbl: { fontSize: 13, color: "#6b7280", marginBottom: 2 },
-  totalVal: { fontSize: 20, fontWeight: "700", color: colors.text },
-  totalInput: {
-    fontSize: 20, fontWeight: "700", color: colors.text,
-    borderBottomWidth: 1.5, borderBottomColor: colors.primary, minWidth: 100, paddingVertical: 0,
-  },
 
   searchRow: {
     flexDirection: "row", alignItems: "center", gap: 8,
@@ -854,6 +813,8 @@ const lpmStyles = StyleSheet.create({
     paddingHorizontal: 10, paddingVertical: 6, fontSize: 14, color: colors.text,
     maxWidth: 130,
   },
+  remainingTxt: { fontSize: 12.5, color: "#6b7280" },
+  remainingVal: { fontWeight: "700", color: colors.primary },
 
   footer: { flexDirection: "row" },
   cancelBtn: { flex: 1, backgroundColor: "#0d4f73", paddingVertical: 16, alignItems: "center" },
