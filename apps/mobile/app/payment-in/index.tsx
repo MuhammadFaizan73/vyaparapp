@@ -39,7 +39,7 @@ export default function PaymentInListScreen() {
 
   const [rows, setRows] = useState<PiRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [range, setRange] = useState<DateRange>(() => getRange("today"));
+  const [range, setRange] = useState<DateRange>(() => getRange("all"));
 
   // FAB animation
   const micPulse = useRef(new Animated.Value(1)).current;

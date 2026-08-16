@@ -315,8 +315,8 @@ export default function NewPaymentInScreen() {
         <View style={styles.infoCell}>
           <Text style={styles.infoLabel}>Date</Text>
           <TouchableOpacity style={styles.infoValueRow} onPress={() => setShowDatePicker(true)}>
+            <Ionicons name="calendar-outline" size={13} color={colors.primary} />
             <Text style={styles.infoValue}>{dateStr()}</Text>
-            <Ionicons name="chevron-down" size={13} color={colors.textMuted} />
           </TouchableOpacity>
         </View>
       </View>
@@ -585,6 +585,13 @@ function LinkPaymentModal({
   onDone: (amounts: Record<string, number>) => void;
   onClose: () => void;
 }) {
+  // `selected` (which invoices are checked) and `amounts` (what's typed in each Link
+  // Amount box) are kept as separate state — they used to be the same object (keyed
+  // presence = both "checked" and "has an amount"), which meant typing into the amount
+  // box implicitly checked the row, and then tapping the checkbox to check it "for
+  // real" actually unchecked it and deleted the typed amount. Keeping them independent
+  // means unchecking a row just excludes it from the result without losing what was typed.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [showSearch, setShowSearch] = useState(false);
   const [search, setSearch] = useState("");
@@ -594,9 +601,14 @@ function LinkPaymentModal({
   // Reflect the currently-linked amounts each time the modal is (re)opened.
   useEffect(() => {
     if (!visible) return;
-    const init: Record<string, string> = {};
-    for (const [id, amt] of Object.entries(linkedAmounts)) init[id] = String(amt);
-    setAmounts(init);
+    const initAmounts: Record<string, string> = {};
+    const initSelected = new Set<string>();
+    for (const [id, amt] of Object.entries(linkedAmounts)) {
+      initAmounts[id] = String(amt);
+      initSelected.add(id);
+    }
+    setAmounts(initAmounts);
+    setSelected(initSelected);
     setEditingReceived(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
@@ -605,40 +617,62 @@ function LinkPaymentModal({
     ? invoices.filter((t) => (t.number ?? "").toLowerCase().includes(search.toLowerCase()))
     : invoices;
 
-  const allLinked = invoices.length > 0 && invoices.every((inv) => amounts[inv.id] !== undefined);
+  const allLinked = invoices.length > 0 && invoices.every((inv) => selected.has(inv.id));
 
   function toggle(inv: Transaction) {
-    setAmounts((prev) => {
-      const next = { ...prev };
-      if (next[inv.id] !== undefined) {
-        delete next[inv.id];
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(inv.id)) {
+        next.delete(inv.id);
       } else {
-        const usedSoFar = Object.values(next).reduce((s, v) => s + (parseFloat(v) || 0), 0);
-        const suggested = Math.max(0, Math.min(inv.balance, receivedAmount - usedSoFar));
-        next[inv.id] = suggested > 0 ? String(suggested) : "";
+        next.add(inv.id);
+        // Only suggest a starting amount if the box is still empty — re-checking a
+        // row the user already typed into shouldn't clobber what they entered.
+        setAmounts((prevAmounts) => {
+          if (prevAmounts[inv.id]) return prevAmounts;
+          const usedSoFar = Array.from(next)
+            .filter((id) => id !== inv.id)
+            .reduce((s, id) => s + (parseFloat(prevAmounts[id] ?? "0") || 0), 0);
+          const suggested = Math.max(0, Math.min(inv.balance, receivedAmount - usedSoFar));
+          return { ...prevAmounts, [inv.id]: suggested > 0 ? String(suggested) : "" };
+        });
       }
       return next;
+    });
+  }
+
+  // Typing a positive amount directly into a row also checks it, so the user doesn't
+  // have to separately tap the checkbox after typing.
+  function setAmount(id: string, text: string) {
+    setAmounts((prev) => ({ ...prev, [id]: text }));
+    const n = parseFloat(text) || 0;
+    setSelected((prev) => {
+      if (n > 0 && !prev.has(id)) { const next = new Set(prev); next.add(id); return next; }
+      return prev;
     });
   }
 
   // Header checkmark — link everything (greedily, oldest-first) if not all linked
   // yet, otherwise clear all. A quick "select all" / "reset" combined into one tap.
   function toggleAll() {
-    if (allLinked) { setAmounts({}); return; }
-    const next: Record<string, string> = {};
+    if (allLinked) { setSelected(new Set()); return; }
+    const nextSelected = new Set<string>();
+    const nextAmounts: Record<string, string> = { ...amounts };
     let left = receivedAmount;
     for (const inv of invoices) {
+      nextSelected.add(inv.id);
       const take = Math.max(0, Math.min(inv.balance, left));
-      next[inv.id] = take > 0 ? String(take) : "";
+      nextAmounts[inv.id] = take > 0 ? String(take) : "";
       left -= take;
     }
-    setAmounts(next);
+    setSelected(nextSelected);
+    setAmounts(nextAmounts);
   }
 
   function handleDone() {
     const result: Record<string, number> = {};
-    for (const [id, v] of Object.entries(amounts)) {
-      const n = parseFloat(v) || 0;
+    for (const id of Array.from(selected)) {
+      const n = parseFloat(amounts[id] ?? "0") || 0;
       if (n > 0) result[id] = n;
     }
     onDone(result);
@@ -704,7 +738,7 @@ function LinkPaymentModal({
           keyboardShouldPersistTaps="handled"
           ListEmptyComponent={<Text style={lpmStyles.emptyTxt}>No outstanding invoices found</Text>}
           renderItem={({ item: t }) => {
-            const isSelected = amounts[t.id] !== undefined;
+            const isSelected = selected.has(t.id);
             return (
               <View style={lpmStyles.cardWrap}>
                 <TouchableOpacity style={lpmStyles.checkBtn} onPress={() => toggle(t)} hitSlop={6}>
@@ -741,7 +775,7 @@ function LinkPaymentModal({
                       <TextInput
                         style={lpmStyles.linkAmtInput}
                         value={amounts[t.id] ?? ""}
-                        onChangeText={(txt) => setAmounts((prev) => ({ ...prev, [t.id]: txt }))}
+                        onChangeText={(txt) => setAmount(t.id, txt)}
                         keyboardType="numeric"
                         placeholder="0.00"
                         placeholderTextColor={colors.textLight}
