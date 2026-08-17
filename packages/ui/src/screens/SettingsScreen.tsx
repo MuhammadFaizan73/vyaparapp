@@ -316,9 +316,11 @@ export function SettingsScreen({ onOpenStores }: SettingsScreenProps = {}) {
           <div className="st-spacer" />
           <SectionTitle title="Stock Transfer Between Stores" />
           <p className="st-desc">Manage all your stores/godowns and transfer stock seamlessly between them.</p>
-          <button type="button" className="items-add-btn__main" onClick={onOpenStores}>
-            Manage Stores →
-          </button>
+          <div className="items-add-btn" style={{ display: "inline-flex" }}>
+            <button type="button" className="items-add-btn__main" onClick={onOpenStores}>
+              Manage Stores →
+            </button>
+          </div>
 
           <div className="st-spacer" />
           <SectionTitle title="Customize Your View" />

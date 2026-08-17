@@ -3,7 +3,6 @@ import type { Store } from "@vyapar/api-client";
 import { useCompany } from "../lib/CompanyContext";
 import { useStores } from "../lib/useStores";
 import { StoreFormModal } from "./StoreFormModal";
-import { StoresIcon } from "../components/icons";
 
 type Props = { onOpenStockTransfer?: () => void };
 
@@ -62,15 +61,19 @@ export function StoresScreen({ onOpenStockTransfer }: Props = {}) {
             <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Manage Stores</h2>
           )}
 
-          <div className="items-add-btn-wrap">
+          <div className="items-add-btn-wrap" style={{ display: "flex", gap: 8 }}>
             {onOpenStockTransfer && (
-              <button type="button" className="items-add-btn__main" style={{ marginRight: 8 }} onClick={onOpenStockTransfer}>
-                Transfer Stock
-              </button>
+              <div className="items-add-btn">
+                <button type="button" className="items-add-btn__main" onClick={onOpenStockTransfer}>
+                  Transfer Stock
+                </button>
+              </div>
             )}
-            <button type="button" className="items-add-btn__main" onClick={openAdd} disabled={!viewCompanyId}>
-              + Add Store
-            </button>
+            <div className="items-add-btn">
+              <button type="button" className="items-add-btn__main" onClick={openAdd} disabled={!viewCompanyId}>
+                + Add Store
+              </button>
+            </div>
           </div>
         </div>
 
@@ -94,7 +97,6 @@ export function StoresScreen({ onOpenStockTransfer }: Props = {}) {
               onClick={() => openEdit(store)}
             >
               <span className="items-row__name" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <StoresIcon />
                 {store.name}
                 {store.isMain && (
                   <span className="badge badge--active" style={{ fontSize: 10 }}>MAIN STORE</span>

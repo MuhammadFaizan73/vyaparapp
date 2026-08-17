@@ -216,9 +216,11 @@ export function StockTransferScreen() {
           </div>
           <div className="items-form-field" style={{ justifyContent: "flex-end" }}>
             <label className="items-form-label">&nbsp;</label>
-            <button type="button" className="items-add-btn__main" onClick={addLine} disabled={!pickItemId || !pickQty}>
-              + Add Item
-            </button>
+            <div className="items-add-btn">
+              <button type="button" className="items-add-btn__main" onClick={addLine} disabled={!pickItemId || !pickQty}>
+                + Add Item
+              </button>
+            </div>
           </div>
         </div>
 
