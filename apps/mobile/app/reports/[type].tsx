@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from "react";
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
-  StyleSheet, ActivityIndicator, Modal, FlatList, StatusBar, Alert,
+  StyleSheet, ActivityIndicator, Modal, FlatList, StatusBar, Alert, Platform,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import * as FileSystem from "expo-file-system";
@@ -139,13 +140,20 @@ const REPORT_LABELS: Record<string, string> = {
 
 // ─── PeriodModal ───────────────────────────────────────────────────────────────
 
-function PeriodModal({ visible, range, onClose, onChange }: {
+function PeriodModal({ visible, range, onClose, onChange, datesOnly }: {
   visible: boolean; range: DateRange;
   onClose: () => void; onChange: (r: DateRange) => void;
+  // Skips the "All Time / Today / This Week / ..." preset list and jumps straight to the
+  // From/To calendar — for screens (Sale Report) where a named-period picker is more than
+  // what's wanted; the user just wants to pick two dates.
+  datesOnly?: boolean;
 }) {
   const [customFrom, setCustomFrom] = useState(range.preset === "custom" ? range.from : monthStart());
   const [customTo, setCustomTo]     = useState(range.preset === "custom" ? range.to   : monthEnd());
   const [selected, setSelected]     = useState<PeriodPreset>(range.preset);
+  // Which native calendar is open, if any — From and To open the same DateTimePicker one
+  // at a time rather than both being permanently mounted.
+  const [activePicker, setActivePicker] = useState<"from" | "to" | null>(null);
 
   function apply(preset: PeriodPreset) {
     setSelected(preset);
@@ -153,18 +161,29 @@ function PeriodModal({ visible, range, onClose, onChange }: {
   }
   function applyCustom() { onChange(getRange("custom", customFrom, customTo)); onClose(); }
 
+  function handlePickerChange(_: unknown, date?: Date) {
+    // Android dismisses on every tap (including Cancel, where `date` is undefined) —
+    // iOS's inline spinner fires continuously while scrolling, so only close there on
+    // explicit dismiss via the overlay, not per-tick.
+    if (Platform.OS === "android") setActivePicker(null);
+    if (!date) return;
+    const iso = isoDate(date);
+    if (activePicker === "from") setCustomFrom(iso);
+    else if (activePicker === "to") setCustomTo(iso);
+  }
+
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <TouchableOpacity style={pm.overlay} activeOpacity={1} onPress={onClose} />
       <View style={pm.sheet}>
         <View style={pm.handle} />
         <View style={pm.header}>
-          <Text style={pm.title}>Select Period</Text>
+          <Text style={pm.title}>{datesOnly ? "Select Dates" : "Select Period"}</Text>
           <TouchableOpacity onPress={onClose} hitSlop={8}>
             <Ionicons name="close" size={22} color={colors.text} />
           </TouchableOpacity>
         </View>
-        {PERIOD_PRESETS.map((p) => (
+        {!datesOnly && PERIOD_PRESETS.map((p) => (
           <TouchableOpacity key={p.preset} style={pm.row} onPress={() => apply(p.preset)}>
             <Text style={[pm.rowTxt, selected === p.preset && pm.rowTxtActive]}>{p.label}</Text>
             {selected === p.preset
@@ -173,20 +192,41 @@ function PeriodModal({ visible, range, onClose, onChange }: {
             }
           </TouchableOpacity>
         ))}
-        {selected === "custom" && (
-          <View style={pm.customRow}>
-            <View style={pm.customGroup}>
-              <Text style={pm.customLabel}>From</Text>
-              <TextInput style={pm.customInput} value={customFrom} onChangeText={setCustomFrom} placeholder="YYYY-MM-DD" keyboardType="numeric" />
+        {(datesOnly || selected === "custom") && (
+          <>
+            <View style={pm.customRow}>
+              <View style={pm.customGroup}>
+                <Text style={pm.customLabel}>From</Text>
+                <TouchableOpacity style={pm.customDateBtn} onPress={() => setActivePicker("from")}>
+                  <Ionicons name="calendar-outline" size={15} color={colors.primary} />
+                  <Text style={pm.customDateTxt}>{customFrom}</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={pm.customGroup}>
+                <Text style={pm.customLabel}>To</Text>
+                <TouchableOpacity style={pm.customDateBtn} onPress={() => setActivePicker("to")}>
+                  <Ionicons name="calendar-outline" size={15} color={colors.primary} />
+                  <Text style={pm.customDateTxt}>{customTo}</Text>
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity style={pm.applyBtn} onPress={applyCustom}>
+                <Text style={pm.applyTxt}>Apply</Text>
+              </TouchableOpacity>
             </View>
-            <View style={pm.customGroup}>
-              <Text style={pm.customLabel}>To</Text>
-              <TextInput style={pm.customInput} value={customTo} onChangeText={setCustomTo} placeholder="YYYY-MM-DD" keyboardType="numeric" />
-            </View>
-            <TouchableOpacity style={pm.applyBtn} onPress={applyCustom}>
-              <Text style={pm.applyTxt}>Apply</Text>
-            </TouchableOpacity>
-          </View>
+            {activePicker && Platform.OS === "ios" && (
+              <TouchableOpacity style={pm.iosPickerDone} onPress={() => setActivePicker(null)}>
+                <Text style={pm.applyTxt}>Done</Text>
+              </TouchableOpacity>
+            )}
+            {activePicker && (
+              <DateTimePicker
+                value={new Date(`${activePicker === "from" ? customFrom : customTo}T00:00:00`)}
+                mode="date"
+                display={Platform.OS === "ios" ? "spinner" : "default"}
+                onChange={handlePickerChange}
+              />
+            )}
+          </>
         )}
         <View style={{ height: 24 }} />
       </View>
@@ -251,8 +291,18 @@ const pm = StyleSheet.create({
     borderWidth: 1.5, borderColor: colors.border, borderRadius: 8,
     paddingHorizontal: 10, paddingVertical: 10, fontSize: 13, color: colors.text,
   },
+  customDateBtn: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    borderWidth: 1.5, borderColor: colors.border, borderRadius: 8,
+    paddingHorizontal: 10, paddingVertical: 10,
+  },
+  customDateTxt: { fontSize: 13, color: colors.text },
   applyBtn: { backgroundColor: colors.primary, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 12 },
   applyTxt: { color: "#fff", fontWeight: "700", fontSize: 13 },
+  iosPickerDone: {
+    alignSelf: "flex-end", marginRight: 20, marginTop: 8,
+    backgroundColor: colors.primary, borderRadius: 8, paddingHorizontal: 16, paddingVertical: 8,
+  },
 });
 
 // ─── FilterPickerModal ─────────────────────────────────────────────────────────
@@ -909,7 +959,7 @@ function SaleReport({ onDataLoaded }: { onDataLoaded?: (rows: ExportRow[]) => vo
             />
       }
 
-      <PeriodModal visible={showPeriod} range={range} onClose={() => setShowPeriod(false)} onChange={setRange} />
+      <PeriodModal visible={showPeriod} range={range} onClose={() => setShowPeriod(false)} onChange={setRange} datesOnly />
 
       {/* Filters panel modal */}
       <Modal visible={showFiltersPanel} transparent animationType="slide" onRequestClose={() => setShowFiltersPanel(false)}>
