@@ -105,6 +105,10 @@ Open the web UI in a browser at `http://localhost:5173` while `dev:desktop` is r
 - **No OTP verification** yet — anyone can register any number. SMS OTP is Phase 3.
 - **SQLite is dev-only** — production flips `DATABASE_URL` to Postgres.
 
+## Deployment
+
+**Never push to `main` or deploy (Railway backend, desktop release build) without asking the user first and getting an explicit go-ahead.** Committing locally is fine; `git push origin main` is not, since it auto-triggers the Desktop Release GitHub Actions workflow and pushing also enables deploying the backend. Always stop and ask before either.
+
 ## Conventions
 
 - **All data flows through the backend.** Clients never read or write the DB directly.

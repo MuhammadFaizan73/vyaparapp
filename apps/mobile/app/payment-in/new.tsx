@@ -589,6 +589,7 @@ function LinkPaymentModal({
   // box implicitly checked the row, and then tapping the checkbox to check it "for
   // real" actually unchecked it and deleted the typed amount. Keeping them independent
   // means unchecking a row just excludes it from the result without losing what was typed.
+  const insets = useSafeAreaInsets();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [showSearch, setShowSearch] = useState(false);
@@ -759,7 +760,7 @@ function LinkPaymentModal({
           }}
         />
 
-        <View style={lpmStyles.footer}>
+        <View style={[lpmStyles.footer, { paddingBottom: insets.bottom + 8 }]}>
           <TouchableOpacity style={lpmStyles.cancelBtn} onPress={onClose}>
             <Text style={lpmStyles.cancelBtnTxt}>CANCEL</Text>
           </TouchableOpacity>

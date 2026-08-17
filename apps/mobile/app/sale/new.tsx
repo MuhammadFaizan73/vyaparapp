@@ -1514,6 +1514,7 @@ function LinkPaymentModal({
   onDone: (ids: string[]) => void;
   onClose: () => void;
 }) {
+  const insets = useSafeAreaInsets();
   const [selected, setSelected] = useState<string[]>(linkedIds);
 
   const linkedAmount = transactions
@@ -1596,7 +1597,7 @@ function LinkPaymentModal({
           )}
         </ScrollView>
 
-        <View style={lpm.footer}>
+        <View style={[lpm.footer, { paddingBottom: insets.bottom + 16 }]}>
           <Text style={lpm.remaining}>Remaining to Link: <Text style={{ fontWeight: "700" }}>Rs {fmt4(remaining)}</Text></Text>
           <View style={{ flexDirection: "row", gap: 10 }}>
             <TouchableOpacity style={lpm.cancelBtn} onPress={onClose}>

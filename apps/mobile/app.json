@@ -68,8 +68,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "e0f59f3c-c7d2-40cb-9f92-ba14a73348db"
+        "projectId": "75412b40-f44b-4073-a38a-10c80e262863"
       }
-    }
+    },
+    "owner": "rootocloud"
   }
 }
