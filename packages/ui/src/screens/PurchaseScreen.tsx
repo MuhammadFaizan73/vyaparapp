@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { api, loadTenant } from "../lib/api";
 import type { Transaction, Party, Item } from "@vyapar/api-client";
 import { useCompany } from "../lib/CompanyContext";
+import { useStores } from "../lib/useStores";
 import { RECENT_ROWS_LIMIT } from "./PaymentInScreen";
 
 function fmt(n: number) {
@@ -13,7 +14,10 @@ function formatDate(iso: string) {
 function today() { return new Date().toISOString().slice(0, 10); }
 
 type PurchaseRow = Transaction & { partyName: string; runningBalance?: number };
-type LineItem = { id: string; name: string; mrp: number; qty: number; unit: string; rate: number; stock?: number };
+// itemId: the real catalog Item.id, captured when picked from the dropdown — needed
+// so a purchase/return can actually move per-store stock. Cleared the moment the
+// name is hand-edited so a renamed row can never misattribute stock.
+type LineItem = { id: string; name: string; mrp: number; qty: number; unit: string; rate: number; stock?: number; itemId?: string };
 type SubTab = "bills" | "payment_out" | "purchase_order" | "debit_note" | "purchase_return";
 
 type PreviewData = {
@@ -475,6 +479,12 @@ function PurchaseBillForm({
   const [parties, setParties] = useState<Party[]>([]);
   const [catalog, setCatalog] = useState<Item[]>([]);
   const { selectedCompanyId } = useCompany();
+  const { stores } = useStores(selectedCompanyId);
+  const [storeId, setStoreId] = useState<string>(editData?.storeId ?? "");
+  useEffect(() => {
+    if (storeId && stores.some((s) => s.id === storeId)) return;
+    setStoreId(stores.find((s) => s.isMain)?.id ?? stores[0]?.id ?? "");
+  }, [stores, storeId]);
 
   useEffect(() => {
     api.getParties().then(ps => {
@@ -493,13 +503,14 @@ function PurchaseBillForm({
         try {
           const parsed = JSON.parse(editData.notes);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            setLineItems(parsed.map((i: { name?: string; mrp?: number; qty?: number; unit?: string; rate?: number }) => ({
+            setLineItems(parsed.map((i: { name?: string; mrp?: number; qty?: number; unit?: string; rate?: number; itemId?: string }) => ({
               id: Date.now().toString() + Math.random(),
               name:  i.name  ?? "",
               mrp:   i.mrp   ?? 0,
               qty:   i.qty   ?? 0,
               unit:  i.unit  ?? "NONE",
               rate:  i.rate  ?? 0,
+              itemId: i.itemId ?? undefined,
             })));
           }
         } catch { /* ignore */ }
@@ -551,6 +562,16 @@ function PurchaseBillForm({
     return catalog.filter(c =>
       c.name.toLowerCase().includes(q) || (c.sku ?? "").toLowerCase().includes(q)
     );
+  }
+
+  // Store-scoped available quantity — falls back to the cross-store total before a
+  // store is chosen (or for single-store tenants).
+  function stockQtyFor(c: Item): number {
+    if (storeId) {
+      const entry = c.stocks.find((s) => s.storeId === storeId);
+      return entry ? entry.quantity : 0;
+    }
+    return c.totalStock ?? c.openingStock ?? 0;
   }
 
   function openItemDrop(itemId: string, inputEl: HTMLElement) {
@@ -608,7 +629,7 @@ function PurchaseBillForm({
     if (validItems.length === 0) { setError("Add at least one item with quantity."); return; }
     setSaving(true);
     const notesJson = JSON.stringify(
-      validItems.map(i => ({ name: i.name, qty: i.qty, unit: i.unit, rate: i.rate, mrp: i.mrp }))
+      validItems.map(i => ({ name: i.name, qty: i.qty, unit: i.unit, rate: i.rate, mrp: i.mrp, itemId: i.itemId }))
     );
     try {
       if (editId) {
@@ -617,6 +638,7 @@ function PurchaseBillForm({
           date: new Date(billDate).toISOString(),
           total, balance, notes: notesJson,
           companyId: selectedCompanyId ?? null,
+          storeId: storeId || null,
         });
         onSaved();
       } else {
@@ -627,6 +649,7 @@ function PurchaseBillForm({
           date: new Date(billDate).toISOString(),
           total, balance, notes: notesJson,
           companyId: selectedCompanyId ?? undefined,
+          storeId: storeId || undefined,
         });
         setPreview({
           txnNumber: txn.number ?? String(billNum),
@@ -759,6 +782,21 @@ function PurchaseBillForm({
                 <span className="nsf-invoice-date-icon">📅</span>
               </div>
             </div>
+            {stores.length > 1 && (
+              <div className="nsf-invoice-meta__row">
+                <span className="nsf-invoice-meta__lbl">Store</span>
+                <select
+                  className="nsf-invoice-date-input"
+                  value={storeId}
+                  onChange={e => setStoreId(e.target.value)}
+                  style={{ cursor: "pointer" }}
+                >
+                  {stores.map(s => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         </div>
 
@@ -790,7 +828,7 @@ function PurchaseBillForm({
                       className="nsf-cell-input nsf-cell-input--name"
                       value={item.name}
                       placeholder="Search item…"
-                      onChange={e => { updateItem(item.id, "name", e.target.value); openItemDrop(item.id, e.currentTarget); }}
+                      onChange={e => { updateItem(item.id, "name", e.target.value); updateItem(item.id, "itemId", ""); openItemDrop(item.id, e.currentTarget); }}
                       onFocus={e => openItemDrop(item.id, e.currentTarget)}
                       onBlur={() => closeItemDrop(item.id)}
                     />
@@ -859,11 +897,12 @@ function PurchaseBillForm({
                   onMouseDown={e => e.preventDefault()}
                   onClick={() => {
                     updateItem(activeItemRow, "name", c.name);
+                    updateItem(activeItemRow, "itemId", c.id);
                     updateItem(activeItemRow, "mrp", c.salePrice ?? 0);
                     updateItem(activeItemRow, "rate", c.purchasePrice ?? c.salePrice ?? 0);
                     updateItem(activeItemRow, "unit", c.unit || "NONE");
                     updateItem(activeItemRow, "qty", 1);
-                    updateItem(activeItemRow, "stock", c.openingStock ?? 0);
+                    updateItem(activeItemRow, "stock", stockQtyFor(c));
                     setActiveItemRow(null);
                     setDropPos(null);
                   }}>
@@ -873,8 +912,8 @@ function PurchaseBillForm({
                   </span>
                   <span className="nsf-item-drop__col">{fmt(c.salePrice ?? 0)}</span>
                   <span className="nsf-item-drop__col">{c.purchasePrice != null ? fmt(c.purchasePrice) : "–"}</span>
-                  <span className={`nsf-item-drop__col nsf-item-drop__col--stock${(c.openingStock ?? 0) > 0 ? " nsf-item-drop__col--pos" : (c.openingStock ?? 0) < 0 ? " nsf-item-drop__col--neg" : ""}`}>
-                    {c.openingStock ?? 0}
+                  <span className={`nsf-item-drop__col nsf-item-drop__col--stock${stockQtyFor(c) > 0 ? " nsf-item-drop__col--pos" : stockQtyFor(c) < 0 ? " nsf-item-drop__col--neg" : ""}`}>
+                    {stockQtyFor(c)}
                   </span>
                   <span className="nsf-item-drop__col nsf-item-drop__col--loc">–</span>
                 </button>
@@ -2436,10 +2475,11 @@ function DebitNoteForm({
       try {
         const parsed = JSON.parse(purchase.notes);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((i: { name?: string; mrp?: number; qty?: number; unit?: string; rate?: number }) => ({
+          return parsed.map((i: { name?: string; mrp?: number; qty?: number; unit?: string; rate?: number; itemId?: string }) => ({
             id: Date.now().toString() + Math.random(),
             name: i.name ?? "", mrp: i.mrp ?? 0, qty: i.qty ?? 0,
             unit: i.unit ?? "NONE", rate: i.rate ?? 0,
+            itemId: i.itemId ?? undefined,
           }));
         }
       } catch { /* ignore */ }
@@ -2467,6 +2507,14 @@ function DebitNoteForm({
   const dropRef      = useRef<HTMLDivElement>(null);
   const tableWrapRef = useRef<HTMLDivElement>(null);
   const { selectedCompanyId } = useCompany();
+  const { stores } = useStores(selectedCompanyId);
+  // Returned goods default back to whichever store the original purchase stocked
+  // them into; a standalone return (no source purchase) defaults to the Main Store.
+  const [storeId, setStoreId] = useState<string>(purchase?.storeId ?? "");
+  useEffect(() => {
+    if (storeId && stores.some((s) => s.id === storeId)) return;
+    setStoreId(stores.find((s) => s.isMain)?.id ?? stores[0]?.id ?? "");
+  }, [stores, storeId]);
 
   useEffect(() => {
     api.getParties().then(ps => {
@@ -2499,6 +2547,16 @@ function DebitNoteForm({
     if (!search.trim()) return catalog;
     const q = search.toLowerCase();
     return catalog.filter(c => c.name.toLowerCase().includes(q) || (c.sku ?? "").toLowerCase().includes(q));
+  }
+
+  // Store-scoped available quantity — falls back to the cross-store total before a
+  // store is chosen (or for single-store tenants).
+  function stockQtyFor(c: Item): number {
+    if (storeId) {
+      const entry = c.stocks.find((s) => s.storeId === storeId);
+      return entry ? entry.quantity : 0;
+    }
+    return c.totalStock ?? c.openingStock ?? 0;
   }
 
   function openItemDrop(itemId: string, inputEl: HTMLElement) {
@@ -2548,7 +2606,7 @@ function DebitNoteForm({
     if (!selectedParty) { setError("Select a party."); return; }
     if (validItems.length === 0) { setError("Add at least one item."); return; }
     setSaving(true);
-    const notesJson = JSON.stringify(validItems.map(i => ({ name: i.name, qty: i.qty, unit: i.unit, rate: i.rate, mrp: i.mrp })));
+    const notesJson = JSON.stringify(validItems.map(i => ({ name: i.name, qty: i.qty, unit: i.unit, rate: i.rate, mrp: i.mrp, itemId: i.itemId })));
     try {
       await api.createTransaction({
         partyId: selectedParty.id,
@@ -2557,6 +2615,7 @@ function DebitNoteForm({
         total, balance, notes: notesJson,
         number: billNumber || undefined,
         companyId: selectedCompanyId ?? undefined,
+        storeId: storeId || undefined,
       });
       for (const [txnId, linked] of Object.entries(linkedTxns)) {
         const txn = partyTxns.find(t => t.id === txnId);
@@ -2709,6 +2768,21 @@ function DebitNoteForm({
                 </label>
               </div>
             </div>
+            {stores.length > 1 && (
+              <div className="nsf-invoice-meta__row">
+                <span className="nsf-invoice-meta__lbl">Store</span>
+                <select
+                  className="nsf-invoice-meta__input"
+                  value={storeId}
+                  onChange={e => setStoreId(e.target.value)}
+                  style={{ cursor: "pointer" }}
+                >
+                  {stores.map(s => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         </div>
 
@@ -2737,7 +2811,7 @@ function DebitNoteForm({
                   </td>
                   <td className="nsf-td nsf-td--name">
                     <input className="nsf-cell-input nsf-cell-input--name" value={item.name} placeholder="Search item…"
-                      onChange={e => { updateItem(item.id, "name", e.target.value); openItemDrop(item.id, e.currentTarget); }}
+                      onChange={e => { updateItem(item.id, "name", e.target.value); updateItem(item.id, "itemId", ""); openItemDrop(item.id, e.currentTarget); }}
                       onFocus={e => openItemDrop(item.id, e.currentTarget)}
                       onBlur={() => closeItemDrop(item.id)} />
                   </td>
@@ -2802,6 +2876,7 @@ function DebitNoteForm({
                   onMouseDown={e => e.preventDefault()}
                   onClick={() => {
                     updateItem(activeItemRow, "name", c.name);
+                    updateItem(activeItemRow, "itemId", c.id);
                     updateItem(activeItemRow, "mrp", c.salePrice ?? 0);
                     updateItem(activeItemRow, "rate", c.purchasePrice ?? c.salePrice ?? 0);
                     updateItem(activeItemRow, "unit", c.unit || "NONE");
@@ -2811,7 +2886,7 @@ function DebitNoteForm({
                   <span className="nsf-item-drop__item-name">{c.name}</span>
                   <span className="nsf-item-drop__col">{fmt(c.salePrice ?? 0)}</span>
                   <span className="nsf-item-drop__col">{c.purchasePrice != null ? fmt(c.purchasePrice) : "–"}</span>
-                  <span className={`nsf-item-drop__col nsf-item-drop__col--stock${(c.openingStock ?? 0) > 0 ? " nsf-item-drop__col--pos" : ""}`}>{c.openingStock ?? 0}</span>
+                  <span className={`nsf-item-drop__col nsf-item-drop__col--stock${stockQtyFor(c) > 0 ? " nsf-item-drop__col--pos" : ""}`}>{stockQtyFor(c)}</span>
                   <span className="nsf-item-drop__col nsf-item-drop__col--loc">–</span>
                 </button>
               ))}

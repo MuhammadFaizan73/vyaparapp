@@ -11,6 +11,7 @@ export class CreateTransactionDto {
   @IsOptional() @IsUUID() companyId?: string;
   @IsOptional() @IsUUID() bookerId?: string;
   @IsOptional() @IsString() idempotencyKey?: string;
+  @IsOptional() @IsUUID() storeId?: string;
 }
 
 export class UpdateTransactionDto {
@@ -21,4 +22,5 @@ export class UpdateTransactionDto {
   @IsOptional() @IsString() notes?: string;
   @IsOptional() @IsUUID() companyId?: string;
   @IsOptional() @IsUUID() bookerId?: string;
+  @IsOptional() @IsUUID() storeId?: string;
 }

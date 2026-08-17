@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, ForbiddenException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { StockService, STOCK_MOVING_TYPES } from "../stores/stock.service";
 import { CreateTransactionDto, UpdateTransactionDto } from "./transactions.dto";
 import { companyIdWhere } from "../common/company-filter.util";
 
@@ -17,6 +18,7 @@ export type TransactionRow = {
   notes: string | null;
   companyId: string | null;
   bookerId: string | null;
+  storeId: string | null;
   createdAt: string;
 };
 
@@ -40,6 +42,7 @@ function toRow(t: any): TransactionRow {
     notes: t.notes ?? null,
     companyId: t.companyId ?? null,
     bookerId: t.bookerId ?? null,
+    storeId: t.storeId ?? null,
     createdAt: t.createdAt.toISOString(),
   };
 }
@@ -75,7 +78,10 @@ function assertCanTouchSale(caller: Caller, txn: { type: string; bookerId: strin
 
 @Injectable()
 export class TransactionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly stock: StockService,
+  ) {}
 
   async findOne(tenantId: string, id: string): Promise<TransactionRow> {
     const row = await this.prisma.transaction.findUnique({ where: { id } });
@@ -93,9 +99,9 @@ export class TransactionsService {
     return rows.map(toRow);
   }
 
-  async listAll(tenantId: string, companyId?: string): Promise<TransactionRow[]> {
+  async listAll(tenantId: string, companyId?: string, storeId?: string): Promise<TransactionRow[]> {
     const rows = await this.prisma.transaction.findMany({
-      where: { tenantId, ...companyIdWhere(companyId) },
+      where: { tenantId, ...companyIdWhere(companyId), ...(storeId ? { storeId } : {}) },
       orderBy: { date: "desc" },
       take: MAX_TRANSACTIONS_PER_PAGE,
     });
@@ -123,7 +129,7 @@ export class TransactionsService {
   async listByType(
     tenantId: string,
     type: string,
-    opts?: { take?: number; skip?: number; from?: string; to?: string; companyId?: string },
+    opts?: { take?: number; skip?: number; from?: string; to?: string; companyId?: string; storeId?: string },
   ): Promise<TransactionRow[]> {
     const dateFilter = this.dateFilter(opts?.from, opts?.to);
     const rows = await this.prisma.transaction.findMany({
@@ -131,6 +137,7 @@ export class TransactionsService {
         tenantId, type,
         ...(dateFilter && { date: dateFilter }),
         ...companyIdWhere(opts?.companyId),
+        ...(opts?.storeId ? { storeId: opts.storeId } : {}),
       },
       orderBy: { date: "desc" },
       take: opts?.take ?? MAX_TRANSACTIONS_PER_PAGE,
@@ -228,26 +235,40 @@ export class TransactionsService {
     if (!party || party.tenantId !== tenantId) {
       throw new NotFoundException("Party not found");
     }
+
+    // Resolved before the $transaction below — resolveStoreId can trigger
+    // StoresService.ensureBootstrapped, which opens its own $transaction; nesting that
+    // inside this one would fight it for SQLite's single writer lock. Only resolved for
+    // types that actually move stock (or when the client explicitly sent one), so a
+    // payment/expense save isn't slowed by a store lookup it'll never use.
+    const needsStore = dto.storeId !== undefined || STOCK_MOVING_TYPES.has(dto.type);
+    const storeId = needsStore ? await this.stock.resolveStoreId(tenantId, dto.companyId ?? null, dto.storeId) : null;
+
     try {
-      const transaction = await this.prisma.transaction.create({
-        data: {
-          tenantId,
-          partyId: dto.partyId,
-          type: dto.type,
-          number: dto.number ?? null,
-          date: dto.date ? new Date(dto.date) : new Date(),
-          total: dto.total,
-          balance: dto.balance,
-          notes: dto.notes ?? null,
-          companyId: dto.companyId ?? null,
-          // Only Sale has an explicit Booker picker in the UI — Payment In/Out and every
-          // other type send no bookerId at all, so a staff member's own payments were
-          // silently unattributed (indistinguishable from the owner's or another staff
-          // member's). Default to the logged-in staff member when the client didn't
-          // pick one explicitly; owners have no memberId, so this is a no-op for them.
-          bookerId: dto.bookerId ?? caller.memberId ?? null,
-          idempotencyKey: dto.idempotencyKey ?? null,
-        },
+      const transaction = await this.prisma.$transaction(async (tx) => {
+        const created = await tx.transaction.create({
+          data: {
+            tenantId,
+            partyId: dto.partyId,
+            type: dto.type,
+            number: dto.number ?? null,
+            date: dto.date ? new Date(dto.date) : new Date(),
+            total: dto.total,
+            balance: dto.balance,
+            notes: dto.notes ?? null,
+            companyId: dto.companyId ?? null,
+            // Only Sale has an explicit Booker picker in the UI — Payment In/Out and every
+            // other type send no bookerId at all, so a staff member's own payments were
+            // silently unattributed (indistinguishable from the owner's or another staff
+            // member's). Default to the logged-in staff member when the client didn't
+            // pick one explicitly; owners have no memberId, so this is a no-op for them.
+            bookerId: dto.bookerId ?? caller.memberId ?? null,
+            idempotencyKey: dto.idempotencyKey ?? null,
+            storeId,
+          },
+        });
+        await this.stock.applyTxnMovement(tx, tenantId, { type: dto.type, storeId, notes: dto.notes, sign: 1 });
+        return created;
       });
       return toRow(transaction);
     } catch (err: any) {
@@ -283,7 +304,18 @@ export class TransactionsService {
       throw new NotFoundException("Transaction not found");
     }
     assertCanTouchSale(caller, existing, "delete");
-    await this.prisma.transaction.delete({ where: { id } });
+    await this.prisma.$transaction(async (tx) => {
+      // Deleting an invoice must put goods back — reverse whatever it moved before removing it.
+      if (STOCK_MOVING_TYPES.has(existing.type)) {
+        await this.stock.applyTxnMovement(tx, tenantId, {
+          type: existing.type,
+          storeId: existing.storeId,
+          notes: existing.notes,
+          sign: -1,
+        });
+      }
+      await tx.transaction.delete({ where: { id } });
+    });
   }
 
   async update(tenantId: string, id: string, dto: UpdateTransactionDto, caller: Caller, ipAddress?: string): Promise<TransactionRow> {
@@ -335,17 +367,46 @@ export class TransactionsService {
       } catch { /* notes not item JSON — generic diff */ }
     }
 
-    const transaction = await this.prisma.transaction.update({
-      where: { id },
-      data: {
-        ...(dto.partyId !== undefined && { partyId: dto.partyId }),
-        ...(dto.date !== undefined && { date: new Date(dto.date) }),
-        ...(dto.total !== undefined && { total: dto.total }),
-        ...(dto.balance !== undefined && { balance: dto.balance }),
-        ...(dto.notes !== undefined && { notes: dto.notes }),
-        ...(dto.companyId !== undefined && { companyId: dto.companyId }),
-        ...(dto.bookerId !== undefined && { bookerId: dto.bookerId }),
-      },
+    // Only resolve a fresh store when something that could affect it actually changed —
+    // avoids an extra ensureBootstrapped-triggering lookup on every ordinary edit.
+    const movesStock = STOCK_MOVING_TYPES.has(existing.type);
+    let newStoreId = existing.storeId;
+    if (movesStock && (dto.storeId !== undefined || dto.companyId !== undefined)) {
+      const companyId = dto.companyId !== undefined ? dto.companyId : existing.companyId;
+      newStoreId = await this.stock.resolveStoreId(tenantId, companyId, dto.storeId);
+    }
+
+    const transaction = await this.prisma.$transaction(async (tx) => {
+      if (movesStock) {
+        await this.stock.applyTxnMovement(tx, tenantId, {
+          type: existing.type,
+          storeId: existing.storeId,
+          notes: existing.notes,
+          sign: -1,
+        });
+      }
+      const updated = await tx.transaction.update({
+        where: { id },
+        data: {
+          ...(dto.partyId !== undefined && { partyId: dto.partyId }),
+          ...(dto.date !== undefined && { date: new Date(dto.date) }),
+          ...(dto.total !== undefined && { total: dto.total }),
+          ...(dto.balance !== undefined && { balance: dto.balance }),
+          ...(dto.notes !== undefined && { notes: dto.notes }),
+          ...(dto.companyId !== undefined && { companyId: dto.companyId }),
+          ...(dto.bookerId !== undefined && { bookerId: dto.bookerId }),
+          ...(movesStock && { storeId: newStoreId }),
+        },
+      });
+      if (movesStock) {
+        await this.stock.applyTxnMovement(tx, tenantId, {
+          type: existing.type,
+          storeId: newStoreId,
+          notes: dto.notes !== undefined ? dto.notes : existing.notes,
+          sign: 1,
+        });
+      }
+      return updated;
     });
 
     /* Persist history if anything changed */

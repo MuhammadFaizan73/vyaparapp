@@ -5,6 +5,7 @@ import { api } from "../lib/api";
 import { loadMemberId, loadPermissions, canEditSale, canDeleteSale } from "../lib/permissions";
 import type { Transaction, Party, Item, Company, TeamMember, TaxRate } from "@vyapar/api-client";
 import { useCompany } from "../lib/CompanyContext";
+import { useStores } from "../lib/useStores";
 import { AddPartyModal } from "./AddPartyModal";
 import { AddItemModal } from "./AddItemModal";
 import { InvoicePreviewModal } from "./InvoicePreviewModal";
@@ -71,6 +72,10 @@ function today() {
 type SaleRow = Transaction & { partyName: string };
 type LineItem = {
   id: string; name: string; mrp: number; qty: number; unit: string; rate: number; stock?: number;
+  // The real catalog Item.id, captured when picked from the dropdown — needed so a
+  // sale can actually decrement per-store stock. Cleared the moment the name is hand-
+  // edited so a renamed row can never misattribute stock to the wrong catalog item.
+  itemId?: string;
   // Carried over from the selected catalog Item so the row's own unit dropdown can offer
   // only that item's configured units (Piece/Box/Carton) instead of a generic fixed list.
   secondaryUnit?: string; conversionRate?: number;
@@ -1120,6 +1125,7 @@ function NewSaleForm({
           rate: Number(i.rate) || 0,
           mrp: Number(i.mrp) || 0,
           discount: Number(i.discount) || 0,
+          itemId: i.itemId ?? undefined,
         }));
       }
       return [{ id: "init", name: "Invoice Total", mrp: 0, qty: 1, unit: "NONE", rate: Number(initialSale.total) || 0 }];
@@ -1159,6 +1165,15 @@ function NewSaleForm({
     () => (selectedCompanyId ? [selectedCompanyId] : []),
   );
 
+  // Which store this sale draws stock from — hidden entirely for single-store
+  // companies, so a tenant that never added a second store sees no change at all.
+  const { stores } = useStores(selectedCompanyId);
+  const [storeId, setStoreId] = useState<string>(initialSale?.storeId ?? "");
+  useEffect(() => {
+    if (storeId && stores.some((s) => s.id === storeId)) return;
+    setStoreId(stores.find((s) => s.isMain)?.id ?? stores[0]?.id ?? "");
+  }, [stores, storeId]);
+
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [bookerId, setBookerId] = useState((initialSale as any)?.bookerId ?? "");
 
@@ -1179,6 +1194,16 @@ function NewSaleForm({
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
+
+  // Store-scoped available quantity for a catalog item — falls back to the
+  // cross-store total before a store is chosen (or for single-store tenants).
+  function stockQtyFor(c: Item): number {
+    if (storeId) {
+      const entry = c.stocks.find((s) => s.storeId === storeId);
+      return entry ? entry.quantity : 0;
+    }
+    return c.totalStock ?? c.openingStock ?? 0;
+  }
 
   function catalogFor(search: string) {
     let filtered = catalog;
@@ -1432,7 +1457,7 @@ function NewSaleForm({
     // Credit sale (nothing received yet) it's recorded as "Credit" rather than whatever
     // the (still-visible, informational) Payment Type dropdown happens to show.
     const notesJson = JSON.stringify({
-      items: validItems.map((i) => ({ name: i.name, qty: i.qty, unit: i.unit, rate: i.rate, mrp: i.mrp, discount: i.discount || 0 })),
+      items: validItems.map((i) => ({ name: i.name, qty: i.qty, unit: i.unit, rate: i.rate, mrp: i.mrp, discount: i.discount || 0, itemId: i.itemId })),
       paymentType: mode === "credit" ? "Credit" : paymentType,
     });
     try {
@@ -1446,6 +1471,7 @@ function NewSaleForm({
           notes: notesJson,
           companyId: selectedCompanyId ?? null,
           bookerId: bookerId || null,
+          storeId: storeId || null,
         });
       } else {
         txn = await api.createTransaction({
@@ -1457,6 +1483,7 @@ function NewSaleForm({
           notes: notesJson,
           companyId: selectedCompanyId ?? undefined,
           bookerId: bookerId || undefined,
+          storeId: storeId || undefined,
         });
       }
 
@@ -1596,6 +1623,22 @@ function NewSaleForm({
               </div>
             )}
 
+            {stores.length > 1 && (
+              <div className="lsf-field" style={{ maxWidth: 220, marginBottom: 12 }}>
+                <label className="lsf-field__lbl">Store</label>
+                <select
+                  className="lsf-input"
+                  value={storeId}
+                  onChange={(e) => setStoreId(e.target.value)}
+                  style={{ cursor: "pointer" }}
+                >
+                  {stores.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {/* Items table */}
             <div className="lsf-table-wrap" ref={tableWrapRef}>
               <div className="nsf-paste-hint">
@@ -1626,7 +1669,7 @@ function NewSaleForm({
                           className="lsf-cell-input"
                           placeholder="Search item…"
                           value={item.name}
-                          onChange={(e) => { updateItem(item.id, "name", e.target.value); openItemDrop(item.id, e.currentTarget); }}
+                          onChange={(e) => { updateItem(item.id, "name", e.target.value); updateItem(item.id, "itemId", ""); openItemDrop(item.id, e.currentTarget); }}
                           onFocus={(e) => openItemDrop(item.id, e.currentTarget)}
                           onBlur={() => closeItemDrop(item.id)}
                         />
@@ -1745,10 +1788,12 @@ function NewSaleForm({
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => {
                         updateItem(activeItemRow, "name", c.name);
+                        updateItem(activeItemRow, "itemId", c.id);
                         updateItem(activeItemRow, "mrp", c.salePrice ?? 0);
                         updateItem(activeItemRow, "rate", c.salePrice ?? 0);
                         updateItem(activeItemRow, "unit", c.unit || "NONE");
                         updateItem(activeItemRow, "qty", 1);
+                        updateItem(activeItemRow, "stock", stockQtyFor(c));
                         updateItem(activeItemRow, "baseSalePrice", c.salePrice ?? 0);
                         updateItem(activeItemRow, "secondaryUnit", c.secondaryUnit ?? "");
                         updateItem(activeItemRow, "conversionRate", c.conversionRate ? Number(c.conversionRate) : 0);
@@ -1764,8 +1809,8 @@ function NewSaleForm({
                       </span>
                       <span className="nsf-item-drop__col">{fmt(c.salePrice ?? 0)}</span>
                       <span className="nsf-item-drop__col">{c.purchasePrice != null ? fmt(c.purchasePrice) : "–"}</span>
-                      <span className={`nsf-item-drop__col nsf-item-drop__col--stock${(c.openingStock ?? 0) < 0 ? " nsf-item-drop__col--neg" : (c.openingStock ?? 0) > 0 ? " nsf-item-drop__col--pos" : ""}`}>
-                        {c.openingStock ?? 0}
+                      <span className={`nsf-item-drop__col nsf-item-drop__col--stock${stockQtyFor(c) < 0 ? " nsf-item-drop__col--neg" : stockQtyFor(c) > 0 ? " nsf-item-drop__col--pos" : ""}`}>
+                        {stockQtyFor(c)}
                       </span>
                       <span className="nsf-item-drop__col nsf-item-drop__col--loc">–</span>
                     </button>
@@ -2071,6 +2116,21 @@ function NewSaleForm({
                 <span className="nsf-invoice-date-icon">📅</span>
               </div>
             </div>
+            {stores.length > 1 && (
+              <div className="nsf-invoice-meta__row">
+                <span className="nsf-invoice-meta__lbl">Store</span>
+                <select
+                  className="nsf-invoice-date-input"
+                  value={storeId}
+                  onChange={(e) => setStoreId(e.target.value)}
+                  style={{ cursor: "pointer" }}
+                >
+                  {stores.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         </div>
 
@@ -2136,7 +2196,7 @@ function NewSaleForm({
                       className="nsf-cell-input nsf-cell-input--name"
                       value={item.name}
                       placeholder="Search item…"
-                      onChange={(e) => { updateItem(item.id, "name", e.target.value); openItemDrop(item.id, e.currentTarget); }}
+                      onChange={(e) => { updateItem(item.id, "name", e.target.value); updateItem(item.id, "itemId", ""); openItemDrop(item.id, e.currentTarget); }}
                       onFocus={(e) => openItemDrop(item.id, e.currentTarget)}
                       onBlur={() => closeItemDrop(item.id)}
                     />
@@ -2306,11 +2366,12 @@ function NewSaleForm({
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => {
                     updateItem(activeItemRow, "name", c.name);
+                    updateItem(activeItemRow, "itemId", c.id);
                     updateItem(activeItemRow, "mrp", c.salePrice ?? 0);
                     updateItem(activeItemRow, "rate", c.salePrice ?? 0);
                     updateItem(activeItemRow, "unit", c.unit || "NONE");
                     updateItem(activeItemRow, "qty", 1);
-                    updateItem(activeItemRow, "stock", c.openingStock ?? 0);
+                    updateItem(activeItemRow, "stock", stockQtyFor(c));
                     updateItem(activeItemRow, "baseSalePrice", c.salePrice ?? 0);
                     updateItem(activeItemRow, "secondaryUnit", c.secondaryUnit ?? "");
                     updateItem(activeItemRow, "conversionRate", c.conversionRate ? Number(c.conversionRate) : 0);
@@ -2326,8 +2387,8 @@ function NewSaleForm({
                   </span>
                   <span className="nsf-item-drop__col">{fmt(c.salePrice ?? 0)}</span>
                   <span className="nsf-item-drop__col">{c.purchasePrice != null ? fmt(c.purchasePrice) : "–"}</span>
-                  <span className={`nsf-item-drop__col nsf-item-drop__col--stock${(c.openingStock ?? 0) < 0 ? " nsf-item-drop__col--neg" : (c.openingStock ?? 0) > 0 ? " nsf-item-drop__col--pos" : ""}`}>
-                    {c.openingStock ?? 0}
+                  <span className={`nsf-item-drop__col nsf-item-drop__col--stock${stockQtyFor(c) < 0 ? " nsf-item-drop__col--neg" : stockQtyFor(c) > 0 ? " nsf-item-drop__col--pos" : ""}`}>
+                    {stockQtyFor(c)}
                   </span>
                   <span className="nsf-item-drop__col nsf-item-drop__col--loc">–</span>
                 </button>
@@ -2739,6 +2800,8 @@ function NewSaleForm({
       <AddItemModal
         onClose={() => setShowAddItem(false)}
         onSaved={() => setShowAddItem(false)}
+        companyId={selectedCompanyId ?? undefined}
+        storeId={storeId || undefined}
       />
     )}
     </div>

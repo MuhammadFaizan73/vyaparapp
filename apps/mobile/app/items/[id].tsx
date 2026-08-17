@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
   StyleSheet, Alert, ActivityIndicator,
@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { colors } from "../../src/theme";
 import { getItem, updateItem, deleteItem, consumePendingUnit, pendingUnit } from "../../src/itemsStore";
+import { useStores } from "../../src/useStores";
 
 type TabId = "pricing" | "stock";
 type MCIName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
@@ -28,10 +29,30 @@ export default function ItemDetailScreen() {
   const [mrp, setMrp] = useState(item?.mrp != null ? String(item.mrp) : "");
   const [salePrice, setSalePrice] = useState(item?.salePrice != null ? String(item.salePrice) : "");
   const [purchasePrice, setPurchasePrice] = useState(item?.purchasePrice != null ? String(item.purchasePrice) : "");
-  const [openingStock, setOpeningStock] = useState(item?.openingStock != null ? String(item.openingStock) : "");
+  // Populated by the storeId effect below, once a target store is resolved — not from
+  // item.openingStock directly (see that effect's comment).
+  const [openingStock, setOpeningStock] = useState("");
   const [openingStockPrice, setOpeningStockPrice] = useState("");
   const [minStock, setMinStock] = useState(item?.minStock != null ? String(item.minStock) : "");
   const [saving, setSaving] = useState(false);
+
+  // Which store the "Current Stock" field reads/writes — defaults to wherever this
+  // item's stock actually lives, not item.openingStock (a frozen historical value
+  // that stops reflecting reality the moment a sale/purchase/transfer touches it).
+  const { stores } = useStores(item?.companyId);
+  const [storeId, setStoreId] = useState<string>(item?.stocks[0]?.storeId ?? "");
+  useEffect(() => {
+    if (!item) return;
+    if (storeId && item.stocks.some((s) => s.storeId === storeId)) return;
+    const fallback = item.stocks[0]?.storeId ?? stores.find((s) => s.isMain)?.id ?? stores[0]?.id ?? "";
+    if (fallback) setStoreId(fallback);
+  }, [item, stores, storeId]);
+  useEffect(() => {
+    if (!item || !storeId) return;
+    const entry = item.stocks.find((s) => s.storeId === storeId);
+    setOpeningStock(entry ? String(entry.quantity) : "0");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storeId]);
 
   // Pick up unit data when returning from the unit screen
   useFocusEffect(
@@ -67,7 +88,7 @@ export default function ItemDetailScreen() {
     if (!name.trim()) { Alert.alert("Required", "Item name is required."); return; }
     setSaving(true);
     try {
-      await updateItem(id!, { name: name.trim(), sku: itemCode, unit, secondaryUnit, conversionRate, mrp, salePrice, purchasePrice, openingStock, minStock });
+      await updateItem(id!, { name: name.trim(), sku: itemCode, unit, secondaryUnit, conversionRate, mrp, salePrice, purchasePrice, openingStock, minStock, storeId: storeId || undefined });
       router.back();
     } catch {
       Alert.alert("Error", "Could not save item. Check your connection.");
@@ -205,6 +226,38 @@ export default function ItemDetailScreen() {
 
         {tab === "stock" && (
           <>
+            {/* Stock by store — only worth showing once stock actually lives in more
+                than one place. */}
+            {item.stocks.length > 1 && (
+              <View style={s.section}>
+                <Text style={s.sectionTitle}>Stock By Store</Text>
+                {item.stocks.map((st) => (
+                  <View key={st.storeId} style={s.storeBreakdownRow}>
+                    <Text style={s.storeBreakdownName}>{st.storeName}</Text>
+                    <Text style={s.storeBreakdownQty}>{st.quantity} {unitShort}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* Store selector for the field below — hidden for single-store companies. */}
+            {stores.length > 1 && (
+              <View style={[s.section, { marginTop: 10, paddingHorizontal: 14, paddingTop: 10, paddingBottom: 12 }]}>
+                <Text style={s.sectionTitle}>Editing Stock At</Text>
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                  {stores.map((st) => (
+                    <TouchableOpacity
+                      key={st.id}
+                      style={[s.storeChip, storeId === st.id && s.storeChipActive]}
+                      onPress={() => setStoreId(st.id)}
+                    >
+                      <Text style={[s.storeChipTxt, storeId === st.id && s.storeChipTxtActive]}>{st.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+
             {/* Current Stock */}
             <View style={s.section}>
               <Text style={s.sectionTitle}>Current Stock</Text>
@@ -342,6 +395,20 @@ const s = StyleSheet.create({
     paddingHorizontal: 5, paddingVertical: 2,
   },
 
+  storeBreakdownRow: {
+    flexDirection: "row", justifyContent: "space-between",
+    paddingHorizontal: 14, paddingVertical: 8,
+    borderTopWidth: 1, borderTopColor: colors.borderLight,
+  },
+  storeBreakdownName: { fontSize: 13, color: colors.text },
+  storeBreakdownQty: { fontSize: 13, fontWeight: "600", color: colors.text },
+  storeChip: {
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 100,
+    backgroundColor: "#f1f5f9", borderWidth: 1, borderColor: "#e2e8f0",
+  },
+  storeChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  storeChipTxt: { fontSize: 12, fontWeight: "600", color: colors.textSecondary },
+  storeChipTxtActive: { color: "#fff" },
   stockDualRow: { flexDirection: "row" },
   stockDualField: { flex: 1, paddingHorizontal: 14, paddingBottom: 12 },
   stockDualDivider: { width: 1, backgroundColor: colors.border, marginVertical: 8 },

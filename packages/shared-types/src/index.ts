@@ -178,6 +178,11 @@ export const ItemSchema = z.object({
   minStock: z.number(),
   companyTag: z.string().nullable().optional(),
   companyId: z.string().uuid().nullable().optional(),
+  // Per-store breakdown + live total, added with multi-store inventory. Empty/0 for
+  // items whose tenant has no stores yet or that aren't attached to a company (see
+  // StoresService.ensureBootstrapped) — callers should fall back to openingStock.
+  stocks: z.array(z.lazy(() => ItemStoreStockSchema)).default([]),
+  totalStock: z.number().default(0),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -273,6 +278,9 @@ export const CreateItemRequestSchema = z.object({
   minStock: z.number().min(0).optional(),
   companyTag: z.string().optional(),
   companyId: z.string().uuid().nullable().optional(),
+  // Which store openingStock should be set at. Falls back to the company's Main
+  // Store when omitted (see StockService.resolveStoreId).
+  storeId: z.string().uuid().optional(),
 });
 export type CreateItemRequest = z.infer<typeof CreateItemRequestSchema>;
 
@@ -291,6 +299,9 @@ export const TransactionSchema = z.object({
   notes: z.string().nullable(),
   companyId: z.string().uuid().nullable().optional(),
   bookerId: z.string().uuid().nullable().optional(),
+  // Which store the goods moved out of/into. Null on pre-feature rows and on types
+  // that don't move stock — see TxnLineItemSchema/parseTxnLineItems below.
+  storeId: z.string().uuid().nullable().optional(),
   createdAt: z.string().datetime(),
 });
 export type Transaction = z.infer<typeof TransactionSchema>;
@@ -305,6 +316,7 @@ export const CreateTransactionRequestSchema = z.object({
   notes: z.string().optional(),
   companyId: z.string().uuid().nullable().optional(),
   bookerId: z.string().uuid().nullable().optional(),
+  storeId: z.string().uuid().nullable().optional(),
   idempotencyKey: z.string().optional(),
 });
 export type CreateTransactionRequest = z.infer<typeof CreateTransactionRequestSchema>;
@@ -317,6 +329,7 @@ export const UpdateTransactionRequestSchema = z.object({
   notes: z.string().optional(),
   companyId: z.string().uuid().nullable().optional(),
   bookerId: z.string().uuid().nullable().optional(),
+  storeId: z.string().uuid().nullable().optional(),
 });
 export type UpdateTransactionRequest = z.infer<typeof UpdateTransactionRequestSchema>;
 
@@ -325,6 +338,121 @@ export const LastSalePriceSchema = z.object({
   date: z.string().datetime(),
 });
 export type LastSalePrice = z.infer<typeof LastSalePriceSchema>;
+
+// ─── Multi-store inventory ──────────────────────────────────────────────────
+
+// The shape stored inside Transaction.notes. Historically untyped, and written in
+// two variants on disk: a bare array (desktop PurchaseScreen) or
+// { items: [...], ...metadata } (everything else) — both are accepted here so old
+// rows keep parsing exactly like reports.service.ts's parseItems() already tolerates.
+export const TxnLineItemSchema = z.object({
+  // Added with per-store stock. Absent on every pre-feature row and on any client
+  // not yet updated — stock movement silently skips lines without it rather than
+  // guessing which catalog item they meant.
+  itemId: z.string().uuid().optional(),
+  name: z.string(),
+  qty: z.number(),
+  unit: z.string().optional(),
+  rate: z.number().optional(),
+  mrp: z.number().optional(),
+  discount: z.number().optional(),
+});
+export type TxnLineItem = z.infer<typeof TxnLineItemSchema>;
+
+const TxnNotesObjectSchema = z.object({ items: z.array(TxnLineItemSchema).optional() }).passthrough();
+
+/** Parses Transaction.notes into a line-item array, tolerating both on-disk shapes
+ * and any malformed/legacy content (returns [] rather than throwing). */
+export function parseTxnLineItems(notes: string | null | undefined): TxnLineItem[] {
+  if (!notes) return [];
+  try {
+    const parsed = JSON.parse(notes);
+    if (Array.isArray(parsed)) {
+      const result = z.array(TxnLineItemSchema).safeParse(parsed);
+      return result.success ? result.data : [];
+    }
+    const result = TxnNotesObjectSchema.safeParse(parsed);
+    return result.success ? (result.data.items ?? []) : [];
+  } catch {
+    return [];
+  }
+}
+
+export const StoreSchema = z.object({
+  id: z.string().uuid(),
+  companyId: z.string().uuid(),
+  name: z.string(),
+  storeType: z.string().nullable(),
+  phone: z.string().nullable(),
+  email: z.string().nullable(),
+  pincode: z.string().nullable(),
+  address: z.string().nullable(),
+  isMain: z.boolean(),
+  createdAt: z.string().datetime(),
+});
+export type Store = z.infer<typeof StoreSchema>;
+
+export const CreateStoreRequestSchema = z.object({
+  companyId: z.string().uuid(),
+  name: z.string().min(1).max(100),
+  storeType: z.string().max(40).optional(),
+  phone: z.string().optional(),
+  email: z.string().optional(),
+  pincode: z.string().optional(),
+  address: z.string().optional(),
+});
+export type CreateStoreRequest = z.infer<typeof CreateStoreRequestSchema>;
+
+export const UpdateStoreRequestSchema = CreateStoreRequestSchema.omit({ companyId: true }).partial();
+export type UpdateStoreRequest = z.infer<typeof UpdateStoreRequestSchema>;
+
+export const ItemStoreStockSchema = z.object({
+  storeId: z.string().uuid(),
+  storeName: z.string(),
+  quantity: z.number(),
+});
+export type ItemStoreStock = z.infer<typeof ItemStoreStockSchema>;
+
+export const StockTransferLineSchema = z.object({
+  id: z.string().uuid(),
+  itemId: z.string().uuid(),
+  itemName: z.string(),
+  itemSku: z.string().nullable(),
+  unit: z.string().nullable(),
+  quantity: z.number(),
+});
+export type StockTransferLine = z.infer<typeof StockTransferLineSchema>;
+
+export const StockTransferSchema = z.object({
+  id: z.string().uuid(),
+  companyId: z.string().uuid(),
+  fromStoreId: z.string().uuid(),
+  fromStoreName: z.string(),
+  toStoreId: z.string().uuid(),
+  toStoreName: z.string(),
+  date: z.string().datetime(),
+  number: z.string().nullable(),
+  notes: z.string().nullable(),
+  lines: z.array(StockTransferLineSchema),
+  totalQty: z.number(),
+  createdAt: z.string().datetime(),
+});
+export type StockTransfer = z.infer<typeof StockTransferSchema>;
+
+export const CreateStockTransferRequestSchema = z.object({
+  companyId: z.string().uuid(),
+  fromStoreId: z.string().uuid(),
+  toStoreId: z.string().uuid(),
+  date: z.string().optional(),
+  number: z.string().optional(),
+  notes: z.string().optional(),
+  lines: z.array(z.object({
+    itemId: z.string().uuid(),
+    quantity: z.number().positive(),
+    unit: z.string().optional(),
+  })).min(1),
+});
+export type CreateStockTransferRequest = z.infer<typeof CreateStockTransferRequestSchema>;
 
 export const BulkSaleImportLineItemSchema = z.object({
   name: z.string(),

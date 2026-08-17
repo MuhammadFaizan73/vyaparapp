@@ -25,6 +25,7 @@ import { CompaniesModule } from "./companies/companies.module";
 import { DistributorsModule } from "./distributors/distributors.module";
 import { BranchesModule } from "./branches/branches.module";
 import { TaxRatesModule } from "./tax-rates/tax-rates.module";
+import { StoresModule } from "./stores/stores.module";
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { TaxRatesModule } from "./tax-rates/tax-rates.module";
     DistributorsModule,
     BranchesModule,
     TaxRatesModule,
+    StoresModule,
   ],
   controllers: [AppController],
   providers: [AppService],

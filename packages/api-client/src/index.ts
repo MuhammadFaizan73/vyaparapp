@@ -25,6 +25,11 @@ import type {
   Branch,
   CreateBranchRequest,
   UpdateBranchRequest,
+  Store,
+  CreateStoreRequest,
+  UpdateStoreRequest,
+  StockTransfer,
+  CreateStockTransferRequest,
   TeamMember,
   BulkSaleImportRequest,
   BulkSaleImportJobStatus,
@@ -282,8 +287,8 @@ export class VyaparApiClient {
     return data;
   }
 
-  async getItems(): Promise<Item[]> {
-    const { data } = await this.http.get<Item[]>("/items");
+  async getItems(opts?: { companyId?: string }): Promise<Item[]> {
+    const { data } = await this.http.get<Item[]>("/items", { params: opts });
     return data;
   }
 
@@ -342,6 +347,40 @@ export class VyaparApiClient {
 
   async deleteBranch(id: string): Promise<void> {
     await this.http.delete(`/branches/${id}`);
+  }
+
+  async getStores(opts?: { companyId?: string }): Promise<Store[]> {
+    const { data } = await this.http.get<Store[]>("/stores", { params: opts });
+    return data;
+  }
+
+  async createStore(body: CreateStoreRequest): Promise<Store> {
+    const { data } = await this.http.post<Store>("/stores", body);
+    return data;
+  }
+
+  async updateStore(id: string, body: UpdateStoreRequest): Promise<Store> {
+    const { data } = await this.http.patch<Store>(`/stores/${id}`, body);
+    return data;
+  }
+
+  async deleteStore(id: string): Promise<void> {
+    await this.http.delete(`/stores/${id}`);
+  }
+
+  async getStockTransfers(opts?: { companyId?: string; take?: number; from?: string; to?: string }): Promise<StockTransfer[]> {
+    const { data } = await this.http.get<StockTransfer[]>("/stock-transfers", { params: opts });
+    return data;
+  }
+
+  async getStockTransfer(id: string): Promise<StockTransfer> {
+    const { data } = await this.http.get<StockTransfer>(`/stock-transfers/${id}`);
+    return data;
+  }
+
+  async createStockTransfer(body: CreateStockTransferRequest): Promise<StockTransfer> {
+    const { data } = await this.http.post<StockTransfer>("/stock-transfers", body);
+    return data;
   }
 
   async createItem(body: CreateItemRequest): Promise<Item> {
@@ -638,6 +677,13 @@ export type {
   Branch,
   CreateBranchRequest,
   UpdateBranchRequest,
+  Store,
+  CreateStoreRequest,
+  UpdateStoreRequest,
+  ItemStoreStock,
+  StockTransfer,
+  StockTransferLine,
+  CreateStockTransferRequest,
   TeamMember,
   TeamRole,
 } from "@vyapar/shared-types";

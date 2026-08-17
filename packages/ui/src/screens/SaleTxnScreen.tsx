@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { api } from "../lib/api";
 import type { Transaction, Party, Item } from "@vyapar/api-client";
 import { useCompany } from "../lib/CompanyContext";
+import { useStores } from "../lib/useStores";
 import { InvoicePreviewModal } from "./InvoicePreviewModal";
 import { loadSettings } from "./SettingsScreen";
 
@@ -43,7 +44,10 @@ function getPresetRange(preset: string): { from: string; to: string } {
 
 const UNITS = ["NONE", "Pcs", "Kg", "Gm", "L", "ML", "Box", "Pack", "Bag", "Mtr", "Ft"];
 
-type LineItem = { id: string; name: string; mrp: number; qty: number; unit: string; rate: number; stock?: number };
+// itemId only matters for the "sale-return"/credit_note config — every other config
+// here (estimate, proforma, sale order, delivery challan) doesn't move goods, so the
+// field is simply carried through unused for those types.
+type LineItem = { id: string; name: string; mrp: number; qty: number; unit: string; rate: number; stock?: number; itemId?: string };
 function emptyRow(): LineItem {
   return { id: Date.now().toString() + Math.random(), name: "", mrp: 0, qty: 0, unit: "NONE", rate: 0 };
 }
@@ -990,11 +994,22 @@ function TxnForm({ cfg, parties, catalog, initialRow, existingCount, onClose, on
   const [showLinkModal, setShowLinkModal] = useState(false);
   const { selectedCompanyId } = useCompany();
 
+  // Only the credit_note config actually moves stock — the Store selector is guarded
+  // on cfg.txnType below, but the hook itself is called unconditionally (React rules).
+  const { stores } = useStores(selectedCompanyId);
+  const [storeId, setStoreId] = useState<string>(initialRow?.storeId ?? "");
+  useEffect(() => {
+    if (cfg.txnType !== "credit_note") return;
+    if (storeId && stores.some((s) => s.id === storeId)) return;
+    setStoreId(stores.find((s) => s.isMain)?.id ?? stores[0]?.id ?? "");
+  }, [stores, storeId, cfg.txnType]);
+
   const [lineItems, setLineItems] = useState<LineItem[]>(() => {
     if (parsed.items && Array.isArray(parsed.items) && parsed.items.length > 0) {
       return parsed.items.map((i: any, idx: number) => ({
         id: String(idx), name: i.name ?? "", qty: Number(i.qty) || 0,
         unit: i.unit ?? "NONE", rate: Number(i.rate) || 0, mrp: Number(i.mrp) || 0,
+        itemId: i.itemId ?? undefined,
       }));
     }
     return [emptyRow(), emptyRow()];
@@ -1056,6 +1071,16 @@ function TxnForm({ cfg, parties, catalog, initialRow, existingCount, onClose, on
     if (!search.trim()) return catalog;
     const q = search.toLowerCase();
     return catalog.filter((c) => c.name.toLowerCase().includes(q) || (c.sku ?? "").toLowerCase().includes(q));
+  }
+
+  // Store-scoped available quantity — only meaningful for the credit_note config,
+  // where goods actually come back into a store.
+  function stockQtyFor(c: Item): number {
+    if (storeId) {
+      const entry = c.stocks.find((s) => s.storeId === storeId);
+      return entry ? entry.quantity : 0;
+    }
+    return c.totalStock ?? c.openingStock ?? 0;
   }
 
   function openItemDrop(itemId: string, inputEl: HTMLElement) {
@@ -1120,7 +1145,7 @@ function TxnForm({ cfg, parties, catalog, initialRow, existingCount, onClose, on
     if (validItems.length === 0) { setError("Add at least one item with a name and quantity > 0."); return; }
     setSaving(true);
     const notesJson = JSON.stringify({
-      items: validItems.map((i) => ({ name: i.name, qty: i.qty, unit: i.unit, rate: i.rate, mrp: i.mrp })),
+      items: validItems.map((i) => ({ name: i.name, qty: i.qty, unit: i.unit, rate: i.rate, mrp: i.mrp, itemId: i.itemId })),
       phone, dueDate, invoiceNumber, invoiceDate, paymentType,
       discountPct, discountRs,
     });
@@ -1134,6 +1159,7 @@ function TxnForm({ cfg, parties, catalog, initialRow, existingCount, onClose, on
           balance,
           notes: notesJson,
           companyId: selectedCompanyId ?? null,
+          storeId: cfg.txnType === "credit_note" ? (storeId || null) : undefined,
         });
       } else {
         savedTxnData = await api.createTransaction({
@@ -1145,6 +1171,7 @@ function TxnForm({ cfg, parties, catalog, initialRow, existingCount, onClose, on
           balance,
           notes: notesJson,
           companyId: selectedCompanyId ?? undefined,
+          storeId: cfg.txnType === "credit_note" ? (storeId || undefined) : undefined,
         });
       }
 
@@ -1301,6 +1328,16 @@ function TxnForm({ cfg, parties, catalog, initialRow, existingCount, onClose, on
                 <input type="date" style={metaInputStyle} value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
               </div>
             )}
+            {cfg.txnType === "credit_note" && stores.length > 1 && (
+              <div style={metaRowStyle}>
+                <span style={metaLabelStyle}>Store</span>
+                <select style={{ ...metaInputStyle, cursor: "pointer" }} value={storeId} onChange={(e) => setStoreId(e.target.value)}>
+                  {stores.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1327,7 +1364,7 @@ function TxnForm({ cfg, parties, catalog, initialRow, existingCount, onClose, on
                     <input
                       style={cellInputStyle}
                       value={item.name}
-                      onChange={(e) => updateItem(item.id, "name", e.target.value)}
+                      onChange={(e) => { updateItem(item.id, "name", e.target.value); updateItem(item.id, "itemId", ""); }}
                       onFocus={(e) => openItemDrop(item.id, e.currentTarget)}
                       onBlur={() => closeItemDrop(item.id)}
                     />
@@ -1342,13 +1379,17 @@ function TxnForm({ cfg, parties, catalog, initialRow, existingCount, onClose, on
                               onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
                               onMouseDown={() => {
                                 updateItem(item.id, "name", c.name);
+                                updateItem(item.id, "itemId", c.id);
                                 updateItem(item.id, "rate", c.salePrice ?? 0);
                                 updateItem(item.id, "mrp", c.mrp ?? 0);
                                 setActiveItemRow(null); setDropPos(null);
                               }}
                             >
                               <span>{c.name}</span>
-                              <span style={{ color: "#6b7280" }}>Rs {c.salePrice?.toLocaleString() ?? 0}</span>
+                              <span style={{ color: "#6b7280" }}>
+                                Rs {c.salePrice?.toLocaleString() ?? 0}
+                                {cfg.txnType === "credit_note" && ` · Stock ${stockQtyFor(c)}`}
+                              </span>
                             </button>
                           ))}
                         </div>

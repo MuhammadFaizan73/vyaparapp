@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, ForbiddenException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { StoresService } from "../stores/stores.service";
 import { CreateCompanyDto, UpdateCompanyDto } from "./companies.dto";
 
 export type CompanyRow = {
@@ -28,7 +29,10 @@ function toRow(c: any): CompanyRow {
 
 @Injectable()
 export class CompaniesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly stores: StoresService,
+  ) {}
 
   // One-time, best-effort import of the legacy Tenant.extraCompanies JSON blob
   // (mobile's whole-array-replace flow) into real Company rows, so a tenant that
@@ -107,6 +111,7 @@ export class CompaniesService {
         branchId: dto.branchId ?? null,
       },
     });
+    await this.stores.ensureBootstrapped(tenantId);
     return toRow(company);
   }
 

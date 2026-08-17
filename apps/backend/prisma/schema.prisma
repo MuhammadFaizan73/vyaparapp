@@ -35,6 +35,9 @@ model Tenant {
   distributors      Distributor[]
   branches          Branch[]
   taxRates         TaxRate[]
+  stores           Store[]
+  itemStocks       ItemStock[]
+  stockTransfers   StockTransfer[]
   officeLat        Float?
   officeLng        Float?
   officeLabel      String?
@@ -88,11 +91,104 @@ model Company {
   items        Item[]
   transactions Transaction[]
   parties      Party[]
+  stores       Store[]
+  stockTransfers StockTransfer[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   @@index([tenantId])
   @@index([branchId])
+}
+
+// A physical location (shop/godown/warehouse) under a Company where item stock is
+// tracked separately. Every Company gets exactly one auto-created "Main Store"
+// (isMain: true, never deletable) via StoresService.ensureBootstrapped — see that
+// service for the lazy-backfill/bootstrap approach (no SQL migration seeds this,
+// since production runs `prisma db push`, not migration files).
+model Store {
+  id        String  @id @default(uuid())
+  tenantId  String
+  tenant    Tenant  @relation(fields: [tenantId], references: [id])
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name      String
+  // Free text ("Store"/"Godown"/"Warehouse"/"Factory"/...), offered as a dropdown on
+  // the client — matches how Company.businessType is handled (no enum).
+  storeType String?
+  phone     String?
+  email     String?
+  pincode   String?
+  address   String?
+  // Exactly one per Company. Enforced in StoresService (Prisma can't express "at
+  // most one true per companyId" portably) — never renamed away logically and never
+  // deletable.
+  isMain    Boolean @default(false)
+
+  itemStocks    ItemStock[]
+  transfersFrom StockTransfer[] @relation("TransferFrom")
+  transfersTo   StockTransfer[] @relation("TransferTo")
+  transactions  Transaction[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId, companyId])
+}
+
+// Live per-store stock quantity for an item. Item.openingStock is left untouched as a
+// historical/seed value (set once at item creation) — this table is the source of
+// truth for "how much of this item is at which store" going forward. An item's live
+// total stock is SUM(ItemStock.quantity) across its stores, computed in the service
+// layer, not stored as a column.
+model ItemStock {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  itemId    String
+  item      Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  quantity  Float    @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([itemId, storeId])
+  @@index([tenantId, storeId])
+}
+
+// Header for a stock movement between two Stores of the same Company. Always
+// created+applied inside one Prisma $transaction (see StockTransfersService) so a
+// transfer is all-or-nothing and can never leave stock inconsistent.
+model StockTransfer {
+  id          String   @id @default(uuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  fromStoreId String
+  fromStore   Store    @relation("TransferFrom", fields: [fromStoreId], references: [id])
+  toStoreId   String
+  toStore     Store    @relation("TransferTo", fields: [toStoreId], references: [id])
+  date        DateTime @default(now())
+  number      String?
+  notes       String?
+  lines       StockTransferLine[]
+  createdAt   DateTime @default(now())
+
+  @@index([tenantId, companyId, date])
+}
+
+model StockTransferLine {
+  id         String        @id @default(uuid())
+  transferId String
+  transfer   StockTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  // Deliberately NOT a foreign key to Item: this is an audit-trail snapshot, so
+  // deleting a catalog item later must not erase or block transfer history.
+  itemId     String
+  itemName   String
+  itemSku    String?
+  unit       String?
+  quantity   Float
 }
 
 model License {
@@ -193,11 +289,15 @@ model Item {
   taxRate                Float?
   inclusiveOfTax         String?
   itemLocation           String?
+  // Historical/seed value only, set once at item creation — never live-decremented.
+  // Live current stock is SUM(ItemStock.quantity) across this item's stores; see
+  // ItemStock and StockService.getStocksForItems.
   openingStock           Float    @default(0)
   minStock               Float    @default(0)
   companyTag             String?
   companyId              String?
   company                Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  stocks                 ItemStock[]
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 }
@@ -217,6 +317,11 @@ model Transaction {
   company   Company?             @relation(fields: [companyId], references: [id], onDelete: SetNull)
   bookerId  String?
   booker    TeamMember?          @relation(fields: [bookerId], references: [id], onDelete: SetNull)
+  // Which store the goods moved out of/into (sale/debit_note = out, purchase/
+  // credit_note = in — see StockService.STOCK_DIRECTION). Null on every pre-feature
+  // row and on types that don't move goods (payment_in, expense, ...).
+  storeId   String?
+  store     Store?               @relation(fields: [storeId], references: [id], onDelete: SetNull)
   createdAt DateTime             @default(now())
   history   TransactionHistory[]
   // Client-generated, one per create attempt (not per retry) — lets a client that
@@ -227,6 +332,7 @@ model Transaction {
   @@index([tenantId, type, date])
   @@index([tenantId, partyId])
   @@index([tenantId, companyId])
+  @@index([tenantId, storeId])
   @@unique([tenantId, idempotencyKey])
 }
 

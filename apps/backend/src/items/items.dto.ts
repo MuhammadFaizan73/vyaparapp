@@ -22,6 +22,7 @@ export class CreateItemDto {
   @IsOptional() @IsString() itemLocation?: string;
   @IsOptional() @IsString() companyTag?: string;
   @IsOptional() @IsString() companyId?: string;
+  @IsOptional() @IsString() storeId?: string;
 }
 
 export class UpdateItemDto {
@@ -45,4 +46,5 @@ export class UpdateItemDto {
   @IsOptional() @IsString() itemLocation?: string;
   @IsOptional() @IsString() companyTag?: string;
   @IsOptional() @IsString() companyId?: string;
+  @IsOptional() @IsString() storeId?: string;
 }

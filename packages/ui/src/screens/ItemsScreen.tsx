@@ -3,6 +3,7 @@ import * as XLSX from "xlsx";
 import { api } from "../lib/api";
 import type { Item } from "@vyapar/api-client";
 import { useCompany } from "../lib/CompanyContext";
+import { useStores } from "../lib/useStores";
 import { formatStockQty } from "../lib/quantity";
 import { TARGET_FIELDS as ITEM_IMPORT_FIELDS } from "./ImportItemsPage";
 
@@ -94,6 +95,36 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
   // Add/Edit Item form's own selector, defaulting to whichever company is filtered.
   const { companies, selectedCompanyId, companyFilter } = useCompany();
   const [formCompanyId, setFormCompanyId] = useState<string>("");
+  const [formStoreId, setFormStoreId] = useState<string>("");
+
+  // Store filter — only meaningful when one specific company is selected (a Store
+  // belongs to exactly one Company), persisted like the company filter, cleared when
+  // it no longer matches a real store.
+  const STORE_FILTER_KEY = "vyapar.itemsStoreFilter";
+  const [storeFilter, setStoreFilter] = useState<string | null>(() => localStorage.getItem(STORE_FILTER_KEY));
+  const { stores: filterStores } = useStores(selectedCompanyId);
+  const { stores: formStores } = useStores(formCompanyId || null);
+
+  useEffect(() => {
+    if (storeFilter) localStorage.setItem(STORE_FILTER_KEY, storeFilter);
+    else localStorage.removeItem(STORE_FILTER_KEY);
+  }, [storeFilter]);
+
+  useEffect(() => {
+    if (storeFilter && !filterStores.some((s) => s.id === storeFilter)) {
+      setStoreFilter(null);
+    }
+  }, [filterStores, storeFilter]);
+
+  // Live quantity to display for an item — the store-scoped subtotal when a store
+  // filter is active, otherwise the true cross-store total.
+  function qtyFor(item: Item): number {
+    if (storeFilter) {
+      const entry = item.stocks.find((s) => s.storeId === storeFilter);
+      return entry ? entry.quantity : 0;
+    }
+    return item.totalStock ?? item.openingStock ?? 0;
+  }
 
   // Settings state
   const [mrpLabel, setMrpLabel] = useState("MRP");
@@ -156,6 +187,27 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
     return () => document.removeEventListener("click", close);
   }, [dotsMenuId]);
 
+  // Default the Add form's store once its company's stores have loaded (may not be
+  // ready yet on the very first click right after switching company).
+  useEffect(() => {
+    if (!showAddForm) return;
+    if (formStoreId && formStores.some((s) => s.id === formStoreId)) return;
+    setFormStoreId(formStores.find((s) => s.isMain)?.id ?? formStores[0]?.id ?? "");
+  }, [showAddForm, formStores, formStoreId]);
+
+  // Re-decompose the opening-stock inputs from whichever store is selected — editing
+  // must always show/set that store's actual current quantity, never the item's
+  // frozen historical openingStock field (which stops reflecting reality the moment
+  // any sale/purchase/transfer touches this item).
+  useEffect(() => {
+    if (!editingItem || !formStoreId) return;
+    const entry = editingItem.stocks.find((s) => s.storeId === formStoreId);
+    const decomposed = decomposeOpeningStock(entry ? entry.quantity : 0, editingItem.conversionRate, editingItem.tertiaryConversionRate);
+    setOpeningStockTop(decomposed.top);
+    setOpeningStock(decomposed.unit);
+    setOpeningStockPieces(decomposed.pieces);
+  }, [formStoreId, editingItem]);
+
   // Combines the per-tier opening stock inputs (e.g. 1 Carton + 20 Box + 6 Pcs) into a
   // single number denominated in `unit` (baseUnit), matching how openingStock is stored.
   function combinedOpeningStock(): number {
@@ -208,6 +260,7 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
         taxRate: taxRate ? Number(taxRate) : undefined,
         inclusiveOfTax: taxRate ? inclusiveOfTax : undefined,
         companyId: formCompanyId || undefined,
+        storeId: formStoreId || undefined,
       });
       setItems((prev) => [created, ...prev]);
       setSelectedItem(created);
@@ -255,6 +308,7 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
     setShowSecondaryPicker(false);
     setShowTertiaryPicker(false);
     setFormCompanyId(selectedCompanyId ?? companies[0]?.id ?? "");
+    setFormStoreId("");
   }
 
   function openEditForm(item: Item) {
@@ -266,12 +320,14 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
     setPurchasePrice(item.purchasePrice != null ? String(item.purchasePrice) : "");
     setDiscountType((item as any).discountType ?? "Discount %");
     setDiscount(item.discount != null ? String(item.discount) : "");
-    {
-      const decomposed = decomposeOpeningStock(item.openingStock ?? 0, item.conversionRate, (item as any).tertiaryConversionRate);
-      setOpeningStockTop(decomposed.top);
-      setOpeningStock(decomposed.unit);
-      setOpeningStockPieces(decomposed.pieces);
-    }
+    // Opening-stock inputs are populated by the formStoreId effect below, once a
+    // target store is chosen — not from item.openingStock, which stops reflecting
+    // reality the moment a sale/purchase/transfer touches this item. Cleared here
+    // first so a store with zero recorded stock doesn't show a stale previous value.
+    setOpeningStockTop("");
+    setOpeningStock("");
+    setOpeningStockPieces("");
+    setFormStoreId(item.stocks[0]?.storeId ?? "");
     setMinStock(item.minStock != null ? String(item.minStock) : "");
     setItemLocation((item as any).itemLocation ?? "");
     setTaxRate((item as any).taxRate != null ? String((item as any).taxRate) : "");
@@ -311,6 +367,7 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
         taxRate: taxRate ? Number(taxRate) : undefined,
         inclusiveOfTax: taxRate ? inclusiveOfTax : undefined,
         companyId: formCompanyId || undefined,
+        storeId: formStoreId || undefined,
       });
       setItems((prev) => prev.map((i) => i.id === updated.id ? updated : i));
       setSelectedItem(updated);
@@ -393,6 +450,26 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
                       <option value="">No specific company</option>
                       {companies.map((c) => (
                         <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* Store selector — hidden for single-store companies, matches the rest
+                  of the app treating that as the invisible default. */}
+              {formStores.length > 1 && (
+                <div className="items-form-row" style={{ marginBottom: 8 }}>
+                  <div className="items-form-field" style={{ flex: 1 }}>
+                    <label className="items-form-label">Store</label>
+                    <select
+                      className="items-form-input"
+                      value={formStoreId}
+                      onChange={(e) => setFormStoreId(e.target.value)}
+                      style={{ cursor: "pointer" }}
+                    >
+                      {formStores.map((s) => (
+                        <option key={s.id} value={s.id}>{s.name}{s.isMain ? " (Main)" : ""}</option>
                       ))}
                     </select>
                   </div>
@@ -764,6 +841,22 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
             )}
           </div>
 
+          {/* Store filter — only meaningful once a single company is selected, since a
+              Store belongs to exactly one Company. */}
+          {selectedCompanyId && filterStores.length > 1 && (
+            <select
+              className="items-form-input"
+              style={{ maxWidth: 180, cursor: "pointer" }}
+              value={storeFilter ?? ""}
+              onChange={(e) => setStoreFilter(e.target.value || null)}
+            >
+              <option value="">All Stores</option>
+              {filterStores.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          )}
+
           {/* Add Item button with dropdown */}
           <div className="items-add-btn-wrap" style={{ position: "relative" }}>
             <div className="items-add-btn">
@@ -842,9 +935,9 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
               onClick={() => { setSelectedItem(item); setShowAddForm(false); }}
             >
               <span className="items-row__name">{item.name}</span>
-              <span className={`items-row__qty${(item.openingStock ?? 0) < 0 ? " items-row__qty--neg" : ""}`}>
+              <span className={`items-row__qty${qtyFor(item) < 0 ? " items-row__qty--neg" : ""}`}>
                 {formatStockQty(
-                  item.openingStock ?? 0,
+                  qtyFor(item),
                   item.unit ?? "",
                   item.secondaryUnit ?? null,
                   item.conversionRate ? Number(item.conversionRate) : null,
@@ -913,7 +1006,7 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
                 <span className="items-stat__label">STOCK QUANTITY</span>
                 <span className="items-stat__value items-stat__value--red">
                   {formatStockQty(
-                    selectedItem.openingStock ?? 0,
+                    qtyFor(selectedItem),
                     selectedItem.unit ?? "",
                     selectedItem.secondaryUnit ?? null,
                     selectedItem.conversionRate ? Number(selectedItem.conversionRate) : null,
@@ -926,10 +1019,32 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
               <div className="items-stat">
                 <span className="items-stat__label">STOCK VALUE</span>
                 <span className="items-stat__value">
-                  Rs {((selectedItem.openingStock ?? 0) * (selectedItem.salePrice ?? 0)).toLocaleString("en-PK", { minimumFractionDigits: 2 })}
+                  Rs {(qtyFor(selectedItem) * (selectedItem.salePrice ?? 0)).toLocaleString("en-PK", { minimumFractionDigits: 2 })}
                 </span>
               </div>
             </div>
+
+            {/* Stock by store breakdown — only worth showing once stock actually lives
+                in more than one place. */}
+            {selectedItem.stocks.length > 1 && (
+              <div className="items-stats-row" style={{ flexWrap: "wrap" }}>
+                {selectedItem.stocks.map((s) => (
+                  <div className="items-stat" key={s.storeId}>
+                    <span className="items-stat__label">{s.storeName.toUpperCase()}</span>
+                    <span className="items-stat__value">
+                      {formatStockQty(
+                        s.quantity,
+                        selectedItem.unit ?? "",
+                        selectedItem.secondaryUnit ?? null,
+                        selectedItem.conversionRate ? Number(selectedItem.conversionRate) : null,
+                        selectedItem.tertiaryUnit ?? null,
+                        selectedItem.tertiaryConversionRate ? Number(selectedItem.tertiaryConversionRate) : null,
+                      )}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* Transactions section */}
             <div className="items-txn-section">
