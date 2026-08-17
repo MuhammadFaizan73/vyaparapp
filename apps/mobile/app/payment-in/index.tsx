@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from "react";
 import {
-  View, Text, TouchableOpacity, FlatList, StyleSheet, Animated,
+  View, Text, TouchableOpacity, FlatList, StyleSheet, Animated, Modal,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useFocusEffect } from "expo-router";
@@ -9,6 +9,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../src/theme";
 import { api } from "../../src/auth";
 import { DateRangeFilterBar, type DateRange, getRange, isWithinRange } from "../../src/components/DateRangeFilter";
+import { useTeamMembers } from "../../src/useTeamMembers";
 import type { Transaction, Party } from "@vyapar/api-client";
 
 type PiRow = Transaction & { partyName: string; colorIdx: number };
@@ -40,6 +41,9 @@ export default function PaymentInListScreen() {
   const [rows, setRows] = useState<PiRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [range, setRange] = useState<DateRange>(() => getRange("all"));
+  const [salesmanFilter, setSalesmanFilter] = useState("");
+  const [showSalesmanPicker, setShowSalesmanPicker] = useState(false);
+  const teamMembers = useTeamMembers();
 
   // FAB animation
   const micPulse = useRef(new Animated.Value(1)).current;
@@ -75,7 +79,10 @@ export default function PaymentInListScreen() {
     }, [])
   );
 
-  const filtered = rows.filter((r) => isWithinRange(r.date, range));
+  const filtered = rows.filter((r) =>
+    isWithinRange(r.date, range) && (!salesmanFilter || r.bookerId === salesmanFilter)
+  );
+  const selectedSalesmanName = salesmanFilter ? teamMembers.find((m) => m.id === salesmanFilter)?.name : null;
   const filteredTotal = filtered.reduce((s, r) => s + r.total, 0);
   const filteredBalance = filtered.reduce((s, r) => s + r.balance, 0);
 
@@ -111,8 +118,8 @@ export default function PaymentInListScreen() {
         {/* Row 1: User */}
         <View style={styles.filterRow}>
           <Text style={styles.filterLabel}>User</Text>
-          <TouchableOpacity style={styles.filterDropdown}>
-            <Text style={styles.filterDropdownTxt}>All Users</Text>
+          <TouchableOpacity style={styles.filterDropdown} onPress={() => setShowSalesmanPicker(true)}>
+            <Text style={styles.filterDropdownTxt}>{selectedSalesmanName ?? "All Users"}</Text>
             <Ionicons name="chevron-down" size={13} color={colors.textMuted} />
           </TouchableOpacity>
         </View>
@@ -254,6 +261,24 @@ export default function PaymentInListScreen() {
           </TouchableOpacity>
         </Animated.View>
       </View>
+
+      {/* Salesman picker */}
+      <Modal visible={showSalesmanPicker} transparent animationType="slide" onRequestClose={() => setShowSalesmanPicker(false)}>
+        <TouchableOpacity style={styles.pickerOverlay} activeOpacity={1} onPress={() => setShowSalesmanPicker(false)} />
+        <View style={styles.pickerSheet}>
+          <Text style={styles.pickerTitle}>Filter by User</Text>
+          <TouchableOpacity style={styles.pickerRow} onPress={() => { setSalesmanFilter(""); setShowSalesmanPicker(false); }}>
+            <Text style={styles.pickerRowTxt}>All Users</Text>
+            {!salesmanFilter && <Ionicons name="checkmark" size={18} color={colors.primary} />}
+          </TouchableOpacity>
+          {teamMembers.map((m) => (
+            <TouchableOpacity key={m.id} style={styles.pickerRow} onPress={() => { setSalesmanFilter(m.id); setShowSalesmanPicker(false); }}>
+              <Text style={styles.pickerRowTxt}>{m.name}</Text>
+              {salesmanFilter === m.id && <Ionicons name="checkmark" size={18} color={colors.primary} />}
+            </TouchableOpacity>
+          ))}
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -372,4 +397,13 @@ const styles = StyleSheet.create({
     alignItems: "center", justifyContent: "center",
     shadowColor: "#c2410c", shadowOpacity: 0.4, shadowRadius: 8, elevation: 5,
   },
+
+  pickerOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)" },
+  pickerSheet: { backgroundColor: "#fff", borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: "70%" },
+  pickerTitle: { fontSize: 15, fontWeight: "700", color: colors.text, marginBottom: 12 },
+  pickerRow: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: "#f1f5f9",
+  },
+  pickerRowTxt: { fontSize: 14.5, color: colors.text },
 });

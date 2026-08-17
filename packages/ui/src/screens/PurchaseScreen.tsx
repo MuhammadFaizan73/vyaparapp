@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { api, loadTenant } from "../lib/api";
 import type { Transaction, Party, Item } from "@vyapar/api-client";
 import { useCompany } from "../lib/CompanyContext";
+import { useTeamMembers } from "../lib/useTeamMembers";
 import { RECENT_ROWS_LIMIT } from "./PaymentInScreen";
 
 function fmt(n: number) {
@@ -65,6 +66,8 @@ export function PurchaseScreen({ isLocked = false, onLockedAction, activeKey = "
   const tabCfg = TAB_CONFIG[activeKey] ?? TAB_CONFIG["purchase-bills"];
   const [filter, setFilter]   = useState<"all" | "unpaid" | "paid">("all");
   const [search, setSearch]   = useState("");
+  const [salesmanFilter, setSalesmanFilter] = useState("");
+  const teamMembers = useTeamMembers();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [purchases, setPurchases] = useState<PurchaseRow[]>([]);
   const [summary, setSummary] = useState({ count: 0, total: 0, balance: 0 });
@@ -119,6 +122,7 @@ export function PurchaseScreen({ isLocked = false, onLockedAction, activeKey = "
   const filtered = purchases.filter(p => {
     if (filter === "unpaid" && p.balance === 0) return false;
     if (filter === "paid"   && p.balance > 0)  return false;
+    if (salesmanFilter && p.bookerId !== salesmanFilter) return false;
     if (search) {
       const q = search.toLowerCase();
       return p.partyName.toLowerCase().includes(q);
@@ -305,6 +309,12 @@ export function PurchaseScreen({ isLocked = false, onLockedAction, activeKey = "
                       onChange={e => setSearch(e.target.value)}
                     />
                   </div>
+                  <select className="rpt-select" value={salesmanFilter} onChange={e => setSalesmanFilter(e.target.value)}>
+                    <option value="">All Salesmen</option>
+                    {teamMembers.map(m => (
+                      <option key={m.id} value={m.id}>{m.name}</option>
+                    ))}
+                  </select>
                   <button type="button" className="purchase-filterbar__icon-btn" title="Export">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                   </button>
@@ -1353,6 +1363,8 @@ function PaymentOutSubScreen({ isLocked, onLockedAction }: { isLocked?: boolean;
   const [parties,   setParties]   = useState<Party[]>([]);
   const [loading,   setLoading]   = useState(true);
   const [showAdd,   setShowAdd]   = useState(false);
+  const [salesmanFilter, setSalesmanFilter] = useState("");
+  const teamMembers = useTeamMembers();
   const { companyFilter } = useCompany();
 
   async function load() {
@@ -1394,6 +1406,8 @@ function PaymentOutSubScreen({ isLocked, onLockedAction }: { isLocked?: boolean;
     try { return JSON.parse(notes).paymentType ?? "Cash"; } catch { return "Cash"; }
   }
 
+  const filtered = salesmanFilter ? rows.filter(r => r.bookerId === salesmanFilter) : rows;
+
   return (
     <div className="pout-layout">
 
@@ -1421,7 +1435,12 @@ function PaymentOutSubScreen({ isLocked, onLockedAction }: { isLocked?: boolean;
           <span>{endDateStr}</span>
         </div>
         <button type="button" className="pout-filter-pill">All Firms <span>▾</span></button>
-        <button type="button" className="pout-filter-pill">All Users <span>▾</span></button>
+        <select className="rpt-select" value={salesmanFilter} onChange={e => setSalesmanFilter(e.target.value)}>
+          <option value="">All Salesmen</option>
+          {teamMembers.map(m => (
+            <option key={m.id} value={m.id}>{m.name}</option>
+          ))}
+        </select>
       </div>
 
       {/* Summary card */}
@@ -1452,9 +1471,11 @@ function PaymentOutSubScreen({ isLocked, onLockedAction }: { isLocked?: boolean;
 
         {loading ? (
           <div className="pout-empty"><span style={{ color: "#9ca3af" }}>Loading…</span></div>
-        ) : rows.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <div className="pout-empty">
-            <span className="pout-empty__title">No Payment-Out records yet</span>
+            <span className="pout-empty__title">
+              {rows.length === 0 ? "No Payment-Out records yet" : "No records for this salesman"}
+            </span>
             <span className="pout-empty__sub">Click "+ Add Payment-Out" to record one.</span>
           </div>
         ) : (
@@ -1471,7 +1492,7 @@ function PaymentOutSubScreen({ isLocked, onLockedAction }: { isLocked?: boolean;
               <span>Actions</span>
             </div>
 
-            {rows.map((row, idx) => {
+            {filtered.map((row, idx) => {
               const pal = partyColor(row.partyName);
               const isUsed = row.balance < row.total;
               const pt = payType(row.notes);
@@ -3339,6 +3360,8 @@ function ExpenseSubScreen({ isLocked, onLockedAction }: { isLocked?: boolean; on
   const [catSearch, setCatSearch] = useState("");
   const [catTab, setCatTab] = useState<"CATEGORY" | "ITEMS">("CATEGORY");
   const [txnSearch, setTxnSearch] = useState("");
+  const [salesmanFilter, setSalesmanFilter] = useState("");
+  const teamMembers = useTeamMembers();
   const { companyFilter } = useCompany();
 
   const now = new Date();
@@ -3387,9 +3410,12 @@ function ExpenseSubScreen({ isLocked, onLockedAction }: { isLocked?: boolean; on
   const txnRows = selectedCat
     ? rows.filter(r => getCategoryFromRow(r) === selectedCat)
     : rows;
-  const filteredTxns = txnSearch
+  const searchedTxns = txnSearch
     ? txnRows.filter(r => r.partyName.toLowerCase().includes(txnSearch.toLowerCase()))
     : txnRows;
+  const filteredTxns = salesmanFilter
+    ? searchedTxns.filter(r => r.bookerId === salesmanFilter)
+    : searchedTxns;
 
   const totalAmount  = filteredTxns.reduce((s, r) => s + r.total, 0);
   const totalBalance = filteredTxns.reduce((s, r) => s + r.balance, 0);
@@ -3527,6 +3553,12 @@ function ExpenseSubScreen({ isLocked, onLockedAction }: { isLocked?: boolean; on
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
               <input className="dr-search" placeholder="Search party…" value={txnSearch} onChange={e => setTxnSearch(e.target.value)} />
             </div>
+            <select className="rpt-select" value={salesmanFilter} onChange={e => setSalesmanFilter(e.target.value)}>
+              <option value="">All Salesmen</option>
+              {teamMembers.map(m => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
             <div style={{ flex: 1 }} />
             <button type="button" className="purchase-filterbar__icon-btn" title="Export">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>

@@ -5,6 +5,7 @@ import { api } from "../lib/api";
 import { loadMemberId, loadPermissions, canEditSale, canDeleteSale } from "../lib/permissions";
 import type { Transaction, Party, Item, Company, TeamMember, TaxRate } from "@vyapar/api-client";
 import { useCompany } from "../lib/CompanyContext";
+import { useTeamMembers } from "../lib/useTeamMembers";
 import { AddPartyModal } from "./AddPartyModal";
 import { AddItemModal } from "./AddItemModal";
 import { InvoicePreviewModal } from "./InvoicePreviewModal";
@@ -193,6 +194,8 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
   const [filterTo, setFilterTo] = useState(initRange.to);
   const [filterSearch, setFilterSearch] = useState("");
   const [showSearch, setShowSearch] = useState(false);
+  const [salesmanFilter, setSalesmanFilter] = useState("");
+  const teamMembers = useTeamMembers();
   const [showDatePanel, setShowDatePanel] = useState(false);
   const [datePanelPos, setDatePanelPos] = useState({ top: 0, left: 0 });
   const datePanelRef = useRef<HTMLDivElement>(null);
@@ -349,6 +352,7 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
     if (d < filterFrom || d > filterTo) return false;
     if (filter === "unpaid" && s.balance === 0) return false;
     if (filter === "paid" && s.balance > 0) return false;
+    if (salesmanFilter && s.bookerId !== salesmanFilter) return false;
     if (filterSearch.trim()) {
       const q = filterSearch.toLowerCase();
       if (!s.partyName.toLowerCase().includes(q) && !(s.number ?? "").toLowerCase().includes(q)) return false;
@@ -627,6 +631,18 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
                   </button>
                 ))}
               </div>
+
+              <select
+                className="rpt-select"
+                style={{ marginLeft: 8 }}
+                value={salesmanFilter}
+                onChange={(e) => setSalesmanFilter(e.target.value)}
+              >
+                <option value="">All Salesmen</option>
+                {teamMembers.map((m) => (
+                  <option key={m.id} value={m.id}>{m.name}</option>
+                ))}
+              </select>
             </div>
 
             {/* ── Date filter panel (fixed) ── */}

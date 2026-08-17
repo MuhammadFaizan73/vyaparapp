@@ -11,6 +11,7 @@ import * as Sharing from "expo-sharing";
 import { colors } from "../../src/theme";
 import { api } from "../../src/auth";
 import { DateRangeFilterBar, type DateRange, getRange, isWithinRange } from "../../src/components/DateRangeFilter";
+import { SalesmanFilter } from "../../src/components/SalesmanFilter";
 import type { Transaction, Party } from "@vyapar/api-client";
 
 type PurchaseRow = Transaction & { partyName: string };
@@ -49,6 +50,7 @@ export default function PurchaseListScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeFilter, setActiveFilter] = useState(0);
+  const [salesmanFilter, setSalesmanFilter] = useState("");
   const [range, setRange] = useState<DateRange>(() => getRange("all"));
   const [search, setSearch] = useState(false);
   const [searchText, setSearchText] = useState("");
@@ -99,7 +101,8 @@ export default function PurchaseListScreen() {
       (activeFilter === 2 && r.balance === 0);
     const matchSearch = !searchText.trim() ||
       r.partyName.toLowerCase().includes(searchText.toLowerCase());
-    return matchFilter && matchSearch;
+    const matchSalesman = !salesmanFilter || r.bookerId === salesmanFilter;
+    return matchFilter && matchSearch && matchSalesman;
   });
 
   const totalPurchase = filtered.reduce((s, r) => s + r.total, 0);
@@ -147,6 +150,7 @@ export default function PurchaseListScreen() {
             <Text style={[s.chipTxt, i === activeFilter && s.chipTxtActive]}>{f}</Text>
           </TouchableOpacity>
         ))}
+        <SalesmanFilter value={salesmanFilter} onChange={setSalesmanFilter} />
       </View>
 
       {loading ? (
@@ -296,7 +300,7 @@ const s = StyleSheet.create({
   searchInput: { flex: 1, fontSize: 14, color: colors.text, padding: 0 },
 
   chipsRow: {
-    backgroundColor: "#fff", flexDirection: "row", gap: 8,
+    backgroundColor: "#fff", flexDirection: "row", flexWrap: "wrap", gap: 8,
     paddingHorizontal: 14, paddingVertical: 10,
     borderBottomWidth: 1, borderBottomColor: colors.border,
   },

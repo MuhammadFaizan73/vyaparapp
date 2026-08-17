@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { api } from "../lib/api";
 import type { Transaction, Party } from "@vyapar/api-client";
 import { useCompany } from "../lib/CompanyContext";
+import { useTeamMembers } from "../lib/useTeamMembers";
 
 /* ── helpers ── */
 function fmt(n: number) {
@@ -75,6 +76,8 @@ export function PaymentInScreen({ isLocked = false, onLockedAction }: Props) {
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
   const [deleteConfirmRow, setDeleteConfirmRow] = useState<PiRow | null>(null);
   const [viewHistoryRow, setViewHistoryRow] = useState<PiRow | null>(null);
+  const [salesmanFilter, setSalesmanFilter] = useState("");
+  const teamMembers = useTeamMembers();
   const { companyFilter, selectedCompanyId } = useCompany();
 
   async function loadData() {
@@ -109,6 +112,7 @@ export function PaymentInScreen({ isLocked = false, onLockedAction }: Props) {
 
   const totalAmount = summary.total;
   const receivedAmount = summary.total - summary.balance;
+  const filtered = salesmanFilter ? rows.filter((r) => r.bookerId === salesmanFilter) : rows;
 
   function handleAdd() {
     if (isLocked) { onLockedAction?.(); return; }
@@ -158,7 +162,12 @@ export function PaymentInScreen({ isLocked = false, onLockedAction }: Props) {
         <button type="button" className="pi-filterbar__chip">This Month ▾</button>
         <button type="button" className="pi-filterbar__date">📅 01/05/2026 To 31/05/2026</button>
         <button type="button" className="pi-filterbar__chip">All Firms ▾</button>
-        <button type="button" className="pi-filterbar__chip">All Users ▾</button>
+        <select className="rpt-select" value={salesmanFilter} onChange={(e) => setSalesmanFilter(e.target.value)}>
+          <option value="">All Salesmen</option>
+          {teamMembers.map((m) => (
+            <option key={m.id} value={m.id}>{m.name}</option>
+          ))}
+        </select>
         <div className="pi-filterbar__spacer" />
       </div>
 
@@ -176,12 +185,12 @@ export function PaymentInScreen({ isLocked = false, onLockedAction }: Props) {
       {/* ── List ── */}
       {loading ? (
         <div className="pi-loading">Loading…</div>
-      ) : rows.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <div className="pi-empty">
           <div className="pi-empty__illustration">
             <div className="pi-empty__circle"><span>💳</span></div>
           </div>
-          <p className="pi-empty__title">No Payment-In records</p>
+          <p className="pi-empty__title">{rows.length === 0 ? "No Payment-In records" : "No records for this salesman"}</p>
           <p className="pi-empty__sub">Record a received payment to get started.</p>
           <button type="button" className="pi-empty__btn" onClick={handleAdd}>
             + Add Payment-In
@@ -202,7 +211,7 @@ export function PaymentInScreen({ isLocked = false, onLockedAction }: Props) {
             <span style={{ flex: 0.6 }} />
           </div>
 
-          {rows.map((row) => {
+          {filtered.map((row) => {
             const pal = partyColor(row.partyName);
             const isUnused = row.balance === row.total;
             const paymentType = getPaymentType(row.notes);
