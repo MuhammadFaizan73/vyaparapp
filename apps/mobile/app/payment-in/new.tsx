@@ -466,7 +466,7 @@ export default function NewPaymentInScreen() {
       </ScrollView>
 
       {/* Footer */}
-      <View style={[styles.footer, { paddingBottom: insets.bottom + 8 }]}>
+      <View style={[styles.footer, { paddingBottom: insets.bottom + 20 }]}>
         {!isEdit && (
           <TouchableOpacity style={styles.footerSaveNew} onPress={() => handleSave(true)} disabled={saving}>
             <Text style={styles.footerSaveNewTxt}>Save & New</Text>
