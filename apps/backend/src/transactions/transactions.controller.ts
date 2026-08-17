@@ -18,6 +18,7 @@ export class TransactionsController {
     @Query("from") from?: string,
     @Query("to") to?: string,
     @Query("companyId") companyId?: string,
+    @Query("storeId") storeId?: string,
   ) {
     if (partyId) return this.transactionsService.listForParty(req.tenantId, partyId);
     if (type) {
@@ -27,9 +28,10 @@ export class TransactionsController {
         from,
         to,
         companyId,
+        storeId,
       });
     }
-    return this.transactionsService.listAll(req.tenantId, companyId);
+    return this.transactionsService.listAll(req.tenantId, companyId, storeId);
   }
 
   @Get("summary")

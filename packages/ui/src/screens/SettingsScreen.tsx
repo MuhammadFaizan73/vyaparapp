@@ -192,7 +192,9 @@ const TABS: { key: Tab; label: string }[] = [
 
 // ─── Main screen ─────────────────────────────────────────────────────────────
 
-export function SettingsScreen() {
+type SettingsScreenProps = { onOpenStores?: () => void };
+
+export function SettingsScreen({ onOpenStores }: SettingsScreenProps = {}) {
   const [tab, setTab] = useState<Tab>("general");
   const [s, setS] = useState<Settings>(loadSettings);
   const [saving, setSaving] = useState(false);
@@ -314,11 +316,9 @@ export function SettingsScreen() {
           <div className="st-spacer" />
           <SectionTitle title="Stock Transfer Between Stores" />
           <p className="st-desc">Manage all your stores/godowns and transfer stock seamlessly between them.</p>
-          <label className="st-check st-check--premium">
-            <input type="checkbox" disabled />
-            <span>Store management &amp; Stock transfer</span>
-            <span className="st-premium-badge">PRO</span>
-          </label>
+          <button type="button" className="items-add-btn__main" onClick={onOpenStores}>
+            Manage Stores →
+          </button>
 
           <div className="st-spacer" />
           <SectionTitle title="Customize Your View" />

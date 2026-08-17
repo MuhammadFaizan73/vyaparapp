@@ -47,6 +47,17 @@ export function PurchaseIcon() {
   );
 }
 
+export function StoresIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M3 9.5 4.5 4h15L21 9.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M3 9.5a2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 5 0" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M5 10v9.5h14V10" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M9.5 19.5V14h5v5.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export function GrowIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">

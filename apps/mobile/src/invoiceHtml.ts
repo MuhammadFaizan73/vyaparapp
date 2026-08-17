@@ -24,7 +24,7 @@ function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-export type NoteLineItem = { name?: string; qty?: number; unit?: string; rate?: number; mrp?: number; discount?: number };
+export type NoteLineItem = { name?: string; qty?: number; unit?: string; rate?: number; mrp?: number; discount?: number; itemId?: string };
 
 // Notes have two shapes in the wild: a bare array of line items, or an object carrying
 // `{ items: [...], ... }` alongside metadata like discount/roundOff/paymentType — same

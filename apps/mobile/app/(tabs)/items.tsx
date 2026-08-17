@@ -1,11 +1,15 @@
 import { useState, useEffect, useCallback } from "react";
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput } from "react-native";
+import * as SecureStore from "expo-secure-store";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { colors } from "../../src/theme";
 import { getItems, loadItems, subscribeItems, type Item } from "../../src/itemsStore";
 import { useSelectedCompany } from "../../src/useSelectedCompany";
+import { useStores } from "../../src/useStores";
+
+const STORE_FILTER_KEY = "vyapar_items_store_filter";
 
 type MCIName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
 
@@ -29,7 +33,33 @@ export default function ItemsScreen() {
   const [search, setSearch] = useState("");
   const [showSearch, setShowSearch] = useState(false);
   const [items, setItems] = useState<Item[]>(getItems());
-  const { companyFilter } = useSelectedCompany();
+  const { companyFilter, selectedCompanyId } = useSelectedCompany();
+  const { stores } = useStores(selectedCompanyId);
+
+  // Store filter — only meaningful once a single company is selected, since a Store
+  // belongs to exactly one Company. Persisted like the app's other filter chips.
+  const [storeFilter, setStoreFilterState] = useState<string | null>(null);
+  useEffect(() => {
+    SecureStore.getItemAsync(STORE_FILTER_KEY).then((v) => { if (v) setStoreFilterState(v); });
+  }, []);
+  function setStoreFilter(id: string | null) {
+    setStoreFilterState(id);
+    if (id) void SecureStore.setItemAsync(STORE_FILTER_KEY, id);
+    else void SecureStore.deleteItemAsync(STORE_FILTER_KEY);
+  }
+  useEffect(() => {
+    if (storeFilter && !stores.some((s) => s.id === storeFilter)) setStoreFilter(null);
+  }, [stores, storeFilter]);
+
+  // Live quantity to display — the store-scoped subtotal when a store filter is
+  // active, otherwise the true cross-store total.
+  function qtyFor(item: Item): number {
+    if (storeFilter) {
+      const entry = item.stocks.find((s) => s.storeId === storeFilter);
+      return entry ? entry.quantity : 0;
+    }
+    return item.totalStock ?? item.openingStock ?? 0;
+  }
 
   // Load from disk once on first mount
   useEffect(() => {
@@ -56,14 +86,14 @@ export default function ItemsScreen() {
     : items;
 
   const lowItems = companyItems.filter((i) => {
-    const qty = i.openingStock ?? 0;
+    const qty = qtyFor(i);
     const min = i.minStock ?? 0;
     return min > 0 && qty < min;
   });
 
   const filtered = companyItems.filter((it) => {
     if (tab === "low") {
-      const qty = it.openingStock ?? 0;
+      const qty = qtyFor(it);
       const min = it.minStock ?? 0;
       if (!(min > 0 && qty < min)) return false;
     }
@@ -74,7 +104,7 @@ export default function ItemsScreen() {
     return true;
   });
 
-  const stockValue = companyItems.reduce((acc, it) => acc + (it.openingStock ?? 0) * (it.salePrice ?? 0), 0);
+  const stockValue = companyItems.reduce((acc, it) => acc + qtyFor(it) * (it.salePrice ?? 0), 0);
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
@@ -125,10 +155,24 @@ export default function ItemsScreen() {
           <PillTab label="Categories" active={tab === "cat"} onPress={() => setTab("cat")} />
         </View>
 
+        {/* Store filter — only shown once there's more than one store to pick from. */}
+        {stores.length > 1 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.storeFilterRow}>
+            <TouchableOpacity style={[styles.storeChip, !storeFilter && styles.storeChipActive]} onPress={() => setStoreFilter(null)}>
+              <Text style={[styles.storeChipTxt, !storeFilter && styles.storeChipTxtActive]}>All Stores</Text>
+            </TouchableOpacity>
+            {stores.map((s) => (
+              <TouchableOpacity key={s.id} style={[styles.storeChip, storeFilter === s.id && styles.storeChipActive]} onPress={() => setStoreFilter(s.id)}>
+                <Text style={[styles.storeChipTxt, storeFilter === s.id && styles.storeChipTxtActive]}>{s.name}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
+
         {/* Items list */}
         {filtered.map((it) => {
           const p = hue(it.name);
-          const qty = it.openingStock ?? 0;
+          const qty = qtyFor(it);
           const min = it.minStock ?? 0;
           const isLow = min > 0 && qty < min;
           return (
@@ -239,6 +283,14 @@ const styles = StyleSheet.create({
   stockIcon: { width: 56, height: 56, borderRadius: 14, alignItems: "center", justifyContent: "center" },
 
   tabRow: { flexDirection: "row", gap: 8, marginTop: 14, marginBottom: 4 },
+  storeFilterRow: { marginTop: 10 },
+  storeChip: {
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 100, marginRight: 8,
+    backgroundColor: "#fff", borderWidth: 1, borderColor: "#e2e8f0",
+  },
+  storeChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  storeChipTxt: { fontSize: 12, fontWeight: "600", color: colors.textSecondary },
+  storeChipTxtActive: { color: "#fff" },
   pill: {
     flex: 1, paddingVertical: 10, borderRadius: 100,
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,

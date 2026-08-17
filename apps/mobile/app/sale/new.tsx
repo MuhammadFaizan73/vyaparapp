@@ -13,6 +13,7 @@ import { useParties } from "../../src/useParties";
 import { api } from "../../src/auth";
 import { getItems, loadItems, subscribeItems, type Item } from "../../src/itemsStore";
 import { useSelectedCompany } from "../../src/useSelectedCompany";
+import { useStores } from "../../src/useStores";
 import { CompanySwitcherBar } from "../../src/components/CompanySwitcher";
 import { takeHandoffTxn } from "../../src/txnHandoff";
 import { parseNoteItems } from "../../src/invoiceHtml";
@@ -26,6 +27,10 @@ type LineItem = {
   qty: number;
   unit: string;
   rate: number;
+  // The real catalog Item.id, captured when picked from the catalog suggestion list —
+  // needed so the sale can actually decrement per-store stock. Cleared the moment the
+  // name is hand-edited so a renamed row can never misattribute stock.
+  itemId?: string;
   // Carried over from the selected catalog Item so the row's own unit picker can offer
   // only that item's configured units (Piece/Box/Carton) instead of a generic fixed list.
   secondaryUnit?: string;
@@ -118,6 +123,15 @@ export default function NewSaleScreen() {
     () => (selectedCompanyId ? [selectedCompanyId] : []),
   );
 
+  // Which store this sale draws stock from — hidden entirely for single-store
+  // companies, so a tenant that never added a second store sees no change at all.
+  const { stores } = useStores(selectedCompanyId);
+  const [storeId, setStoreId] = useState("");
+  useEffect(() => {
+    if (storeId && stores.some((s) => s.id === storeId)) return;
+    setStoreId(stores.find((s) => s.isMain)?.id ?? stores[0]?.id ?? "");
+  }, [stores, storeId]);
+
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [bookerId, setBookerId] = useState("");
   const [showBookerPicker, setShowBookerPicker] = useState(false);
@@ -183,6 +197,7 @@ export default function NewSaleScreen() {
   // Add Item modal state
   const [showAddItem, setShowAddItem] = useState(false);
   const [editItemId, setEditItemId] = useState<string | null>(null);
+  const [newItemId, setNewItemId] = useState("");
   const [newItemName, setNewItemName] = useState("");
   const [newItemQty, setNewItemQty] = useState("1");
   const [newItemUnit, setNewItemUnit] = useState("NONE");
@@ -372,6 +387,7 @@ export default function NewSaleScreen() {
         setSelectedCompanyFilters([txn.companyId]);
         setSelectedCompanyId(txn.companyId);
       }
+      if (txn.storeId) setStoreId(txn.storeId);
       setBookerId(txn.bookerId ?? "");
 
       let parsedNotes: any = {};
@@ -392,6 +408,7 @@ export default function NewSaleScreen() {
           tertiaryConversionRate: (match as any)?.tertiaryConversionRate ? Number((match as any).tertiaryConversionRate) : undefined,
           baseSalePrice: match?.salePrice ?? undefined,
           discount: it.discount || 0,
+          itemId: it.itemId ?? undefined,
         };
       });
       setItems(loadedItems);
@@ -489,6 +506,7 @@ export default function NewSaleScreen() {
 
   function openAddItem() {
     setEditItemId(null);
+    setNewItemId("");
     setNewItemName(""); setNewItemQty("1"); setNewItemUnit("NONE");
     setNewItemMrp(""); setNewItemRate("");
     setNewItemSecondaryUnit(""); setNewItemConversionRate(0);
@@ -501,6 +519,7 @@ export default function NewSaleScreen() {
 
   function editItem(item: LineItem) {
     setEditItemId(item.id);
+    setNewItemId(item.itemId ?? "");
     setNewItemName(item.name); setNewItemQty(String(item.qty));
     setNewItemUnit(item.unit);
     setNewItemMrp(item.mrp ? String(item.mrp) : "");
@@ -541,6 +560,7 @@ export default function NewSaleScreen() {
     const item: LineItem = {
       id,
       name: newItemName.trim(),
+      itemId: newItemId || undefined,
       mrp: parseFloat(newItemMrp) || 0,
       qty: parseFloat(newItemQty) || 1,
       unit: newItemUnit,
@@ -590,13 +610,14 @@ export default function NewSaleScreen() {
         total,
         balance: balanceDue,
         notes: JSON.stringify({
-          items: items.map((i) => ({ name: i.name, qty: i.qty, unit: i.unit, mrp: i.mrp, rate: i.rate, discount: i.discount || 0 })),
+          items: items.map((i) => ({ name: i.name, qty: i.qty, unit: i.unit, mrp: i.mrp, rate: i.rate, discount: i.discount || 0, itemId: i.itemId })),
           discount: discountRsVal,
           roundOff: roundOffAmt,
           notes,
         }),
         companyId: selectedCompanyId ?? undefined,
         bookerId: bookerId || undefined,
+        storeId: storeId || undefined,
       };
 
       if (params.editId) {
@@ -713,6 +734,17 @@ export default function NewSaleScreen() {
           switcher never renders here — without this, there was no way to see or change
           which company a new invoice gets tagged with short of backing out to a tab. */}
       <CompanySwitcherBar />
+
+      {/* Store selector — hidden for single-store companies. */}
+      {stores.length > 1 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.storeRow}>
+          {stores.map((s) => (
+            <TouchableOpacity key={s.id} style={[styles.storeChip, storeId === s.id && styles.storeChipActive]} onPress={() => setStoreId(s.id)}>
+              <Text style={[styles.storeChipTxt, storeId === s.id && styles.storeChipTxtActive]}>{s.name}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
 
       {/* ── Invoice No + Date row ── */}
       <View style={styles.invoiceInfoRow}>
@@ -1269,6 +1301,7 @@ export default function NewSaleScreen() {
                   value={newItemName}
                   onChangeText={(t) => {
                     setNewItemName(t);
+                    setNewItemId("");
                     setItemSearch(t);
                     setShowCatalog(t.length > 0);
                   }}
@@ -1287,6 +1320,7 @@ export default function NewSaleScreen() {
                       style={styles.catalogRow}
                       onPress={() => {
                         setNewItemName(c.name);
+                        setNewItemId(c.id);
                         setNewItemMrp(c.mrp ? String(c.mrp) : "");
                         setNewItemRate(c.salePrice ? String(c.salePrice) : "");
                         setNewItemUnit(c.unit || "NONE");
@@ -1672,6 +1706,15 @@ const styles = StyleSheet.create({
   modeBtnCash: { backgroundColor: colors.textLight },
   modeTxt: { fontSize: 13, fontWeight: "600", color: colors.textMuted },
   modeTxtActive: { color: "#fff" },
+
+  storeRow: { backgroundColor: "#fff", paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.border },
+  storeChip: {
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 100, marginRight: 8,
+    backgroundColor: "#f1f5f9", borderWidth: 1, borderColor: "#e2e8f0",
+  },
+  storeChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  storeChipTxt: { fontSize: 12, fontWeight: "600", color: colors.textSecondary },
+  storeChipTxtActive: { color: "#fff" },
 
   invoiceInfoRow: {
     flexDirection: "row", backgroundColor: "#fff",

@@ -11,8 +11,14 @@ import { colors } from "../../src/theme";
 import { api } from "../../src/auth";
 import { useParties } from "../../src/useParties";
 import { useItems } from "../../src/useItems";
+import { useSelectedCompany } from "../../src/useSelectedCompany";
+import { useStores } from "../../src/useStores";
+import { CompanySwitcherBar } from "../../src/components/CompanySwitcher";
 
-type ItemRow = { id: string; name: string; qty: number; unit: string; mrp: string; rate: number };
+// itemId: the real catalog Item.id, captured when picked from the catalog suggestion
+// list — needed so this return can actually move per-store stock. Cleared the moment
+// the name is hand-edited so a renamed row can never misattribute stock.
+type ItemRow = { id: string; name: string; itemId?: string; qty: number; unit: string; mrp: string; rate: number };
 const UNITS = ["Pcs", "Kg", "Gm", "L", "ML", "Box", "Pack", "Bag", "Mtr", "Ft", "NONE"];
 const PAYMENT_TYPES = ["Cash", "Cheque", "Bank Transfer", "UPI"];
 
@@ -33,6 +39,7 @@ function AddItemScreen({
 }) {
   const insets = useSafeAreaInsets();
   const [name, setName] = useState("");
+  const [itemId, setItemId] = useState("");
   const [qty, setQty] = useState("1");
   const [unit, setUnit] = useState("Pcs");
   const [mrp, setMrp] = useState("");
@@ -50,6 +57,7 @@ function AddItemScreen({
     return {
       id: Date.now().toString(),
       name: name.trim(),
+      itemId: itemId || undefined,
       qty: parseFloat(qty) || 1,
       unit,
       mrp,
@@ -73,7 +81,7 @@ function AddItemScreen({
           <TextInput
             style={sf.fieldInput}
             value={name}
-            onChangeText={(t) => { setName(t); setShowCatalog(true); }}
+            onChangeText={(t) => { setName(t); setItemId(""); setShowCatalog(true); }}
             onFocus={() => { setNameFocused(true); setShowCatalog(true); }}
             onBlur={() => { setNameFocused(false); setTimeout(() => setShowCatalog(false), 150); }}
             placeholder="e.g. Chocolate Cake"
@@ -86,7 +94,7 @@ function AddItemScreen({
           <View style={sf.catalog}>
             {catMatches.slice(0, 6).map((c) => (
               <TouchableOpacity key={c.id} style={sf.catalogRow}
-                onPress={() => { setName(c.name); setRate(String(c.salePrice ?? 0)); setMrp(String(c.mrp ?? "")); setShowCatalog(false); }}>
+                onPress={() => { setName(c.name); setItemId(c.id); setRate(String(c.salePrice ?? 0)); setMrp(String(c.mrp ?? "")); setShowCatalog(false); }}>
                 <Text style={sf.catalogName}>{c.name}</Text>
                 <Text style={sf.catalogPrice}>Rs {c.salePrice ?? 0}</Text>
               </TouchableOpacity>
@@ -153,6 +161,15 @@ export default function NewCreditNoteScreen() {
   const insets = useSafeAreaInsets();
   const { parties } = useParties();
   const { items: catalog } = useItems();
+  const { selectedCompanyId } = useSelectedCompany();
+  // Hidden entirely for single-store companies, so a tenant that never added a second
+  // store sees no change at all.
+  const { stores } = useStores(selectedCompanyId);
+  const [storeId, setStoreId] = useState("");
+  useEffect(() => {
+    if (storeId && stores.some((s) => s.id === storeId)) return;
+    setStoreId(stores.find((s) => s.isMain)?.id ?? stores[0]?.id ?? "");
+  }, [stores, storeId]);
 
   // Auto-generate return number
   const [returnNo, setReturnNo] = useState(1);
@@ -223,6 +240,10 @@ export default function NewCreditNoteScreen() {
     if (!customer.trim()) { Alert.alert("Select a customer"); return; }
     const party = parties.find((p) => p.id === customerId) ?? parties.find((p) => p.name === customer);
     if (!party) { Alert.alert("Select a valid customer from the list"); return; }
+    if (!selectedCompanyId) {
+      Alert.alert("Select a Company", "Pick a specific company from the switcher before saving a credit note.");
+      return;
+    }
     setSaving(true);
     try {
       await api.createTransaction({
@@ -233,7 +254,7 @@ export default function NewCreditNoteScreen() {
         total,
         balance: balanceDue,
         notes: JSON.stringify({
-          items: items.map((i) => ({ name: i.name, qty: i.qty, unit: i.unit, mrp: i.mrp, rate: i.rate })),
+          items: items.map((i) => ({ name: i.name, qty: i.qty, unit: i.unit, mrp: i.mrp, rate: i.rate, itemId: i.itemId })),
           discountPct,
           discountRs,
           roundOff: roundOffAmt,
@@ -243,6 +264,8 @@ export default function NewCreditNoteScreen() {
           invoiceDate,
           invNo,
         }),
+        companyId: selectedCompanyId ?? undefined,
+        storeId: storeId || undefined,
       });
       if (saveAndNew) {
         router.replace("/credit-note/new");
@@ -281,6 +304,21 @@ export default function NewCreditNoteScreen() {
             <Ionicons name="settings-outline" size={22} color={colors.textMuted} />
           </TouchableOpacity>
         </View>
+
+        {/* This screen is pushed outside the Tabs layout, so the tab bar's own company
+            switcher never renders here. */}
+        <CompanySwitcherBar />
+
+        {/* Store selector — hidden for single-store companies. */}
+        {stores.length > 1 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.storeRow}>
+            {stores.map((st) => (
+              <TouchableOpacity key={st.id} style={[s.storeChip, storeId === st.id && s.storeChipActive]} onPress={() => setStoreId(st.id)}>
+                <Text style={[s.storeChipTxt, storeId === st.id && s.storeChipTxtActive]}>{st.name}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
 
         {/* Return No + Date row */}
         <View style={s.refRow}>
@@ -614,6 +652,14 @@ const s = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: colors.border,
   },
   appBarTitle: { flex: 1, fontSize: 17, fontWeight: "600", color: colors.text },
+  storeRow: { backgroundColor: "#fff", paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.border },
+  storeChip: {
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 100, marginRight: 8,
+    backgroundColor: "#f1f5f9", borderWidth: 1, borderColor: "#e2e8f0",
+  },
+  storeChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  storeChipTxt: { fontSize: 12, fontWeight: "600", color: colors.textSecondary },
+  storeChipTxtActive: { color: "#fff" },
   refRow: {
     backgroundColor: "#fff", flexDirection: "row",
     borderBottomWidth: 1, borderBottomColor: colors.border,

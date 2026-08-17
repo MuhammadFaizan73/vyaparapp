@@ -90,6 +90,7 @@ export async function updateItem(id: string, body: {
   name?: string; sku?: string; unit?: string; secondaryUnit?: string;
   conversionRate?: string; mrp?: string; salePrice?: string;
   purchasePrice?: string; openingStock?: string; minStock?: string;
+  storeId?: string;
 }): Promise<void> {
   const updated = await api.updateItem(id, {
     ...(body.name !== undefined && { name: body.name }),
@@ -102,6 +103,7 @@ export async function updateItem(id: string, body: {
     ...(body.purchasePrice !== undefined && { purchasePrice: body.purchasePrice ? Number(body.purchasePrice) : undefined }),
     ...(body.openingStock !== undefined && { openingStock: Number(body.openingStock) || 0 }),
     ...(body.minStock !== undefined && { minStock: Number(body.minStock) || 0 }),
+    ...(body.storeId !== undefined && { storeId: body.storeId }),
   });
   const idx = items.findIndex((i) => i.id === id);
   if (idx !== -1) items[idx] = updated;

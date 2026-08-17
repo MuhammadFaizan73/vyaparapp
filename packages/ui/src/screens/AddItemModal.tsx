@@ -6,6 +6,8 @@ import { api } from "../lib/api";
 type Props = {
   onClose: () => void;
   onSaved: (item: Item) => void;
+  companyId?: string;
+  storeId?: string;
 };
 
 type ItemTab = "pricing" | "stock";
@@ -16,7 +18,7 @@ function genCode() {
   return "ITM-" + Math.random().toString(36).slice(2, 7).toUpperCase();
 }
 
-export function AddItemModal({ onClose, onSaved }: Props) {
+export function AddItemModal({ onClose, onSaved, companyId, storeId }: Props) {
   const [busy, setBusy]   = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab]     = useState<ItemTab>("pricing");
@@ -102,6 +104,8 @@ export function AddItemModal({ onClose, onSaved }: Props) {
         itemLocation:   itemLocation.trim() || undefined,
         taxRate:        taxRate ? parseFloat(taxRate) : undefined,
         inclusiveOfTax: taxRate ? inclusiveOfTax : undefined,
+        companyId,
+        storeId,
       });
       if (andNew) {
         setName(""); setSku(""); setCategory(""); setUnit("NONE"); setSecondaryUnit("NONE");

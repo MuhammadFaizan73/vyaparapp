@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { ItemsService } from "./items.service";
 import { CreateItemDto, UpdateItemDto } from "./items.dto";
 import { JwtGuard, type AuthedRequest } from "../auth/jwt.guard";
@@ -9,8 +9,8 @@ export class ItemsController {
   constructor(private readonly itemsService: ItemsService) {}
 
   @Get()
-  list(@Req() req: AuthedRequest) {
-    return this.itemsService.list(req.tenantId);
+  list(@Req() req: AuthedRequest, @Query("companyId") companyId?: string) {
+    return this.itemsService.list(req.tenantId, { companyId });
   }
 
   @Post()

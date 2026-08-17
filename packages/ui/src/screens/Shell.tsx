@@ -42,6 +42,7 @@ const ROLE_ALLOWED: Record<string, string[]> = {
   ],
   stock_keeper: [
     "home", "items",
+    "stores", "stores-manage", "stores-transfer",
     "purchase", "purchase-bills", "purchase-payment-out",
     "purchase-expense", "purchase-order", "purchase-return",
     "settings", "plans",
@@ -67,6 +68,7 @@ const ROLE_ALLOWED: Record<string, string[]> = {
   secondary_admin: [
     "home", "parties", "parties-all", "parties-customers", "parties-suppliers",
     "items",
+    "stores", "stores-manage", "stores-transfer",
     "sale", "sale-invoices", "sale-estimate", "sale-proforma",
     "sale-payment-in", "sale-order", "sale-delivery", "sale-return",
     "purchase", "purchase-bills", "purchase-payment-out",
@@ -80,6 +82,8 @@ import { ReviewOrderModal } from "./ReviewOrderModal";
 import { HomeScreen } from "./HomeScreen";
 import { PartiesScreen } from "./PartiesScreen";
 import { ItemsScreen } from "./ItemsScreen";
+import { StoresScreen } from "./StoresScreen";
+import { StockTransferScreen } from "./StockTransferScreen";
 import { SaleScreen } from "./SaleScreen";
 import { PurchaseScreen } from "./PurchaseScreen";
 import { PaymentInScreen } from "./PaymentInScreen";
@@ -101,6 +105,7 @@ import {
   HomeIcon,
   PartiesIcon,
   ItemsIcon,
+  StoresIcon,
   SaleIcon,
   PurchaseIcon,
   GrowIcon,
@@ -142,6 +147,13 @@ const navStructure: NavEntry[] = [
     ],
   },
   { type: "item", key: "items",    label: "Items",               icon: <ItemsIcon />,    action: "add" },
+  {
+    type: "item", key: "stores",   label: "Stores",              icon: <StoresIcon />,   action: "chevron",
+    children: [
+      { key: "stores-manage",  label: "Manage Stores",  action: "none" },
+      { key: "stores-transfer", label: "Stock Transfer", action: "none" },
+    ],
+  },
   {
     type: "item", key: "sale",     label: "Sale",                icon: <SaleIcon />,     action: "chevron",
     children: [
@@ -335,6 +347,8 @@ export function Shell({ status, onLogout, onLicenseActivated }: Props) {
   const screenKey = (() => {
     if (active === "home")                  return "home";
     if (active === "items")                 return "items";
+    if (active === "stores-manage")         return "stores-manage";
+    if (active === "stores-transfer")       return "stores-transfer";
     if (active === "utilities-import-items") return "import-items";
     if (active === "utilities-import-sales") return "import-sale-history";
     if (active === "utilities-import-purchases") return "import-purchase-history";
@@ -561,6 +575,8 @@ export function Shell({ status, onLogout, onLicenseActivated }: Props) {
         )}
         {screenKey === "parties"     && <PartiesScreen  isLocked={isLocked} onLockedAction={handleLockedAction} />}
         {screenKey === "items"       && <ItemsScreen    isLocked={isLocked} onLockedAction={handleLockedAction} onOpenImportItems={() => setActive("utilities-import-items")} />}
+        {screenKey === "stores-manage"   && <StoresScreen onOpenStockTransfer={() => setActive("stores-transfer")} />}
+        {screenKey === "stores-transfer" && <StockTransferScreen />}
         {screenKey === "import-items" && <ImportItemsPage onGoToItems={() => setActive("items")} />}
         {screenKey === "import-sale-history" && <ImportSaleHistoryPage onGoToParties={() => setActive("parties")} />}
         {screenKey === "import-purchase-history" && <ImportPurchaseHistoryPage onGoToPurchases={() => setActive("purchase-bills")} />}
@@ -575,7 +591,7 @@ export function Shell({ status, onLogout, onLicenseActivated }: Props) {
         {screenKey === "bank-accounts" && <BankAccountsScreen />}
         {screenKey === "cash-in-hand"  && <CashInHandScreen />}
         {screenKey === "loan-accounts" && <LoanAccountsScreen />}
-        {screenKey === "settings"      && <SettingsScreen />}
+        {screenKey === "settings"      && <SettingsScreen onOpenStores={() => setActive("stores-manage")} />}
         {screenKey === "team"          && <TeamScreen />}
         {screenKey === "sync-data"     && <SyncDataScreen />}
         {screenKey === "sync-backup"   && <BackupScreen />}
