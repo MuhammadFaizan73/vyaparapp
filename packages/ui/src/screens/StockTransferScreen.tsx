@@ -34,6 +34,8 @@ export function StockTransferScreen() {
   const [fromStoreId, setFromStoreId] = useState("");
   const [toStoreId, setToStoreId] = useState("");
   const [pickItemId, setPickItemId] = useState("");
+  const [pickSearch, setPickSearch] = useState("");
+  const [showResults, setShowResults] = useState(false);
   const [pickQty, setPickQty] = useState("");
   const [lines, setLines] = useState<PendingLine[]>([]);
   const [busy, setBusy] = useState(false);
@@ -82,6 +84,22 @@ export function StockTransferScreen() {
     }
   }, [fromStoreId, toStoreId, stores]);
 
+  const matches = useMemo(() => {
+    const q = pickSearch.trim().toLowerCase();
+    const filtered = q ? items.filter((i) => i.name.toLowerCase().includes(q)) : items;
+    return filtered.slice(0, 20);
+  }, [items, pickSearch]);
+
+  function selectPickItem(item: Item) {
+    setPickItemId(item.id);
+    setPickSearch(item.name);
+    setShowResults(false);
+  }
+
+  function closeResults() {
+    setTimeout(() => setShowResults(false), 150);
+  }
+
   function availableAt(itemId: string, storeId: string): number {
     const item = items.find((i) => i.id === itemId);
     if (!item) return 0;
@@ -105,6 +123,7 @@ export function StockTransferScreen() {
       return [...prev, { itemId: item.id, itemName: item.name, unit: item.unit ?? "", quantity: qty }];
     });
     setPickItemId("");
+    setPickSearch("");
     setPickQty("");
   }
 
@@ -193,16 +212,40 @@ export function StockTransferScreen() {
         </div>
 
         <div className="items-form-row" style={{ marginTop: 8 }}>
-          <div className="items-form-field" style={{ flex: 2 }}>
+          <div className="items-form-field" style={{ flex: 2, position: "relative" }}>
             <label className="items-form-label">Item</label>
-            <select className="items-form-input" value={pickItemId} onChange={(e) => setPickItemId(e.target.value)} style={{ cursor: "pointer" }}>
-              <option value="">Select item</option>
-              {items.map((i) => (
-                <option key={i.id} value={i.id}>
-                  {i.name} — Available at {stores.find((s) => s.id === fromStoreId)?.name ?? "store"}: {availableAt(i.id, fromStoreId) - pendingQtyFor(i.id)}
-                </option>
-              ))}
-            </select>
+            <input
+              type="text"
+              className="items-form-input"
+              placeholder="Search item…"
+              value={pickSearch}
+              onChange={(e) => { setPickSearch(e.target.value); setPickItemId(""); setShowResults(true); }}
+              onFocus={() => setShowResults(true)}
+              onBlur={closeResults}
+            />
+            {showResults && (
+              <div className="nsf-item-drop" style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 50 }}>
+                {matches.length === 0 && <p className="nsf-item-drop__empty">No items found</p>}
+                {matches.map((i) => {
+                  const available = availableAt(i.id, fromStoreId) - pendingQtyFor(i.id);
+                  return (
+                    <button
+                      key={i.id}
+                      type="button"
+                      className="nsf-item-drop__row"
+                      style={{ display: "flex", justifyContent: "space-between", gridTemplateColumns: "none" }}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => selectPickItem(i)}
+                    >
+                      <span className="nsf-item-drop__item-name">{i.name}</span>
+                      <span className={`nsf-item-drop__col${available > 0 ? " nsf-item-drop__col--pos" : available < 0 ? " nsf-item-drop__col--neg" : ""}`}>
+                        Available: {available}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
           <div className="items-form-field">
             <label className="items-form-label">Quantity</label>
