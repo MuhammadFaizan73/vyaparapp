@@ -118,7 +118,7 @@ export default function PaymentInListScreen() {
         </View>
 
         {/* Row 2: Date range */}
-        <DateRangeFilterBar range={range} onChange={setRange} />
+        <DateRangeFilterBar range={range} onChange={setRange} datesOnly />
 
         {/* Row 3: Type / Status — split */}
         <View style={[styles.filterRow, { paddingHorizontal: 0 }]}>

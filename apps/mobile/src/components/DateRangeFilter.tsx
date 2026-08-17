@@ -125,9 +125,13 @@ const pb = StyleSheet.create({
   toTxt: { fontSize: 12, color: colors.textMuted, fontWeight: "600" },
 });
 
-function PeriodModal({ visible, range, onClose, onChange }: {
+function PeriodModal({ visible, range, onClose, onChange, datesOnly }: {
   visible: boolean; range: DateRange;
   onClose: () => void; onChange: (r: DateRange) => void;
+  // Skips the "All Time / Today / This Week / ..." preset list and jumps straight to the
+  // From/To calendar — for screens (Payment-In) where a named-period picker is more than
+  // what's wanted; the user just wants to pick two dates.
+  datesOnly?: boolean;
 }) {
   const [customFrom, setCustomFrom] = useState(range.preset === "custom" ? range.from : monthStart());
   const [customTo, setCustomTo]     = useState(range.preset === "custom" ? range.to   : monthEnd());
@@ -159,12 +163,12 @@ function PeriodModal({ visible, range, onClose, onChange }: {
       <View style={pm.sheet}>
         <View style={pm.handle} />
         <View style={pm.header}>
-          <Text style={pm.title}>Select Period</Text>
+          <Text style={pm.title}>{datesOnly ? "Select Dates" : "Select Period"}</Text>
           <TouchableOpacity onPress={onClose} hitSlop={8}>
             <Ionicons name="close" size={22} color={colors.text} />
           </TouchableOpacity>
         </View>
-        {PERIOD_PRESETS.map((p) => (
+        {!datesOnly && PERIOD_PRESETS.map((p) => (
           <TouchableOpacity key={p.preset} style={pm.row} onPress={() => apply(p.preset)}>
             <Text style={[pm.rowTxt, selected === p.preset && pm.rowTxtActive]}>{p.label}</Text>
             {selected === p.preset
@@ -173,7 +177,7 @@ function PeriodModal({ visible, range, onClose, onChange }: {
             }
           </TouchableOpacity>
         ))}
-        {selected === "custom" && (
+        {(datesOnly || selected === "custom") && (
           <>
             <View style={pm.customRow}>
               <View style={pm.customGroup}>
@@ -253,12 +257,15 @@ const pm = StyleSheet.create({
 // The one thing every list screen actually needs to own is `range` (it drives their own
 // row filtering) — this bundles the button + picker modal so call sites don't each repeat
 // the same showPeriod visibility state.
-export function DateRangeFilterBar({ range, onChange }: { range: DateRange; onChange: (r: DateRange) => void }) {
+export function DateRangeFilterBar({ range, onChange, datesOnly }: {
+  range: DateRange; onChange: (r: DateRange) => void;
+  datesOnly?: boolean;
+}) {
   const [showPeriod, setShowPeriod] = useState(false);
   return (
     <>
       <PeriodBar range={range} onPress={() => setShowPeriod(true)} />
-      <PeriodModal visible={showPeriod} range={range} onClose={() => setShowPeriod(false)} onChange={onChange} />
+      <PeriodModal visible={showPeriod} range={range} onClose={() => setShowPeriod(false)} onChange={onChange} datesOnly={datesOnly} />
     </>
   );
 }
