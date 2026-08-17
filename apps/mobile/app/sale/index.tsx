@@ -427,7 +427,7 @@ export default function SaleListScreen() {
         </View>
       </View>
 
-      <DateRangeFilterBar range={range} onChange={setRange} />
+      <DateRangeFilterBar range={range} onChange={setRange} datesOnly />
 
       {/* Filter chips */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false}
