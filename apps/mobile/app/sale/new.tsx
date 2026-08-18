@@ -737,7 +737,12 @@ export default function NewSaleScreen() {
 
       {/* Store selector — hidden for single-store companies. */}
       {stores.length > 1 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.storeRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.storeRow}
+          contentContainerStyle={styles.storeRowContent}
+        >
           {stores.map((s) => (
             <TouchableOpacity key={s.id} style={[styles.storeChip, storeId === s.id && styles.storeChipActive]} onPress={() => setStoreId(s.id)}>
               <Text style={[styles.storeChipTxt, storeId === s.id && styles.storeChipTxtActive]}>{s.name}</Text>
@@ -1707,7 +1712,11 @@ const styles = StyleSheet.create({
   modeTxt: { fontSize: 13, fontWeight: "600", color: colors.textMuted },
   modeTxtActive: { color: "#fff" },
 
-  storeRow: { backgroundColor: "#fff", paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.border },
+  // Explicit height — a horizontal ScrollView with no bounded height stretches to
+  // fill whatever flexible vertical space its parent offers, which blew the store
+  // chips up into full-height pills instead of a compact row.
+  storeRow: { height: 52, backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: colors.border },
+  storeRowContent: { alignItems: "center", paddingHorizontal: 12 },
   storeChip: {
     paddingHorizontal: 12, paddingVertical: 6, borderRadius: 100, marginRight: 8,
     backgroundColor: "#f1f5f9", borderWidth: 1, borderColor: "#e2e8f0",
