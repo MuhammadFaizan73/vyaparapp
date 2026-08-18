@@ -155,23 +155,26 @@ export default function ItemsScreen() {
           <PillTab label="Categories" active={tab === "cat"} onPress={() => setTab("cat")} />
         </View>
 
-        {/* Store filter — only shown once there's more than one store to pick from. */}
+        {/* Store filter — only shown once there's more than one store to pick from. A
+            plain height-constrained View wraps the ScrollView because a bare `height`
+            on a ScrollView's own style prop isn't reliably honored as a hard cap on Android. */}
         {stores.length > 1 && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.storeFilterRow}
-            contentContainerStyle={styles.storeFilterRowContent}
-          >
-            <TouchableOpacity style={[styles.storeChip, !storeFilter && styles.storeChipActive]} onPress={() => setStoreFilter(null)}>
-              <Text style={[styles.storeChipTxt, !storeFilter && styles.storeChipTxtActive]}>All Stores</Text>
-            </TouchableOpacity>
-            {stores.map((s) => (
-              <TouchableOpacity key={s.id} style={[styles.storeChip, storeFilter === s.id && styles.storeChipActive]} onPress={() => setStoreFilter(s.id)}>
-                <Text style={[styles.storeChipTxt, storeFilter === s.id && styles.storeChipTxtActive]}>{s.name}</Text>
+          <View style={styles.storeFilterRowWrap}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.storeFilterRowContent}
+            >
+              <TouchableOpacity style={[styles.storeChip, !storeFilter && styles.storeChipActive]} onPress={() => setStoreFilter(null)}>
+                <Text style={[styles.storeChipTxt, !storeFilter && styles.storeChipTxtActive]}>All Stores</Text>
               </TouchableOpacity>
-            ))}
-          </ScrollView>
+              {stores.map((s) => (
+                <TouchableOpacity key={s.id} style={[styles.storeChip, storeFilter === s.id && styles.storeChipActive]} onPress={() => setStoreFilter(s.id)}>
+                  <Text style={[styles.storeChipTxt, storeFilter === s.id && styles.storeChipTxtActive]}>{s.name}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
         )}
 
         {/* Items list */}
@@ -290,8 +293,8 @@ const styles = StyleSheet.create({
   tabRow: { flexDirection: "row", gap: 8, marginTop: 14, marginBottom: 4 },
   // Explicit height — a horizontal ScrollView with no bounded height stretches to
   // fill whatever flexible vertical space its parent offers.
-  storeFilterRow: { height: 44, marginTop: 10 },
-  storeFilterRowContent: { alignItems: "center" },
+  storeFilterRowWrap: { height: 44, overflow: "hidden", marginTop: 10 },
+  storeFilterRowContent: { alignItems: "center", height: 44 },
   storeChip: {
     paddingHorizontal: 12, paddingVertical: 6, borderRadius: 100, marginRight: 8,
     backgroundColor: "#fff", borderWidth: 1, borderColor: "#e2e8f0",

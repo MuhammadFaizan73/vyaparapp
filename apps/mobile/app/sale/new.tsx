@@ -735,20 +735,25 @@ export default function NewSaleScreen() {
           which company a new invoice gets tagged with short of backing out to a tab. */}
       <CompanySwitcherBar skipTopInset />
 
-      {/* Store selector — hidden for single-store companies. */}
+      {/* Store selector — hidden for single-store companies. A plain height-constrained
+          View wraps the ScrollView because a bare `height` in a ScrollView's own style
+          prop isn't reliably honored as a hard cap on Android — the scroll content can
+          still measure taller than that, leaving the (correctly-sized) chips centered
+          inside an oversized invisible box instead of a compact row. */}
       {stores.length > 1 && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.storeRow}
-          contentContainerStyle={styles.storeRowContent}
-        >
-          {stores.map((s) => (
-            <TouchableOpacity key={s.id} style={[styles.storeChip, storeId === s.id && styles.storeChipActive]} onPress={() => setStoreId(s.id)}>
-              <Text style={[styles.storeChipTxt, storeId === s.id && styles.storeChipTxtActive]}>{s.name}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+        <View style={styles.storeRowWrap}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.storeRowContent}
+          >
+            {stores.map((s) => (
+              <TouchableOpacity key={s.id} style={[styles.storeChip, storeId === s.id && styles.storeChipActive]} onPress={() => setStoreId(s.id)}>
+                <Text style={[styles.storeChipTxt, storeId === s.id && styles.storeChipTxtActive]}>{s.name}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
       )}
 
       {/* ── Invoice No + Date row ── */}
@@ -1715,8 +1720,11 @@ const styles = StyleSheet.create({
   // Explicit height — a horizontal ScrollView with no bounded height stretches to
   // fill whatever flexible vertical space its parent offers, which blew the store
   // chips up into full-height pills instead of a compact row.
-  storeRow: { height: 52, backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: colors.border },
-  storeRowContent: { alignItems: "center", paddingHorizontal: 12, flexGrow: 1 },
+  // overflow:"hidden" is the real clamp here — height alone on a ScrollView (or a View
+  // wrapping one) isn't always enough to stop Android from letting scroll content
+  // measure past it; hidden overflow forces the visible box to actually stay this size.
+  storeRowWrap: { height: 52, overflow: "hidden", backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: colors.border },
+  storeRowContent: { alignItems: "center", paddingHorizontal: 12, height: 52 },
   storeChip: {
     paddingHorizontal: 12, paddingVertical: 6, borderRadius: 100, marginRight: 8,
     backgroundColor: "#f1f5f9", borderWidth: 1, borderColor: "#e2e8f0",
