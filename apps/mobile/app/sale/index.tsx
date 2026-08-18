@@ -104,7 +104,7 @@ export default function SaleListScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [activeFilter, setActiveFilter] = useState(0);
-  const [range, setRange] = useState<DateRange>(() => getRange("all"));
+  const [range, setRange] = useState<DateRange>(() => getRange("month"));
   const [sales, setSales] = useState<SaleRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
