@@ -21,7 +21,15 @@ type ExportRow = Record<string, string | number>;
 type PeriodPreset = "today" | "week" | "month" | "quarter" | "financial_year" | "custom";
 interface DateRange { from: string; to: string; preset: PeriodPreset; label: string; }
 
-function isoDate(d: Date) { return d.toISOString().slice(0, 10); }
+// Local calendar date, NOT toISOString() — that converts to UTC, which rolls local
+// midnight back to the previous day for any timezone ahead of UTC (e.g. Pakistan,
+// UTC+5), so "This Month" and friends were consistently off by one day.
+function isoDate(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 function todayStr() { return isoDate(new Date()); }
 function monthStart() {
   const d = new Date();

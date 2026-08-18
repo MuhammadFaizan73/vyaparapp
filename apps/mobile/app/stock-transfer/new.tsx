@@ -13,8 +13,11 @@ import { getItems, loadItems, type Item } from "../../src/itemsStore";
 
 type PendingLine = { itemId: string; itemName: string; unit: string; quantity: number };
 
+// Local calendar date, not toISOString() — that rolls local midnight back a day for
+// any timezone ahead of UTC (e.g. Pakistan).
 function todayISO() {
-  return new Date().toISOString().split("T")[0];
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 export default function NewStockTransferScreen() {

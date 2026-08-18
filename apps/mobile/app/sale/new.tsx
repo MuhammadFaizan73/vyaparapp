@@ -733,7 +733,7 @@ export default function NewSaleScreen() {
       {/* This screen is pushed outside the Tabs layout, so the tab bar's own company
           switcher never renders here — without this, there was no way to see or change
           which company a new invoice gets tagged with short of backing out to a tab. */}
-      <CompanySwitcherBar />
+      <CompanySwitcherBar skipTopInset />
 
       {/* Store selector — hidden for single-store companies. */}
       {stores.length > 1 && (
@@ -1716,7 +1716,7 @@ const styles = StyleSheet.create({
   // fill whatever flexible vertical space its parent offers, which blew the store
   // chips up into full-height pills instead of a compact row.
   storeRow: { height: 52, backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: colors.border },
-  storeRowContent: { alignItems: "center", paddingHorizontal: 12 },
+  storeRowContent: { alignItems: "center", paddingHorizontal: 12, flexGrow: 1 },
   storeChip: {
     paddingHorizontal: 12, paddingVertical: 6, borderRadius: 100, marginRight: 8,
     backgroundColor: "#f1f5f9", borderWidth: 1, borderColor: "#e2e8f0",

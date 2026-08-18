@@ -43,7 +43,11 @@ export default function SalesmanTrackingScreen() {
   const [pings, setPings] = useState<LocationPingPoint[]>([]);
   const [officeLoc, setOfficeLoc] = useState<{ latitude: number; longitude: number } | null>(null);
   const [routeLoading, setRouteLoading] = useState(false);
-  const today = new Date().toISOString().slice(0, 10);
+  // Local calendar date, not toISOString() — that rolls local midnight back a day for
+  // any timezone ahead of UTC (e.g. Pakistan), which would query yesterday's route
+  // during the first few hours of the day.
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
   const loadLive = useCallback(async () => {
     try {

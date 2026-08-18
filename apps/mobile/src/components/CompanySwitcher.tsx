@@ -17,7 +17,10 @@ type CompanyView =
   | { level: "distributor"; distributor: Distributor }
   | { level: "branch"; distributor: Distributor; branch: Branch };
 
-export function CompanySwitcherBar() {
+// skipTopInset: pass true when the screen that renders this bar has already applied
+// insets.top to its own root padding (every "new"/"add" stack screen does) — otherwise
+// the inset gets added twice, showing up as a band of blank space above the bar.
+export function CompanySwitcherBar({ skipTopInset = false }: { skipTopInset?: boolean } = {}) {
   const {
     distributors, branches, companies,
     selectedDistributorId, selectedBranchId, selectedCompanyId,
@@ -32,7 +35,7 @@ export function CompanySwitcherBar() {
   // status bar when it's visible — only add our own top inset when we're the first thing
   // painted, otherwise the two would stack and push everything down twice as far.
   const { isReadOnly } = useDevice();
-  const topInset = isReadOnly ? 0 : insets.top;
+  const topInset = skipTopInset || isReadOnly ? 0 : insets.top;
 
   // Desktop's equivalent dropdown is always visible, even for a single-company tenant —
   // it's the only way to confirm/select that company. Only hide here if there's truly

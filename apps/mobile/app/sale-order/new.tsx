@@ -20,7 +20,6 @@ function todayStr() {
   const d = new Date();
   return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
 }
-function todayIso() { return new Date().toISOString().slice(0, 10); }
 
 /* ══════════════════════════════════════════════════════
    ADD ITEM SUB-SCREEN

@@ -19,7 +19,15 @@ export interface DateRange { from: string; to: string; preset: PeriodPreset; lab
 const ALL_TIME_FROM = "2000-01-01";
 const ALL_TIME_TO = "2100-01-01";
 
-function isoDate(d: Date) { return d.toISOString().slice(0, 10); }
+// Local calendar date, NOT toISOString() — that converts to UTC, which rolls local
+// midnight back to the previous day for any timezone ahead of UTC (e.g. Pakistan,
+// UTC+5), so "This Month" and friends were consistently off by one day.
+function isoDate(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 function todayStr() { return isoDate(new Date()); }
 function monthStart() {
   const d = new Date();
