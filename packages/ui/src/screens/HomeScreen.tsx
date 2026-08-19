@@ -15,6 +15,16 @@ function fmtShort(n: number): string {
 }
 const MONTH_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
+// Local calendar date, NOT toISOString() — that converts to UTC, which rolls local
+// midnight back to the previous day for any timezone ahead of UTC (e.g. Pakistan,
+// UTC+5), shifting the from/to sent to the backend by a day.
+function isoDate(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 function getRange(period: Period): { start: Date; end: Date } {
   const now = new Date();
   if (period === "This Month") return { start: new Date(now.getFullYear(), now.getMonth(), 1), end: now };
@@ -123,8 +133,10 @@ export function HomeScreen({ onNavigate }: Props) {
   const [showPeriod, setShowPeriod] = useState(false);
   const [parties, setParties] = useState<Party[]>([]);
   const [sales, setSales] = useState<Transaction[]>([]);
-  const [purchases, setPurchases] = useState<Transaction[]>([]);
-  const [expenses, setExpenses] = useState<Transaction[]>([]);
+  const [saleSummary, setSaleSummary] = useState({ count: 0, total: 0 });
+  const [purchaseSummary, setPurchaseSummary] = useState({ count: 0, total: 0 });
+  const [expenseSummary, setExpenseSummary] = useState({ count: 0, total: 0 });
+  const [prevSaleSummary, setPrevSaleSummary] = useState({ count: 0, total: 0 });
   const [stockValue, setStockValue] = useState<number | null>(null);
   const [cashInHand, setCashInHand] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -142,37 +154,45 @@ export function HomeScreen({ onNavigate }: Props) {
     return { start: new Date(now.getFullYear() - 1, 0, 1), end: new Date(now.getFullYear() - 1, 11, 31) };
   }, [period]);
 
-  // Bound the fetch to cover the selected period plus its comparison period — still a
-  // fixed window, never "every sale/purchase ever" — instead of fetching the whole history
-  // just to filter it down to a month or two client-side.
-  const fetchFrom = useMemo(
-    () => new Date(Math.min(range.start.getTime(), prevRange.start.getTime())).toISOString().slice(0, 10),
-    [range, prevRange]
-  );
-  const fetchTo = useMemo(
-    () => new Date(Math.max(range.end.getTime(), prevRange.end.getTime())).toISOString().slice(0, 10),
-    [range, prevRange]
-  );
+  // Bound the raw-row fetch (used only to build the day-by-day chart) to cover the
+  // selected period plus its comparison period — still a fixed window, never "every
+  // sale ever" — instead of fetching the whole history just to filter it client-side.
+  const fetchFrom = useMemo(() => isoDate(new Date(Math.min(range.start.getTime(), prevRange.start.getTime()))), [range, prevRange]);
+  const fetchTo = useMemo(() => isoDate(new Date(Math.max(range.end.getTime(), prevRange.end.getTime()))), [range, prevRange]);
+
+  const rangeFrom = useMemo(() => isoDate(range.start), [range]);
+  const rangeTo = useMemo(() => isoDate(range.end), [range]);
+  const prevFrom = useMemo(() => isoDate(prevRange.start), [prevRange]);
+  const prevTo = useMemo(() => isoDate(prevRange.end), [prevRange]);
 
   useEffect(() => {
     setLoading(true);
     const companyId = companyFilter ?? undefined;
     Promise.all([
       api.getParties({ companyId }),
-      api.getTransactionsByType("sale", { from: fetchFrom, to: fetchTo, companyId }),
-      api.getTransactionsByType("purchase", { from: fetchFrom, to: fetchTo, companyId }),
-      api.getTransactionsByType("expense", { from: fetchFrom, to: fetchTo, companyId }),
+      // A high but still date-bounded `take` — the chart needs every row in the window
+      // to bucket per day, and the backend's default cap (200) silently dropped the
+      // oldest days for any tenant with more than 200 sales across the two periods.
+      api.getTransactionsByType("sale", { from: fetchFrom, to: fetchTo, companyId, take: 5000 }),
+      // Headline totals come from the backend aggregate, not a sum over the (capped)
+      // row fetch above — a summary query has no row-count limit to silently truncate.
+      api.getTransactionsSummary("sale", { from: rangeFrom, to: rangeTo, companyId }),
+      api.getTransactionsSummary("purchase", { from: rangeFrom, to: rangeTo, companyId }),
+      api.getTransactionsSummary("expense", { from: rangeFrom, to: rangeTo, companyId }),
+      api.getTransactionsSummary("sale", { from: prevFrom, to: prevTo, companyId }),
       api.getReport("stock-summary", { companyId }),
       api.getCashInHand({ companyId }),
-    ]).then(([ps, ss, pur, exp, stock, cash]) => {
+    ]).then(([ps, ss, saleSumm, purchSumm, expSumm, prevSaleSumm, stock, cash]) => {
       setParties(ps);
       setSales(ss);
-      setPurchases(pur);
-      setExpenses(exp);
+      setSaleSummary(saleSumm);
+      setPurchaseSummary(purchSumm);
+      setExpenseSummary(expSumm);
+      setPrevSaleSummary(prevSaleSumm);
       setStockValue(stock?.total?.stockValue ?? 0);
       setCashInHand(cash?.balance ?? 0);
     }).catch(() => {}).finally(() => setLoading(false));
-  }, [fetchFrom, fetchTo, companyFilter]);
+  }, [fetchFrom, fetchTo, rangeFrom, rangeTo, prevFrom, prevTo, companyFilter]);
 
   const receivable = useMemo(() => {
     const pos = parties.filter(p => p.balance > 0);
@@ -188,23 +208,11 @@ export function HomeScreen({ onNavigate }: Props) {
     () => sales.filter(t => inRange(t.date, range)),
     [sales, range]
   );
-  const periodPurchases = useMemo(
-    () => purchases.filter(t => inRange(t.date, range)),
-    [purchases, range]
-  );
-  const periodExpenses = useMemo(
-    () => expenses.filter(t => inRange(t.date, range)),
-    [expenses, range]
-  );
 
-  const totalSale = useMemo(() => periodSales.reduce((s, t) => s + t.total, 0), [periodSales]);
-  const totalPurchase = useMemo(() => periodPurchases.reduce((s, t) => s + t.total, 0), [periodPurchases]);
-  const totalExpense = useMemo(() => periodExpenses.reduce((s, t) => s + t.total, 0), [periodExpenses]);
-
-  const prevSaleTotal = useMemo(
-    () => sales.filter(t => inRange(t.date, prevRange)).reduce((s, t) => s + t.total, 0),
-    [sales, prevRange]
-  );
+  const totalSale = saleSummary.total;
+  const totalPurchase = purchaseSummary.total;
+  const totalExpense = expenseSummary.total;
+  const prevSaleTotal = prevSaleSummary.total;
 
   const saleChange = useMemo(() => {
     if (prevSaleTotal === 0 && totalSale === 0) return null;
@@ -294,7 +302,7 @@ export function HomeScreen({ onNavigate }: Props) {
             </div>
             <div className="hs-metric-item hs-metric-item--border-l">
               <span className="hs-metric-label">Transactions</span>
-              <span className="hs-metric-val">{loading ? "…" : periodSales.length + periodPurchases.length}</span>
+              <span className="hs-metric-val">{loading ? "…" : saleSummary.count + purchaseSummary.count}</span>
             </div>
             <div className="hs-metric-item hs-metric-item--border-l">
               <span className="hs-metric-label">Parties</span>
