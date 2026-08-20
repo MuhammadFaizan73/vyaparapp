@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { api } from "../lib/api";
-import type { Transaction, Party } from "@vyapar/api-client";
+import type { Transaction, Party, TeamMember } from "@vyapar/api-client";
 import { useCompany } from "../lib/CompanyContext";
 
 /* ── helpers ── */
@@ -12,6 +12,32 @@ function formatDate(iso: string) {
 }
 function today() {
   return new Date().toISOString().slice(0, 10);
+}
+function fmtChip(iso: string) {
+  return new Date(iso).toLocaleDateString("en-PK", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+function getPresetRange(preset: string): { from: string; to: string } {
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const iso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const todayStr = iso(now);
+  switch (preset) {
+    case "Today": return { from: todayStr, to: todayStr };
+    case "This Week": {
+      const day = now.getDay();
+      const mon = new Date(now); mon.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
+      return { from: iso(mon), to: todayStr };
+    }
+    case "This Month": return { from: `${y}-${pad(m + 1)}-01`, to: iso(new Date(y, m + 1, 0)) };
+    case "Last Month": return { from: `${y}-${pad(m)}-01`, to: iso(new Date(y, m, 0)) };
+    case "This Quarter": {
+      const qStart = Math.floor(m / 3) * 3;
+      return { from: `${y}-${pad(qStart + 1)}-01`, to: todayStr };
+    }
+    case "This Year": return { from: `${y}-01-01`, to: todayStr };
+    default: return { from: `${y}-${pad(m + 1)}-01`, to: iso(new Date(y, m + 1, 0)) };
+  }
 }
 
 type PiRow = Transaction & { partyName: string; runningBalance: number };
@@ -75,15 +101,62 @@ export function PaymentInScreen({ isLocked = false, onLockedAction }: Props) {
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
   const [deleteConfirmRow, setDeleteConfirmRow] = useState<PiRow | null>(null);
   const [viewHistoryRow, setViewHistoryRow] = useState<PiRow | null>(null);
-  const { companyFilter, selectedCompanyId } = useCompany();
+  const { companyFilter, selectedCompanyId, companies } = useCompany();
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+
+  /* ── date filter — was a static, non-functional display before this fix ── */
+  const initRange = getPresetRange("This Month");
+  const [filterPreset, setFilterPreset] = useState("This Month");
+  const [filterFrom, setFilterFrom] = useState(initRange.from);
+  const [filterTo, setFilterTo] = useState(initRange.to);
+  const [showDatePanel, setShowDatePanel] = useState(false);
+  const [datePanelPos, setDatePanelPos] = useState({ top: 0, left: 0 });
+  const datePanelRef = useRef<HTMLDivElement>(null);
+
+  /* ── firm (company) and user (booker) filters — also static/non-functional before this fix ── */
+  const [firmFilterId, setFirmFilterId] = useState("");
+  const [userFilterId, setUserFilterId] = useState("");
+  const [showFirmPanel, setShowFirmPanel] = useState(false);
+  const [showUserPanel, setShowUserPanel] = useState(false);
+  const [firmPanelPos, setFirmPanelPos] = useState({ top: 0, left: 0 });
+  const [userPanelPos, setUserPanelPos] = useState({ top: 0, left: 0 });
+  const firmPanelRef = useRef<HTMLDivElement>(null);
+  const userPanelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    api.listTeamMembers().then(setTeamMembers).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!showDatePanel) return;
+    function handler(e: MouseEvent) {
+      if (datePanelRef.current && !datePanelRef.current.contains(e.target as Node)) setShowDatePanel(false);
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showDatePanel]);
+
+  useEffect(() => {
+    if (!showFirmPanel && !showUserPanel) return;
+    function handler(e: MouseEvent) {
+      if (showFirmPanel && firmPanelRef.current && !firmPanelRef.current.contains(e.target as Node)) setShowFirmPanel(false);
+      if (showUserPanel && userPanelRef.current && !userPanelRef.current.contains(e.target as Node)) setShowUserPanel(false);
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showFirmPanel, showUserPanel]);
 
   async function loadData() {
     try {
-      const companyId = companyFilter ?? undefined;
+      const companyId = firmFilterId || companyFilter || undefined;
+      const bookerId = userFilterId || undefined;
       const [txns, ps, sum] = await Promise.all([
-        api.getTransactionsByType("payment_in", { take: RECENT_ROWS_LIMIT, companyId }),
+        // Explicit take alongside the date range — a bare take (no from/to) was the bug:
+        // it silently showed the most recent RECENT_ROWS_LIMIT payments regardless of
+        // whatever the filter chips claimed to be showing.
+        api.getTransactionsByType("payment_in", { from: filterFrom, to: filterTo, take: 10000, companyId, bookerId }),
         api.getParties(),
-        api.getTransactionsSummary("payment_in", { companyId }),
+        api.getTransactionsSummary("payment_in", { from: filterFrom, to: filterTo, companyId, bookerId }),
       ]);
       const map = Object.fromEntries(ps.map((p: Party) => [p.id, p]));
       const oldest = txns[txns.length - 1];
@@ -98,7 +171,8 @@ export function PaymentInScreen({ isLocked = false, onLockedAction }: Props) {
   useEffect(() => {
     setLoading(true);
     loadData().finally(() => setLoading(false));
-  }, [companyFilter]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyFilter, filterFrom, filterTo, firmFilterId, userFilterId]);
 
   useEffect(() => {
     if (!menuId) return;
@@ -155,12 +229,104 @@ export function PaymentInScreen({ isLocked = false, onLockedAction }: Props) {
       {/* ── Filter bar ── */}
       <div className="pi-filterbar">
         <span className="pi-filterbar__label">Filter by :</span>
-        <button type="button" className="pi-filterbar__chip">This Month ▾</button>
-        <button type="button" className="pi-filterbar__date">📅 01/05/2026 To 31/05/2026</button>
-        <button type="button" className="pi-filterbar__chip">All Firms ▾</button>
-        <button type="button" className="pi-filterbar__chip">All Users ▾</button>
+        <button type="button" className="pi-filterbar__chip" onClick={(e) => {
+          const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+          setDatePanelPos({ top: r.bottom + 6, left: r.left });
+          setShowDatePanel((v) => !v);
+        }}>{filterPreset} ▾</button>
+        <button type="button" className="pi-filterbar__date" onClick={(e) => {
+          const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+          setDatePanelPos({ top: r.bottom + 6, left: r.left });
+          setShowDatePanel((v) => !v);
+        }}>📅 {fmtChip(filterFrom)} To {fmtChip(filterTo)}</button>
+        <button type="button" className="pi-filterbar__chip" onClick={(e) => {
+          const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+          setFirmPanelPos({ top: r.bottom + 6, left: r.left });
+          setShowFirmPanel((v) => !v);
+        }}>{firmFilterId ? (companies.find((c) => c.id === firmFilterId)?.name ?? "All Firms") : "All Firms"} ▾</button>
+        <button type="button" className="pi-filterbar__chip" onClick={(e) => {
+          const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+          setUserPanelPos({ top: r.bottom + 6, left: r.left });
+          setShowUserPanel((v) => !v);
+        }}>{userFilterId ? (teamMembers.find((m) => m.id === userFilterId)?.name ?? "All Users") : "All Users"} ▾</button>
         <div className="pi-filterbar__spacer" />
       </div>
+
+      {/* ── Firm (company) filter panel ── */}
+      {showFirmPanel && (
+        <div ref={firmPanelRef} style={{ position: "fixed", top: firmPanelPos.top, left: firmPanelPos.left, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, boxShadow: "0 8px 28px rgba(0,0,0,0.13)", zIndex: 700, width: 220, padding: "6px 0", maxHeight: 320, overflowY: "auto" }}>
+          <button type="button" onClick={() => { setFirmFilterId(""); setShowFirmPanel(false); }}
+            style={{ display: "block", width: "100%", padding: "8px 14px", background: !firmFilterId ? "#eff6ff" : "none", border: "none", cursor: "pointer", textAlign: "left", fontSize: 13, color: !firmFilterId ? "#2563eb" : "#374151", fontWeight: !firmFilterId ? 600 : 400 }}>
+            All Firms
+          </button>
+          {companies.map((c) => (
+            <button key={c.id} type="button" onClick={() => { setFirmFilterId(c.id); setShowFirmPanel(false); }}
+              style={{ display: "block", width: "100%", padding: "8px 14px", background: firmFilterId === c.id ? "#eff6ff" : "none", border: "none", cursor: "pointer", textAlign: "left", fontSize: 13, color: firmFilterId === c.id ? "#2563eb" : "#374151", fontWeight: firmFilterId === c.id ? 600 : 400 }}>
+              {c.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* ── User (booker) filter panel ── */}
+      {showUserPanel && (
+        <div ref={userPanelRef} style={{ position: "fixed", top: userPanelPos.top, left: userPanelPos.left, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, boxShadow: "0 8px 28px rgba(0,0,0,0.13)", zIndex: 700, width: 220, padding: "6px 0", maxHeight: 320, overflowY: "auto" }}>
+          <button type="button" onClick={() => { setUserFilterId(""); setShowUserPanel(false); }}
+            style={{ display: "block", width: "100%", padding: "8px 14px", background: !userFilterId ? "#eff6ff" : "none", border: "none", cursor: "pointer", textAlign: "left", fontSize: 13, color: !userFilterId ? "#2563eb" : "#374151", fontWeight: !userFilterId ? 600 : 400 }}>
+            All Users
+          </button>
+          {teamMembers.length === 0 ? (
+            <div style={{ padding: "8px 14px", fontSize: 12, color: "#9ca3af" }}>No team members yet.</div>
+          ) : teamMembers.map((m) => (
+            <button key={m.id} type="button" onClick={() => { setUserFilterId(m.id); setShowUserPanel(false); }}
+              style={{ display: "block", width: "100%", padding: "8px 14px", background: userFilterId === m.id ? "#eff6ff" : "none", border: "none", cursor: "pointer", textAlign: "left", fontSize: 13, color: userFilterId === m.id ? "#2563eb" : "#374151", fontWeight: userFilterId === m.id ? 600 : 400 }}>
+              {m.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* ── Date filter panel (fixed) ── */}
+      {showDatePanel && (
+        <div ref={datePanelRef} style={{ position: "fixed", top: datePanelPos.top, left: datePanelPos.left, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, boxShadow: "0 8px 28px rgba(0,0,0,0.13)", zIndex: 700, width: 340, padding: "12px 0 16px" }}>
+          <div style={{ padding: "0 14px 10px", fontSize: 11, fontWeight: 700, color: "#9ca3af", letterSpacing: 0.8, textTransform: "uppercase" }}>Quick Select</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2px 0" }}>
+            {["Today", "This Week", "This Month", "Last Month", "This Quarter", "This Year"].map((p) => (
+              <button key={p} type="button"
+                onClick={() => {
+                  const r = getPresetRange(p);
+                  setFilterPreset(p); setFilterFrom(r.from); setFilterTo(r.to);
+                  setShowDatePanel(false);
+                }}
+                style={{ padding: "8px 14px", background: filterPreset === p ? "#eff6ff" : "none", border: "none", cursor: "pointer", textAlign: "left", fontSize: 13, color: filterPreset === p ? "#2563eb" : "#374151", fontWeight: filterPreset === p ? 600 : 400 }}
+                onMouseEnter={(e) => { if (filterPreset !== p) e.currentTarget.style.background = "#f9fafb"; }}
+                onMouseLeave={(e) => { if (filterPreset !== p) e.currentTarget.style.background = "none"; }}
+              >{p}</button>
+            ))}
+          </div>
+          <div style={{ height: 1, background: "#f3f4f6", margin: "10px 0" }} />
+          <div style={{ padding: "0 14px 4px", fontSize: 11, fontWeight: 700, color: "#9ca3af", letterSpacing: 0.8, textTransform: "uppercase" }}>Custom Range</div>
+          <div style={{ display: "flex", gap: 8, padding: "8px 14px 0", alignItems: "center" }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 3 }}>From</div>
+              <input type="date" value={filterFrom}
+                onChange={(e) => { setFilterFrom(e.target.value); setFilterPreset("Custom"); }}
+                style={{ width: "100%", border: "1px solid #d1d5db", borderRadius: 6, padding: "6px 8px", fontSize: 13, boxSizing: "border-box" }} />
+            </div>
+            <span style={{ fontSize: 13, color: "#9ca3af", marginTop: 14 }}>–</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 3 }}>To</div>
+              <input type="date" value={filterTo}
+                onChange={(e) => { setFilterTo(e.target.value); setFilterPreset("Custom"); }}
+                style={{ width: "100%", border: "1px solid #d1d5db", borderRadius: 6, padding: "6px 8px", fontSize: 13, boxSizing: "border-box" }} />
+            </div>
+          </div>
+          <div style={{ padding: "10px 14px 0", display: "flex", justifyContent: "flex-end" }}>
+            <button type="button" onClick={() => setShowDatePanel(false)}
+              style={{ padding: "6px 16px", background: "#3b82f6", color: "#fff", border: "none", borderRadius: 6, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>Apply</button>
+          </div>
+        </div>
+      )}
 
       {/* ── Summary card ── */}
       <div className="pi-summary">

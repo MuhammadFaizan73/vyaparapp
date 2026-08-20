@@ -11,6 +11,7 @@ import { AddItemModal } from "./AddItemModal";
 import { InvoicePreviewModal } from "./InvoicePreviewModal";
 import { PaymentInForm, RECENT_ROWS_LIMIT } from "./PaymentInScreen";
 import { DeliveryChallanModal } from "./DeliveryChallanModal";
+import { CompanyDropdown } from "./CompanyDropdown";
 import { loadSettings } from "./SettingsScreen";
 
 /* ── helpers ── */
@@ -163,21 +164,61 @@ function partyColor(name: string) {
   return avatarCache[name];
 }
 
+function ddmmyyyy(iso: string) {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+}
+
 // Exports exactly what's on screen — same rows the filters (date range, search, paid/unpaid)
-// have already narrowed down — not the full unfiltered sale history.
-function exportSalesToExcel(rows: SaleRow[], from: string, to: string) {
-  const sheet = XLSX.utils.json_to_sheet(
-    rows.map((s, idx) => ({
+// have already narrowed down — not the full unfiltered sale history. Same two-sheet "Sale
+// Report" / "Item Details" shape the app's own Import Sale History screen reads, so a file
+// exported here can be re-imported elsewhere without any column remapping.
+function exportSalesToExcel(rows: SaleRow[], parties: Party[], from: string, to: string) {
+  const phoneByPartyId = new Map(parties.map((p) => [p.id, p.phone ?? ""]));
+
+  const saleReportRows = rows.map((s, idx) => {
+    const paymentType = parseSaleNotes(s.notes).paymentType;
+    return {
+      "Date": ddmmyyyy(s.date),
+      "Order No": "",
       "Invoice No": s.number ?? `#${idx + 1}`,
       "Party Name": s.partyName,
-      "Date": formatDate(s.date),
-      "Amount": s.total,
-      "Balance": s.balance,
+      "Party Phone No.": phoneByPartyId.get(s.partyId) ?? "",
+      "Total Amount": s.total,
+      "Payment Type": paymentType === "Credit" ? "Credit" : (paymentType || "Cash"),
+      "Received/Paid Amount": s.total - s.balance,
+      "Balance Due": s.balance,
+      "Due Date": ddmmyyyy(s.date),
       "Status": s.balance === 0 ? "Paid" : "Unpaid",
-    })),
-  );
+      "Description": "",
+      "Cash": 0,
+    };
+  });
+
+  const itemDetailRows = rows.flatMap((s, idx) => {
+    const items = parseSaleNotes(s.notes).items;
+    return items.map((it: any) => ({
+      "Date": ddmmyyyy(s.date),
+      "Invoice No./Txn No.": s.number ?? `#${idx + 1}`,
+      "Party Name": s.partyName,
+      "Item Name": it.name ?? "",
+      "Item Code": "",
+      "Category": "",
+      "Challan/Order No.": "",
+      "Quantity": it.qty ?? 0,
+      "Unit": it.unit && it.unit !== "NONE" ? it.unit : "",
+      "UnitPrice": it.rate ?? 0,
+      "Discount Percent": it.discount || 0,
+      "Discount": Number((((it.qty ?? 0) * (it.rate ?? 0) * (it.discount || 0)) / 100).toFixed(2)),
+      "Transaction Type": "Sale",
+      "Amount": Number((((it.qty ?? 0) * (it.rate ?? 0)) * (1 - (it.discount || 0) / 100)).toFixed(2)),
+    }));
+  });
+
   const book = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(book, sheet, "Sale Invoices".slice(0, 31));
+  XLSX.utils.book_append_sheet(book, XLSX.utils.json_to_sheet(saleReportRows), "Sale Report");
+  XLSX.utils.book_append_sheet(book, XLSX.utils.json_to_sheet(itemDetailRows), "Item Details");
   XLSX.writeFile(book, `SaleInvoices_${from}_to_${to}.xlsx`);
 }
 
@@ -603,7 +644,7 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
 
               <div className="sale-filterbar__spacer" />
 
-              <button type="button" className="dc-icon-btn" onClick={() => exportSalesToExcel(filtered, filterFrom, filterTo)}>
+              <button type="button" className="dc-icon-btn" onClick={() => exportSalesToExcel(filtered, parties, filterFrom, filterTo)}>
                 📊 Excel Report
               </button>
 
@@ -1442,7 +1483,8 @@ function NewSaleForm({
     setError("");
     if (mode === "credit" && !selectedParty) { setError("Select a customer from the dropdown."); return; }
     if (validItems.length === 0) { setError("Add at least one item with quantity."); return; }
-    if (!selectedCompanyId) { setError("Select a specific Company from the company switcher before saving — invoices can't be saved under \"All Companies\"."); return; }
+    if (!selectedCompanyId) { setError("Select a specific Company before saving — invoices can't be saved under \"All Companies\"."); return; }
+    if (!bookerId) { setError(teamMembers.length === 0 ? "Add a Team Member (Booker/Salesman) before you can save a sale." : "Select a Booker/Salesman before saving."); return; }
     const lowStock = validItems
       .filter((i) => i.stock !== undefined && i.qty > i.stock)
       .map((i) => i.name);
@@ -1625,6 +1667,11 @@ function NewSaleForm({
                 })}
               </div>
             )}
+
+            <div className="lsf-field" style={{ maxWidth: 220, marginBottom: 12 }}>
+              <label className="lsf-field__lbl">Company *</label>
+              <CompanyDropdown />
+            </div>
 
             {stores.length > 1 && (
               <div className="lsf-field" style={{ maxWidth: 220, marginBottom: 12 }}>
@@ -1863,10 +1910,10 @@ function NewSaleForm({
                 <span>Balance: {fmt(balance)}</span>
               </div>
               <div className="lsf-totals-row">
-                <span className="lsf-totals-lbl">Booker</span>
+                <span className="lsf-totals-lbl">Booker *</span>
                 <div className="lsf-totals-controls">
                   <select className="lsf-sm-select" value={bookerId} onChange={(e) => setBookerId(e.target.value)}>
-                    <option value="">No booker</option>
+                    <option value="">Select Booker</option>
                     {teamMembers.map((m) => (
                       <option key={m.id} value={m.id}>{m.name}</option>
                     ))}
@@ -2118,6 +2165,10 @@ function NewSaleForm({
                 />
                 <span className="nsf-invoice-date-icon">📅</span>
               </div>
+            </div>
+            <div className="nsf-invoice-meta__row">
+              <span className="nsf-invoice-meta__lbl">Company *</span>
+              <CompanyDropdown />
             </div>
             {stores.length > 1 && (
               <div className="nsf-invoice-meta__row">
@@ -2430,20 +2481,20 @@ function NewSaleForm({
             <button type="button" className="nsf-add-payment-btn">+ Add Payment type</button>
 
             <div className="nsf-payment-field">
-              <span className="nsf-payment-lbl">Booker</span>
+              <span className="nsf-payment-lbl">Booker *</span>
               {teamMembers.length > 0 ? (
                 <select
                   className="nsf-payment-select"
                   value={bookerId}
                   onChange={(e) => setBookerId(e.target.value)}
                 >
-                  <option value="">No booker</option>
+                  <option value="">Select Booker</option>
                   {teamMembers.map((m) => (
                     <option key={m.id} value={m.id}>{m.name}</option>
                   ))}
                 </select>
               ) : (
-                <span className="nsf-booker-empty-hint">No team members yet — add one from Team → Add User</span>
+                <span className="nsf-booker-empty-hint">No team members yet — add one from Team → Add User before you can save a sale.</span>
               )}
             </div>
 

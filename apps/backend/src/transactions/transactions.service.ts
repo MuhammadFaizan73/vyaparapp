@@ -129,7 +129,7 @@ export class TransactionsService {
   async listByType(
     tenantId: string,
     type: string,
-    opts?: { take?: number; skip?: number; from?: string; to?: string; companyId?: string; storeId?: string },
+    opts?: { take?: number; skip?: number; from?: string; to?: string; companyId?: string; storeId?: string; bookerId?: string },
   ): Promise<TransactionRow[]> {
     const dateFilter = this.dateFilter(opts?.from, opts?.to);
     const rows = await this.prisma.transaction.findMany({
@@ -138,6 +138,7 @@ export class TransactionsService {
         ...(dateFilter && { date: dateFilter }),
         ...companyIdWhere(opts?.companyId),
         ...(opts?.storeId ? { storeId: opts.storeId } : {}),
+        ...(opts?.bookerId ? { bookerId: opts.bookerId } : {}),
       },
       orderBy: { date: "desc" },
       take: opts?.take ?? MAX_TRANSACTIONS_PER_PAGE,
@@ -193,10 +194,15 @@ export class TransactionsService {
   async summaryByType(
     tenantId: string,
     type: string,
-    opts?: { from?: string; to?: string; companyId?: string },
+    opts?: { from?: string; to?: string; companyId?: string; bookerId?: string },
   ): Promise<{ count: number; total: number; balance: number }> {
     const dateFilter = this.dateFilter(opts?.from, opts?.to);
-    const where = { tenantId, type, ...(dateFilter && { date: dateFilter }), ...companyIdWhere(opts?.companyId) };
+    const where = {
+      tenantId, type,
+      ...(dateFilter && { date: dateFilter }),
+      ...companyIdWhere(opts?.companyId),
+      ...(opts?.bookerId ? { bookerId: opts.bookerId } : {}),
+    };
     const [agg, count] = await Promise.all([
       this.prisma.transaction.aggregate({ where, _sum: { total: true, balance: true } }),
       this.prisma.transaction.count({ where }),

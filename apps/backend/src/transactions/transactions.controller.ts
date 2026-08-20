@@ -19,6 +19,7 @@ export class TransactionsController {
     @Query("to") to?: string,
     @Query("companyId") companyId?: string,
     @Query("storeId") storeId?: string,
+    @Query("bookerId") bookerId?: string,
   ) {
     if (partyId) return this.transactionsService.listForParty(req.tenantId, partyId);
     if (type) {
@@ -29,6 +30,7 @@ export class TransactionsController {
         to,
         companyId,
         storeId,
+        bookerId,
       });
     }
     return this.transactionsService.listAll(req.tenantId, companyId, storeId);
@@ -41,8 +43,9 @@ export class TransactionsController {
     @Query("from") from?: string,
     @Query("to") to?: string,
     @Query("companyId") companyId?: string,
+    @Query("bookerId") bookerId?: string,
   ) {
-    return this.transactionsService.summaryByType(req.tenantId, type, { from, to, companyId });
+    return this.transactionsService.summaryByType(req.tenantId, type, { from, to, companyId, bookerId });
   }
 
   @Get("opening-balance")
