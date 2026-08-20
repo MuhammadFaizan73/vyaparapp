@@ -197,7 +197,9 @@ export function SaleTxnScreen({ activeKey, isLocked = false, onLockedAction }: P
   async function load() {
     try {
       const [txns, ps, items] = await Promise.all([
-        api.getTransactionsByType(cfg.txnType, { from: filterFrom, to: filterTo, companyId: companyFilter ?? undefined }),
+        // Explicit take — the backend defaults to a 200-row cap even with a date range,
+        // which silently drops the oldest rows in any period with more than 200 entries.
+        api.getTransactionsByType(cfg.txnType, { from: filterFrom, to: filterTo, companyId: companyFilter ?? undefined, take: 10000 }),
         api.getParties(),
         api.getItems(),
       ]);

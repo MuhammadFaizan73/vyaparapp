@@ -314,7 +314,10 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
   async function loadSales() {
     try {
       const [txns, ps, its] = await Promise.all([
-        api.getTransactionsByType("sale", { from: filterFrom, to: filterTo, companyId: companyFilter ?? undefined }),
+        // Explicit take — the backend defaults to a 200-row cap (its guard against an
+        // unbounded all-time fetch) even when a date range is passed, which silently
+        // dropped the oldest invoices in any month with more than 200 sales.
+        api.getTransactionsByType("sale", { from: filterFrom, to: filterTo, companyId: companyFilter ?? undefined, take: 10000 }),
         api.getParties(),
         api.getItems(),
       ]);
