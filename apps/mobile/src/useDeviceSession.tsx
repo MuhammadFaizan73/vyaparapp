@@ -1,9 +1,16 @@
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import * as SecureStore from "expo-secure-store";
 import * as Device from "expo-device";
-import { Platform } from "react-native";
-import { api, loadToken } from "./auth";
+import { Platform, AppState } from "react-native";
+import { router } from "expo-router";
+import { api, loadToken, clearToken } from "./auth";
 import type { DeviceSession } from "@vyapar/api-client";
+
+// A mobile license is single-device: logging in on a new phone deletes this phone's
+// session server-side (see DevicesService.register). Poll for that instead of waiting
+// for the user to notice — checked on an interval and whenever the app is foregrounded,
+// since there's no push channel to notify this device the moment it's kicked.
+const KICK_CHECK_INTERVAL_MS = 30_000;
 
 const DEVICE_ID_KEY = "vyapar_device_id";
 
@@ -51,6 +58,7 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
   const [isReadOnly, setIsReadOnly] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [deviceId, setDeviceId] = useState<string | null>(null);
+  const deviceIdRef = useRef<string | null>(null);
 
   const register = useCallback(async () => {
     const token = await loadToken();
@@ -58,6 +66,7 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     try {
       const id = await getOrCreateDeviceId();
       setDeviceId(id);
+      deviceIdRef.current = id;
       const session = await api.registerDevice(id, getDeviceName(), "mobile");
       setSessionId(session.id);
       setIsReadOnly(!session.isActive);
@@ -66,9 +75,40 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // If another phone has since logged into this same license, our own DeviceSession
+  // row was deleted server-side — getDevices() coming back without our deviceId is
+  // the signal. Log out locally rather than leaving the app silently unusable.
+  const checkKicked = useCallback(async () => {
+    const id = deviceIdRef.current;
+    if (!id) return;
+    const token = await loadToken();
+    if (!token) return;
+    try {
+      const sessions = await api.getDevices();
+      const stillThere = sessions.some((s) => s.deviceId === id);
+      if (!stillThere) {
+        await clearToken();
+        router.replace("/onboarding" as never);
+      }
+    } catch {
+      // Network error — don't log out over a flaky connection
+    }
+  }, []);
+
   useEffect(() => {
     register();
   }, [register]);
+
+  useEffect(() => {
+    const interval = setInterval(checkKicked, KICK_CHECK_INTERVAL_MS);
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") checkKicked();
+    });
+    return () => {
+      clearInterval(interval);
+      sub.remove();
+    };
+  }, [checkKicked]);
 
   return (
     // @ts-ignore — React 19 JSX

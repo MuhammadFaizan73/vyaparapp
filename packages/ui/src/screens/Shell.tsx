@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useCallback, type ReactNode } from "react";
+import { useMemo, useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import type { LicenseStatus, DeviceSession } from "@vyapar/api-client";
 import { loadTenant, loadRole, api } from "../lib/api";
 import { CompanyProvider } from "../lib/CompanyContext";
@@ -239,10 +239,12 @@ export function Shell({ status, onLogout, onLicenseActivated }: Props) {
   const [devices, setDevices] = useState<DeviceSession[]>([]);
   const [showDevices, setShowDevices] = useState(false);
   const [deviceSessionId, setDeviceSessionId] = useState<string | null>(null);
+  const desktopDeviceIdRef = useRef<string | null>(null);
 
   const registerDevice = useCallback(async () => {
     try {
       const deviceId = getOrCreateDesktopDeviceId();
+      desktopDeviceIdRef.current = deviceId;
       const hostname = window.location.hostname || "Desktop App";
       const session = await api.registerDevice(deviceId, `Desktop – ${hostname}`, "desktop");
       setDeviceSessionId(session.id);
@@ -251,6 +253,22 @@ export function Shell({ status, onLogout, onLicenseActivated }: Props) {
       // Network error — stay in current mode
     }
   }, []);
+
+  // Desktop is a single-device license too — if this same license gets activated on
+  // another PC, this session's DeviceSession row is deleted server-side (see
+  // DevicesService.register). Poll for that and log out locally rather than leaving
+  // a stale, still-open window sitting on someone else's license.
+  const checkKicked = useCallback(async () => {
+    const id = desktopDeviceIdRef.current;
+    if (!id) return;
+    try {
+      const list = await api.getDevices();
+      const stillThere = list.some((d) => d.deviceId === id);
+      if (!stillThere) onLogout();
+    } catch {
+      // Network error — don't log out over a flaky connection
+    }
+  }, [onLogout]);
 
   const loadDevices = useCallback(async () => {
     try {
@@ -276,6 +294,16 @@ export function Shell({ status, onLogout, onLicenseActivated }: Props) {
   useEffect(() => {
     registerDevice();
   }, [registerDevice]);
+
+  useEffect(() => {
+    const interval = setInterval(checkKicked, 30_000);
+    const onFocus = () => checkKicked();
+    window.addEventListener("focus", onFocus);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [checkKicked]);
 
   const role = loadRole();
   const allowed = ROLE_ALLOWED[role]; // undefined = owner = full access

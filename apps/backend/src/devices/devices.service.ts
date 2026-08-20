@@ -7,6 +7,23 @@ export class DevicesService {
   constructor(private readonly prisma: PrismaService) {}
 
   async register(tenantId: string, dto: RegisterDeviceDto) {
+    // Mobile and desktop are sold as separate single-device licenses — logging in on a
+    // new phone/PC kicks any other device of that SAME type off immediately (removed
+    // here; the old device's poll loop — useDeviceSession.tsx on mobile, Shell.tsx's
+    // registerDevice interval on desktop — notices its session is gone and force-logs-
+    // out within ~30s). The two license types are independent: a new mobile login never
+    // touches a desktop session or vice versa. "web" isn't a sold license yet, so it
+    // still only participates in the older multi-device "view-only" read/write lock
+    // via `isActive`, shared with whichever type happens to hold it.
+    if (dto.deviceType === "mobile" || dto.deviceType === "desktop") {
+      const otherSameType = await this.prisma.deviceSession.findMany({
+        where: { tenantId, deviceType: dto.deviceType, deviceId: { not: dto.deviceId } },
+      });
+      for (const s of otherSameType) {
+        await this.remove(tenantId, s.id);
+      }
+    }
+
     const session = await this.prisma.deviceSession.upsert({
       where: { tenantId_deviceId: { tenantId, deviceId: dto.deviceId } },
       update: { deviceName: dto.deviceName, deviceType: dto.deviceType, lastSeenAt: new Date() },
