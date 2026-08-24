@@ -18,7 +18,7 @@ import { CompanySwitcherBar } from "../../src/components/CompanySwitcher";
 import { takeHandoffTxn } from "../../src/txnHandoff";
 import { parseNoteItems } from "../../src/invoiceHtml";
 import { useTransactionSettings } from "../../src/useTransactionSettings";
-import type { TeamMember, Party, Transaction } from "@vyapar/api-client";
+import type { TeamMember, Party, Transaction, TaxRate } from "@vyapar/api-client";
 
 type LineItem = {
   id: string;
@@ -139,6 +139,7 @@ export default function NewSaleScreen() {
   useEffect(() => {
     loadItems();
     api.listTeamMembers().then(setTeamMembers).catch(() => {});
+    api.listTaxRates().then(setTaxRates).catch(() => {});
     return subscribeItems(() => setCatalog(getItems()));
   }, []);
 
@@ -226,6 +227,9 @@ export default function NewSaleScreen() {
   // Summary state
   const [discountPct, setDiscountPct] = useState("");
   const [discountRs, setDiscountRs] = useState("");
+  const [taxRates, setTaxRates] = useState<TaxRate[]>([]);
+  const [taxRateId, setTaxRateId] = useState("");
+  const [showTaxPicker, setShowTaxPicker] = useState(false);
   const [roundOff, setRoundOff] = useState(true);
   const [received, setReceived] = useState(false);
   const [receivedAmt, setReceivedAmt] = useState("");
@@ -306,6 +310,9 @@ export default function NewSaleScreen() {
     ? (subtotal * discountPctVal) / 100
     : parseFloat(discountRs) || 0;
   const afterDiscount = subtotal - discountRsVal;
+  const selectedTaxRate = taxRates.find((t) => t.id === taxRateId);
+  const taxAmt = selectedTaxRate ? (afterDiscount * selectedTaxRate.rate) / 100 : 0;
+  const afterTax = afterDiscount + taxAmt;
 
   function handleDiscountPct(val: string) {
     setDiscountPct(val);
@@ -319,8 +326,8 @@ export default function NewSaleScreen() {
     setDiscountPct(val && subtotal ? ((rs / subtotal) * 100).toFixed(2) : "");
   }
 
-  const roundOffAmt = roundOff ? Math.round(afterDiscount) - afterDiscount : 0;
-  const total = afterDiscount + roundOffAmt;
+  const roundOffAmt = roundOff ? Math.round(afterTax) - afterTax : 0;
+  const total = afterTax + roundOffAmt;
   const receivedAmtVal = parseFloat(receivedAmt) || 0;
   const linkedAmount = partyTxns
     .filter((t) => linkedTxnIds.includes(t.id))
@@ -945,13 +952,13 @@ export default function NewSaleScreen() {
 
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Tax</Text>
-              <TouchableOpacity style={styles.taxDropdown}>
-                <Text style={styles.taxTxt}>None</Text>
+              <TouchableOpacity style={styles.taxDropdown} onPress={() => setShowTaxPicker(true)}>
+                <Text style={styles.taxTxt}>{selectedTaxRate ? `${selectedTaxRate.name} (${selectedTaxRate.rate}%)` : "None"}</Text>
                 <Ionicons name="chevron-down" size={13} color={colors.textMuted} />
               </TouchableOpacity>
-              <View style={[styles.taxAmtBox, { opacity: 0.5 }]}>
+              <View style={styles.taxAmtBox}>
                 <Text style={styles.taxRs}>Rs</Text>
-                <Text style={styles.taxAmt}>0.0000</Text>
+                <Text style={styles.taxAmt}>{taxAmt.toFixed(4)}</Text>
               </View>
             </View>
 
@@ -1233,6 +1240,33 @@ export default function NewSaleScreen() {
               >
                 <Text style={{ fontSize: 14, color: colors.text }}>{m.name}</Text>
                 {bookerId === m.id && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      </Modal>
+
+      {/* ── Tax Picker Modal ── */}
+      <Modal visible={showTaxPicker} transparent animationType="slide" onRequestClose={() => setShowTaxPicker(false)}>
+        <TouchableOpacity style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)" }} activeOpacity={1} onPress={() => setShowTaxPicker(false)} />
+        <View style={{ backgroundColor: "#fff", borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, gap: 4, maxHeight: "60%" }}>
+          <Text style={{ fontSize: 16, fontWeight: "700", color: colors.text, marginBottom: 8 }}>Select Tax</Text>
+          <ScrollView>
+            <TouchableOpacity
+              style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: "#f1f5f9" }}
+              onPress={() => { setTaxRateId(""); setShowTaxPicker(false); }}
+            >
+              <Text style={{ fontSize: 14, color: colors.text }}>None</Text>
+              {!taxRateId && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
+            </TouchableOpacity>
+            {taxRates.map((t) => (
+              <TouchableOpacity
+                key={t.id}
+                style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: "#f1f5f9" }}
+                onPress={() => { setTaxRateId(t.id); setShowTaxPicker(false); }}
+              >
+                <Text style={{ fontSize: 14, color: colors.text }}>{t.name} ({t.rate}%)</Text>
+                {taxRateId === t.id && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
               </TouchableOpacity>
             ))}
           </ScrollView>

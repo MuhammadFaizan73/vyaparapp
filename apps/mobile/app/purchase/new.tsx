@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
-  StyleSheet, KeyboardAvoidingView, Platform, Alert,
+  StyleSheet, KeyboardAvoidingView, Platform, Alert, Modal,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -13,6 +13,7 @@ import { useItems } from "../../src/useItems";
 import { useSelectedCompany } from "../../src/useSelectedCompany";
 import { useStores } from "../../src/useStores";
 import { CompanySwitcherBar } from "../../src/components/CompanySwitcher";
+import type { TaxRate } from "@vyapar/api-client";
 
 // itemId: the real catalog Item.id, captured when picked from the catalog suggestion
 // list — needed so the purchase can actually move per-store stock. Cleared the moment
@@ -170,6 +171,10 @@ export default function NewPurchaseScreen() {
     setStoreId(stores.find((s) => s.isMain)?.id ?? stores[0]?.id ?? "");
   }, [stores, storeId]);
 
+  useEffect(() => {
+    api.listTaxRates().then(setTaxRates).catch(() => {});
+  }, []);
+
   const [billNo] = useState("1");
   const [dateDisplay] = useState(todayStr());
 
@@ -182,6 +187,9 @@ export default function NewPurchaseScreen() {
   const [items, setItems] = useState<ItemRow[]>([]);
   const [discountPct, setDiscountPct] = useState("");
   const [discountRs, setDiscountRs] = useState("");
+  const [taxRates, setTaxRates] = useState<TaxRate[]>([]);
+  const [taxRateId, setTaxRateId] = useState("");
+  const [showTaxPicker, setShowTaxPicker] = useState(false);
   const [roundOff, setRoundOff] = useState(true);
   const [isPaid, setIsPaid] = useState(false);
   const [paidAmt, setPaidAmt] = useState("");
@@ -193,8 +201,11 @@ export default function NewPurchaseScreen() {
   const totalQty = items.reduce((s, i) => s + i.qty, 0);
   const discAmt = discountPct ? (subtotal * parseFloat(discountPct)) / 100 : parseFloat(discountRs) || 0;
   const afterDisc = subtotal - discAmt;
-  const roundOffAmt = roundOff ? Math.round(afterDisc) - afterDisc : 0;
-  const total = afterDisc + roundOffAmt;
+  const selectedTaxRate = taxRates.find((t) => t.id === taxRateId);
+  const taxAmt = selectedTaxRate ? (afterDisc * selectedTaxRate.rate) / 100 : 0;
+  const afterTax = afterDisc + taxAmt;
+  const roundOffAmt = roundOff ? Math.round(afterTax) - afterTax : 0;
+  const total = afterTax + roundOffAmt;
   const paid = isPaid ? (parseFloat(paidAmt) || total) : 0;
   const balance = Math.max(0, total - paid);
 
@@ -253,6 +264,7 @@ export default function NewPurchaseScreen() {
   }
 
   return (
+    <>
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <View style={[s.screen, { paddingTop: insets.top }]}>
 
@@ -414,13 +426,13 @@ export default function NewPurchaseScreen() {
           <View style={s.flatRow}>
             <Text style={s.flatLabel}>Tax</Text>
             <View style={s.taxRow}>
-              <View style={s.taxSelect}>
-                <Text style={s.taxSelectTxt}>None</Text>
+              <TouchableOpacity style={s.taxSelect} onPress={() => setShowTaxPicker(true)}>
+                <Text style={s.taxSelectTxt}>{selectedTaxRate ? `${selectedTaxRate.name} (${selectedTaxRate.rate}%)` : "None"}</Text>
                 <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
-              </View>
+              </TouchableOpacity>
               <View style={s.discRsBox}>
                 <Text style={s.discRsLbl}>Rs</Text>
-                <Text style={s.taxAmtTxt}>0.0000</Text>
+                <Text style={s.taxAmtTxt}>{taxAmt.toFixed(4)}</Text>
               </View>
             </View>
           </View>
@@ -487,6 +499,34 @@ export default function NewPurchaseScreen() {
         </View>
       </View>
     </KeyboardAvoidingView>
+
+    {/* Tax Picker Modal */}
+    <Modal visible={showTaxPicker} transparent animationType="slide" onRequestClose={() => setShowTaxPicker(false)}>
+      <TouchableOpacity style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)" }} activeOpacity={1} onPress={() => setShowTaxPicker(false)} />
+      <View style={{ backgroundColor: "#fff", borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, gap: 4, maxHeight: "60%" }}>
+        <Text style={{ fontSize: 16, fontWeight: "700", color: colors.text, marginBottom: 8 }}>Select Tax</Text>
+        <ScrollView>
+          <TouchableOpacity
+            style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: "#f1f5f9" }}
+            onPress={() => { setTaxRateId(""); setShowTaxPicker(false); }}
+          >
+            <Text style={{ fontSize: 14, color: colors.text }}>None</Text>
+            {!taxRateId && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
+          </TouchableOpacity>
+          {taxRates.map((t) => (
+            <TouchableOpacity
+              key={t.id}
+              style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: "#f1f5f9" }}
+              onPress={() => { setTaxRateId(t.id); setShowTaxPicker(false); }}
+            >
+              <Text style={{ fontSize: 14, color: colors.text }}>{t.name} ({t.rate}%)</Text>
+              {taxRateId === t.id && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+    </Modal>
+    </>
   );
 }
 

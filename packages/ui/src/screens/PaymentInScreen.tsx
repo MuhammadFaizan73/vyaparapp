@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import * as XLSX from "xlsx";
 import { api } from "../lib/api";
 import type { Transaction, Party, TeamMember } from "@vyapar/api-client";
 import { useCompany } from "../lib/CompanyContext";
@@ -40,7 +41,7 @@ function getPresetRange(preset: string): { from: string; to: string } {
   }
 }
 
-type PiRow = Transaction & { partyName: string; runningBalance: number };
+export type PiRow = Transaction & { partyName: string; runningBalance: number };
 
 // Rows arrive most-recent-first; running balance accumulates chronologically (oldest
 // first), starting from whatever came before the oldest row currently on screen.
@@ -78,6 +79,30 @@ function getPaymentType(notes: string | null): string {
   } catch {
     return "Cash";
   }
+}
+
+function ddmmyyyyPI(iso: string) {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+}
+
+function exportPaymentsToExcel(rows: PiRow[], from: string, to: string) {
+  const sheet = XLSX.utils.json_to_sheet(
+    rows.map((r, idx) => ({
+      "Date": ddmmyyyyPI(r.date),
+      "Reference No": r.number ?? `#${idx + 1}`,
+      "Party Name": r.partyName,
+      "Total Amount": r.total,
+      "Payment Type": getPaymentType(r.notes),
+      "Received": r.total - r.balance,
+      "Running Balance": r.runningBalance,
+      "Status": r.balance === 0 ? "Used" : "Unused",
+    })),
+  );
+  const book = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(book, sheet, "Payment-In");
+  XLSX.writeFile(book, `PaymentIn_${from}_to_${to}.xlsx`);
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -250,6 +275,9 @@ export function PaymentInScreen({ isLocked = false, onLockedAction }: Props) {
           setShowUserPanel((v) => !v);
         }}>{userFilterId ? (teamMembers.find((m) => m.id === userFilterId)?.name ?? "All Users") : "All Users"} ▾</button>
         <div className="pi-filterbar__spacer" />
+        <button type="button" className="dc-icon-btn" onClick={() => exportPaymentsToExcel(rows, filterFrom, filterTo)}>
+          📊 Excel Report
+        </button>
       </div>
 
       {/* ── Firm (company) filter panel ── */}
@@ -543,7 +571,15 @@ export function PaymentInForm({
   const [customer, setCustomer] = useState(initParty?.name ?? "");
   const [selectedPartyId, setSelectedPartyId] = useState(initParty?.id ?? "");
   const [showPartyDrop, setShowPartyDrop] = useState(false);
+  const PRESET_PAYMENT_TYPES = ["Cash", "UPI", "Bank Transfer", "Cheque", "Card"];
   const [paymentType, setPaymentType] = useState<string>(initNotes.paymentType ?? "Cash");
+  // "+ Add Payment type" was a dead button — clicking it did nothing, so a custom
+  // method (Easy Paisa, JazzCash, ...) could never actually be recorded even though
+  // paymentType has always just been a free-text string in `notes`.
+  const [showCustomPayment, setShowCustomPayment] = useState(
+    () => !!initNotes.paymentType && !PRESET_PAYMENT_TYPES.includes(initNotes.paymentType),
+  );
+  const [customPaymentInput, setCustomPaymentInput] = useState(showCustomPayment ? paymentType : "");
   const [receiptNo, setReceiptNo] = useState(initialRow?.number ?? String(existingCount + 1));
 
   /* Auto-compute receipt number when opened fresh */
@@ -613,6 +649,7 @@ export function PaymentInForm({
     setError("");
     if (!selectedPartyId) { setError("Select a party."); return; }
     if (receivedAmt <= 0) { setError("Enter a valid amount."); return; }
+    if (!paymentType.trim()) { setError("Enter a payment type."); return; }
     setSaving(true);
     const notesJson = JSON.stringify({ paymentType, receiptNo });
     try {
@@ -766,16 +803,31 @@ export function PaymentInForm({
 
             <div className="pi-payment-field">
               <span className="pi-field-label">Payment Type</span>
-              <select className="pi-payment-select" value={paymentType} onChange={(e) => setPaymentType(e.target.value)}>
-                <option>Cash</option>
-                <option>UPI</option>
-                <option>Bank Transfer</option>
-                <option>Cheque</option>
-                <option>Card</option>
-              </select>
+              {showCustomPayment ? (
+                <input
+                  className="pi-payment-select"
+                  value={customPaymentInput}
+                  autoFocus
+                  placeholder="e.g. Easy Paisa"
+                  onChange={(e) => { setCustomPaymentInput(e.target.value); setPaymentType(e.target.value); }}
+                />
+              ) : (
+                <select className="pi-payment-select" value={paymentType} onChange={(e) => setPaymentType(e.target.value)}>
+                  {PRESET_PAYMENT_TYPES.map((pt) => <option key={pt}>{pt}</option>)}
+                </select>
+              )}
             </div>
 
-            <button type="button" className="pi-add-payment-btn">+ Add Payment type</button>
+            <button
+              type="button"
+              className="pi-add-payment-btn"
+              onClick={() => {
+                if (showCustomPayment) { setShowCustomPayment(false); setPaymentType("Cash"); }
+                else { setShowCustomPayment(true); setCustomPaymentInput(""); setPaymentType(""); }
+              }}
+            >
+              {showCustomPayment ? "← Use preset type" : "+ Add Payment type"}
+            </button>
 
             <div className="pi-add-btns">
               <button type="button" className="pi-add-btn">

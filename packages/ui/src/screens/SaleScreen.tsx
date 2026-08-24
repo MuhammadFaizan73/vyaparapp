@@ -70,7 +70,7 @@ function today() {
 }
 
 /* ── types ── */
-type SaleRow = Transaction & { partyName: string };
+export type SaleRow = Transaction & { partyName: string };
 type LineItem = {
   id: string; name: string; mrp: number; qty: number; unit: string; rate: number; stock?: number;
   // The real catalog Item.id, captured when picked from the dropdown — needed so a
@@ -1120,7 +1120,7 @@ function parseSaleNotes(notes: string | null | undefined): { items: any[]; payme
   }
 }
 
-function NewSaleForm({
+export function NewSaleForm({
   parties, catalog, companies, selectedCompanyId, initialSale, initialParty, onClose, onSaved,
 }: {
   parties: Party[];

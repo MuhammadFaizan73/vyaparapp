@@ -108,6 +108,9 @@ export default function NewPaymentInScreen() {
   const [received, setReceived] = useState(params.prefillAmount ?? "");
   const [paymentType, setPaymentType] = useState("Cash");
   const [showPaymentTypePicker, setShowPaymentTypePicker] = useState(false);
+  // No preset covers every wallet (Easy Paisa, JazzCash, ...) — without this a client
+  // simply couldn't record what they actually got paid with.
+  const [customPaymentType, setCustomPaymentType] = useState("");
   const [receiptNo, setReceiptNo] = useState(1);
   const [showReceiptNumEdit, setShowReceiptNumEdit] = useState(false);
   const [receiptNumInput, setReceiptNumInput] = useState("");
@@ -528,12 +531,28 @@ export default function NewPaymentInScreen() {
             <TouchableOpacity
               key={pt}
               style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#f1f5f9" }}
-              onPress={() => { setPaymentType(pt); setShowPaymentTypePicker(false); }}
+              onPress={() => { setPaymentType(pt); setCustomPaymentType(""); setShowPaymentTypePicker(false); }}
             >
               <Text style={{ fontSize: 15, color: colors.text }}>{pt}</Text>
               {paymentType === pt && <Ionicons name="checkmark-circle" size={20} color={colors.primary} />}
             </TouchableOpacity>
           ))}
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 14 }}>
+            <TextInput
+              style={{ flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, color: colors.text }}
+              placeholder="Other (e.g. Easy Paisa)"
+              placeholderTextColor={colors.textLight}
+              value={customPaymentType}
+              onChangeText={setCustomPaymentType}
+            />
+            <TouchableOpacity
+              style={{ backgroundColor: colors.primary, borderRadius: 8, paddingHorizontal: 16, paddingVertical: 11 }}
+              disabled={!customPaymentType.trim()}
+              onPress={() => { setPaymentType(customPaymentType.trim()); setShowPaymentTypePicker(false); }}
+            >
+              <Text style={{ color: "#fff", fontWeight: "600", fontSize: 14 }}>Use</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </Modal>
 

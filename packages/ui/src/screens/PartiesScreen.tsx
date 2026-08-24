@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
-import type { Party, Transaction } from "@vyapar/api-client";
+import type { Party, Transaction, Item } from "@vyapar/api-client";
 import { api } from "../lib/api";
+import { NewSaleForm, type SaleRow } from "./SaleScreen";
+import { PaymentInForm, type PiRow } from "./PaymentInScreen";
 import { AddPartyModal } from "./AddPartyModal";
 import { PartySettingsDrawer, loadPartySettings, type PartySettings } from "./PartySettingsDrawer";
 import { ImportExcelModal } from "./ImportExcelModal";
@@ -39,8 +41,13 @@ export function PartiesScreen({ isLocked = false, onLockedAction }: PartiesScree
   const [showPrintOptions, setShowPrintOptions] = useState(false);
   const [printOptions, setPrintOptions] = useState<PrintOptions | null>(null);
   const [showExcelColumns, setShowExcelColumns] = useState(false);
+  const [editSaleTxn, setEditSaleTxn] = useState<Transaction | null>(null);
+  const [editPaymentTxn, setEditPaymentTxn] = useState<Transaction | null>(null);
+  const [catalog, setCatalog] = useState<Item[]>([]);
   const moreMenuRef = useRef<HTMLDivElement>(null);
-  const { companies, companyFilter, setSelectedDistributorId } = useCompany();
+  const { companies, companyFilter, selectedCompanyId, setSelectedDistributorId } = useCompany();
+
+  useEffect(() => { api.getItems().then(setCatalog).catch(() => {}); }, []);
 
   useEffect(() => { void load(); }, [companyFilter]);
 
@@ -449,6 +456,7 @@ export function PartiesScreen({ isLocked = false, onLockedAction }: PartiesScree
                   {["Type", "Number", "Date", "Total", "Balance"].map((col) => (
                     <div key={col} className="party-transactions__col">{col} <FilterIcon /></div>
                   ))}
+                  <div className="party-transactions__col" />
                 </div>
 
                 {displayTxns.length === 0 ? (
@@ -493,6 +501,21 @@ export function PartiesScreen({ isLocked = false, onLockedAction }: PartiesScree
                             </span>
                           )}
                           {hideBalance && <span className="party-txn-row__balance" />}
+                          {(txn.type === "sale" || txn.type === "payment_in") && (
+                            <button
+                              type="button"
+                              className="party-txn-row__edit-btn"
+                              title="Edit"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (isLocked) { onLockedAction?.(); return; }
+                                if (txn.type === "sale") setEditSaleTxn(txn);
+                                else setEditPaymentTxn(txn);
+                              }}
+                            >
+                              <EditIcon />
+                            </button>
+                          )}
                         </div>
                       );
                     })}
@@ -514,6 +537,32 @@ export function PartiesScreen({ isLocked = false, onLockedAction }: PartiesScree
           defaultType={showAdd && typeFilter !== "all" ? typeFilter : undefined}
           onClose={() => { setShowAdd(false); setEditParty(null); }}
           onSaved={handleSaved}
+        />
+      )}
+
+      {/* Edit Sale (opened from a party's transaction row) */}
+      {editSaleTxn && selected && (
+        <NewSaleForm
+          key={editSaleTxn.id}
+          parties={parties}
+          catalog={catalog}
+          companies={companies}
+          selectedCompanyId={selectedCompanyId}
+          initialSale={{ ...editSaleTxn, partyName: selected.name } as SaleRow}
+          initialParty={selected}
+          onClose={() => setEditSaleTxn(null)}
+          onSaved={() => { setEditSaleTxn(null); void loadTransactions(selected.id); void load(); }}
+        />
+      )}
+
+      {/* Edit Payment-In (opened from a party's transaction row) */}
+      {editPaymentTxn && selected && (
+        <PaymentInForm
+          key={editPaymentTxn.id}
+          parties={parties}
+          initialRow={{ ...editPaymentTxn, partyName: selected.name, runningBalance: 0 } as PiRow}
+          onClose={() => setEditPaymentTxn(null)}
+          onSaved={() => { setEditPaymentTxn(null); void loadTransactions(selected.id); void load(); }}
         />
       )}
 

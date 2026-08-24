@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
+import * as XLSX from "xlsx";
 import { api, loadTenant } from "../lib/api";
-import type { Transaction, Party, Item } from "@vyapar/api-client";
+import type { Transaction, Party, Item, TeamMember } from "@vyapar/api-client";
 import { useCompany } from "../lib/CompanyContext";
 import { useStores } from "../lib/useStores";
 import { RECENT_ROWS_LIMIT } from "./PaymentInScreen";
@@ -12,6 +13,94 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-PK", { day: "2-digit", month: "short", year: "2-digit" });
 }
 function today() { return new Date().toISOString().slice(0, 10); }
+function fmtChip(iso: string) {
+  return new Date(iso).toLocaleDateString("en-PK", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+function ddmmyyyy(iso: string) {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+}
+function getPresetRange(preset: string): { from: string; to: string } {
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const iso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const todayStr = iso(now);
+  switch (preset) {
+    case "Today": return { from: todayStr, to: todayStr };
+    case "This Week": {
+      const day = now.getDay();
+      const mon = new Date(now); mon.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
+      return { from: iso(mon), to: todayStr };
+    }
+    case "This Month": return { from: `${y}-${pad(m + 1)}-01`, to: iso(new Date(y, m + 1, 0)) };
+    case "Last Month": return { from: `${y}-${pad(m)}-01`, to: iso(new Date(y, m, 0)) };
+    case "This Quarter": {
+      const qStart = Math.floor(m / 3) * 3;
+      return { from: `${y}-${pad(qStart + 1)}-01`, to: todayStr };
+    }
+    case "This Year": return { from: `${y}-01-01`, to: todayStr };
+    default: return { from: `${y}-${pad(m + 1)}-01`, to: iso(new Date(y, m + 1, 0)) };
+  }
+}
+
+// Same two-sheet "Sale Report" / "Item Details" shape used across the app's import/export
+// tools — Purchase's own line items are stored the same way (JSON in `notes`).
+function exportPurchasesToExcel(rows: PurchaseRow[], parties: Party[], from: string, to: string) {
+  const phoneByPartyId = new Map(parties.map((p) => [p.id, p.phone ?? ""]));
+  const parseNotes = (n: string | null | undefined): { items: any[]; paymentType?: string } => {
+    try {
+      const parsed = JSON.parse(n ?? "{}");
+      if (Array.isArray(parsed)) return { items: parsed };
+      return { items: Array.isArray(parsed?.items) ? parsed.items : [], paymentType: parsed?.paymentType };
+    } catch { return { items: [] }; }
+  };
+
+  const reportRows = rows.map((r, idx) => {
+    const paymentType = parseNotes(r.notes).paymentType;
+    return {
+      "Date": ddmmyyyy(r.date),
+      "Order No": "",
+      "Invoice No": r.number ?? `#${idx + 1}`,
+      "Party Name": r.partyName,
+      "Party Phone No.": phoneByPartyId.get(r.partyId) ?? "",
+      "Total Amount": r.total,
+      "Payment Type": paymentType === "Credit" ? "Credit" : (paymentType || "Cash"),
+      "Received/Paid Amount": r.total - r.balance,
+      "Balance Due": r.balance,
+      "Due Date": ddmmyyyy(r.date),
+      "Status": r.balance === 0 ? "Paid" : "Unpaid",
+      "Description": "",
+      "Cash": 0,
+    };
+  });
+
+  const itemRows = rows.flatMap((r, idx) => {
+    const items = parseNotes(r.notes).items;
+    return items.map((it: any) => ({
+      "Date": ddmmyyyy(r.date),
+      "Invoice No./Txn No.": r.number ?? `#${idx + 1}`,
+      "Party Name": r.partyName,
+      "Item Name": it.name ?? "",
+      "Item Code": "",
+      "Category": "",
+      "Challan/Order No.": "",
+      "Quantity": it.qty ?? 0,
+      "Unit": it.unit && it.unit !== "NONE" ? it.unit : "",
+      "UnitPrice": it.rate ?? 0,
+      "Discount Percent": it.discount || 0,
+      "Discount": Number((((it.qty ?? 0) * (it.rate ?? 0) * (it.discount || 0)) / 100).toFixed(2)),
+      "Transaction Type": "Purchase",
+      "Amount": Number((((it.qty ?? 0) * (it.rate ?? 0)) * (1 - (it.discount || 0) / 100)).toFixed(2)),
+    }));
+  });
+
+  const book = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(book, XLSX.utils.json_to_sheet(reportRows), "Sale Report");
+  XLSX.utils.book_append_sheet(book, XLSX.utils.json_to_sheet(itemRows), "Item Details");
+  XLSX.writeFile(book, `Purchases_${from}_to_${to}.xlsx`);
+}
 
 type PurchaseRow = Transaction & { partyName: string; runningBalance?: number };
 // itemId: the real catalog Item.id, captured when picked from the dropdown — needed
@@ -86,7 +175,46 @@ export function PurchaseScreen({ isLocked = false, onLockedAction, activeKey = "
   const [historyTarget, setHistoryTarget] = useState<PurchaseRow | null>(null);
   const [returnTarget,  setReturnTarget]  = useState<PurchaseRow | null>(null);
   const [previewTarget, setPreviewTarget] = useState<PurchaseRow | null>(null);
-  const { companyFilter, selectedCompanyId } = useCompany();
+  const { companyFilter, selectedCompanyId, companies } = useCompany();
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+
+  /* ── date / firm / user filters — were static placeholders before this fix ── */
+  const initRange = getPresetRange("This Month");
+  const [filterPreset, setFilterPreset] = useState("This Month");
+  const [filterFrom, setFilterFrom] = useState(initRange.from);
+  const [filterTo, setFilterTo] = useState(initRange.to);
+  const [showDatePanel, setShowDatePanel] = useState(false);
+  const [datePanelPos, setDatePanelPos] = useState({ top: 0, left: 0 });
+  const datePanelRef = useRef<HTMLDivElement>(null);
+  const [firmFilterId, setFirmFilterId] = useState("");
+  const [userFilterId, setUserFilterId] = useState("");
+  const [showFirmPanel, setShowFirmPanel] = useState(false);
+  const [showUserPanel, setShowUserPanel] = useState(false);
+  const [firmPanelPos, setFirmPanelPos] = useState({ top: 0, left: 0 });
+  const [userPanelPos, setUserPanelPos] = useState({ top: 0, left: 0 });
+  const firmPanelRef = useRef<HTMLDivElement>(null);
+  const userPanelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { api.listTeamMembers().then(setTeamMembers).catch(() => {}); }, []);
+
+  useEffect(() => {
+    if (!showDatePanel) return;
+    function handler(e: MouseEvent) {
+      if (datePanelRef.current && !datePanelRef.current.contains(e.target as Node)) setShowDatePanel(false);
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showDatePanel]);
+
+  useEffect(() => {
+    if (!showFirmPanel && !showUserPanel) return;
+    function handler(e: MouseEvent) {
+      if (showFirmPanel && firmPanelRef.current && !firmPanelRef.current.contains(e.target as Node)) setShowFirmPanel(false);
+      if (showUserPanel && userPanelRef.current && !userPanelRef.current.contains(e.target as Node)) setShowUserPanel(false);
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showFirmPanel, showUserPanel]);
 
   async function loadPurchases() {
     // Load parties + items first — independent of transactions
@@ -100,10 +228,14 @@ export function PurchaseScreen({ isLocked = false, onLockedAction, activeKey = "
 
     // Load transactions for the current tab's type
     try {
-      const companyId = companyFilter ?? undefined;
+      const companyId = firmFilterId || companyFilter || undefined;
+      const bookerId = userFilterId || undefined;
       const [txns, sum] = await Promise.all([
-        api.getTransactionsByType(tabCfg.txnType, { take: RECENT_ROWS_LIMIT, companyId }),
-        api.getTransactionsSummary(tabCfg.txnType, { companyId }),
+        // Explicit take alongside from/to — a bare take (no date bound) was the bug: it
+        // silently showed the most recent RECENT_ROWS_LIMIT purchases regardless of what
+        // the (until now, purely decorative) "This Month" bar claimed to be showing.
+        api.getTransactionsByType(tabCfg.txnType, { from: filterFrom, to: filterTo, take: 10000, companyId, bookerId }),
+        api.getTransactionsSummary(tabCfg.txnType, { from: filterFrom, to: filterTo, companyId, bookerId }),
       ]);
       const map: Record<string, string> = {};
       ps.forEach(p => { map[p.id] = p.name; });
@@ -112,7 +244,11 @@ export function PurchaseScreen({ isLocked = false, onLockedAction, activeKey = "
     } catch { /* offline */ }
   }
 
-  useEffect(() => { setLoading(true); loadPurchases().finally(() => setLoading(false)); }, [activeKey, companyFilter]);
+  useEffect(() => {
+    setLoading(true);
+    loadPurchases().finally(() => setLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeKey, companyFilter, filterFrom, filterTo, firmFilterId, userFilterId]);
   useEffect(() => {
     if (!menuId) return;
     const close = () => setMenuId(null);
@@ -130,11 +266,8 @@ export function PurchaseScreen({ isLocked = false, onLockedAction, activeKey = "
     return true;
   });
 
-  const now = new Date();
-  const fmtDMY = (d: Date) =>
-    `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
-  const startDateStr = fmtDMY(new Date(now.getFullYear(), now.getMonth(), 1));
-  const endDateStr   = fmtDMY(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+  const startDateStr = fmtChip(filterFrom);
+  const endDateStr = fmtChip(filterTo);
 
   const totalPurchase = summary.total;
   const totalPaid     = summary.total - summary.balance;
@@ -250,23 +383,112 @@ export function PurchaseScreen({ isLocked = false, onLockedAction, activeKey = "
         <>
             {/* ── Date bar ── */}
             <div className="purchase-datebar">
-              <button type="button" className="purchase-datebar__period">This Month <span>▾</span></button>
+              <button type="button" className="purchase-datebar__period" onClick={(e) => {
+                const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                setDatePanelPos({ top: r.bottom + 6, left: r.left });
+                setShowDatePanel((v) => !v);
+              }}>{filterPreset} <span>▾</span></button>
               <div className="purchase-datebar__range">
-                <button type="button" className="purchase-datebar__between-btn">Between</button>
+                <button type="button" className="purchase-datebar__between-btn" onClick={(e) => {
+                  const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                  setDatePanelPos({ top: r.bottom + 6, left: r.left });
+                  setShowDatePanel((v) => !v);
+                }}>Between</button>
                 <span className="purchase-datebar__date-val">{startDateStr}</span>
                 <span className="purchase-datebar__to">To</span>
                 <span className="purchase-datebar__date-val">{endDateStr}</span>
               </div>
-              <button type="button" className="purchase-datebar__chip">ALL FIRMS <span>▾</span></button>
-              <button type="button" className="purchase-datebar__chip">ALL USERS <span>▾</span></button>
+              <button type="button" className="purchase-datebar__chip" onClick={(e) => {
+                const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                setFirmPanelPos({ top: r.bottom + 6, left: r.left });
+                setShowFirmPanel((v) => !v);
+              }}>{(firmFilterId ? companies.find((c) => c.id === firmFilterId)?.name : null) ?? "ALL FIRMS"} <span>▾</span></button>
+              <button type="button" className="purchase-datebar__chip" onClick={(e) => {
+                const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                setUserPanelPos({ top: r.bottom + 6, left: r.left });
+                setShowUserPanel((v) => !v);
+              }}>{(userFilterId ? teamMembers.find((m) => m.id === userFilterId)?.name : null) ?? "ALL USERS"} <span>▾</span></button>
               <div className="purchase-datebar__spacer" />
-              <button type="button" className="purchase-datebar__icon-btn" title="Export to Excel">
+              <button type="button" className="purchase-datebar__icon-btn" title="Export to Excel" onClick={() => exportPurchasesToExcel(filtered, parties, filterFrom, filterTo)}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
               </button>
               <button type="button" className="purchase-datebar__icon-btn" title="Print" onClick={() => window.print()}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
               </button>
             </div>
+
+            {showDatePanel && (
+              <div ref={datePanelRef} style={{ position: "fixed", top: datePanelPos.top, left: datePanelPos.left, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, boxShadow: "0 8px 28px rgba(0,0,0,0.13)", zIndex: 700, width: 340, padding: "12px 0 16px" }}>
+                <div style={{ padding: "0 14px 10px", fontSize: 11, fontWeight: 700, color: "#9ca3af", letterSpacing: 0.8, textTransform: "uppercase" }}>Quick Select</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2px 0" }}>
+                  {["Today", "This Week", "This Month", "Last Month", "This Quarter", "This Year"].map((p) => (
+                    <button key={p} type="button"
+                      onClick={() => {
+                        const r = getPresetRange(p);
+                        setFilterPreset(p); setFilterFrom(r.from); setFilterTo(r.to);
+                        setShowDatePanel(false);
+                      }}
+                      style={{ padding: "8px 14px", background: filterPreset === p ? "#eff6ff" : "none", border: "none", cursor: "pointer", textAlign: "left", fontSize: 13, color: filterPreset === p ? "#2563eb" : "#374151", fontWeight: filterPreset === p ? 600 : 400 }}
+                      onMouseEnter={(e) => { if (filterPreset !== p) e.currentTarget.style.background = "#f9fafb"; }}
+                      onMouseLeave={(e) => { if (filterPreset !== p) e.currentTarget.style.background = "none"; }}
+                    >{p}</button>
+                  ))}
+                </div>
+                <div style={{ height: 1, background: "#f3f4f6", margin: "10px 0" }} />
+                <div style={{ padding: "0 14px 4px", fontSize: 11, fontWeight: 700, color: "#9ca3af", letterSpacing: 0.8, textTransform: "uppercase" }}>Custom Range</div>
+                <div style={{ display: "flex", gap: 8, padding: "8px 14px 0", alignItems: "center" }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 3 }}>From</div>
+                    <input type="date" value={filterFrom}
+                      onChange={(e) => { setFilterFrom(e.target.value); setFilterPreset("Custom"); }}
+                      style={{ width: "100%", border: "1px solid #d1d5db", borderRadius: 6, padding: "6px 8px", fontSize: 13, boxSizing: "border-box" }} />
+                  </div>
+                  <span style={{ fontSize: 13, color: "#9ca3af", marginTop: 14 }}>–</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 3 }}>To</div>
+                    <input type="date" value={filterTo}
+                      onChange={(e) => { setFilterTo(e.target.value); setFilterPreset("Custom"); }}
+                      style={{ width: "100%", border: "1px solid #d1d5db", borderRadius: 6, padding: "6px 8px", fontSize: 13, boxSizing: "border-box" }} />
+                  </div>
+                </div>
+                <div style={{ padding: "10px 14px 0", display: "flex", justifyContent: "flex-end" }}>
+                  <button type="button" onClick={() => setShowDatePanel(false)}
+                    style={{ padding: "6px 16px", background: "#3b82f6", color: "#fff", border: "none", borderRadius: 6, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>Apply</button>
+                </div>
+              </div>
+            )}
+
+            {showFirmPanel && (
+              <div ref={firmPanelRef} style={{ position: "fixed", top: firmPanelPos.top, left: firmPanelPos.left, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, boxShadow: "0 8px 28px rgba(0,0,0,0.13)", zIndex: 700, width: 220, padding: "6px 0", maxHeight: 320, overflowY: "auto" }}>
+                <button type="button" onClick={() => { setFirmFilterId(""); setShowFirmPanel(false); }}
+                  style={{ display: "block", width: "100%", padding: "8px 14px", background: !firmFilterId ? "#eff6ff" : "none", border: "none", cursor: "pointer", textAlign: "left", fontSize: 13, color: !firmFilterId ? "#2563eb" : "#374151", fontWeight: !firmFilterId ? 600 : 400 }}>
+                  All Firms
+                </button>
+                {companies.map((c) => (
+                  <button key={c.id} type="button" onClick={() => { setFirmFilterId(c.id); setShowFirmPanel(false); }}
+                    style={{ display: "block", width: "100%", padding: "8px 14px", background: firmFilterId === c.id ? "#eff6ff" : "none", border: "none", cursor: "pointer", textAlign: "left", fontSize: 13, color: firmFilterId === c.id ? "#2563eb" : "#374151", fontWeight: firmFilterId === c.id ? 600 : 400 }}>
+                    {c.name}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {showUserPanel && (
+              <div ref={userPanelRef} style={{ position: "fixed", top: userPanelPos.top, left: userPanelPos.left, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, boxShadow: "0 8px 28px rgba(0,0,0,0.13)", zIndex: 700, width: 220, padding: "6px 0", maxHeight: 320, overflowY: "auto" }}>
+                <button type="button" onClick={() => { setUserFilterId(""); setShowUserPanel(false); }}
+                  style={{ display: "block", width: "100%", padding: "8px 14px", background: !userFilterId ? "#eff6ff" : "none", border: "none", cursor: "pointer", textAlign: "left", fontSize: 13, color: !userFilterId ? "#2563eb" : "#374151", fontWeight: !userFilterId ? 600 : 400 }}>
+                  All Users
+                </button>
+                {teamMembers.length === 0 ? (
+                  <div style={{ padding: "8px 14px", fontSize: 12, color: "#9ca3af" }}>No team members yet.</div>
+                ) : teamMembers.map((m) => (
+                  <button key={m.id} type="button" onClick={() => { setUserFilterId(m.id); setShowUserPanel(false); }}
+                    style={{ display: "block", width: "100%", padding: "8px 14px", background: userFilterId === m.id ? "#eff6ff" : "none", border: "none", cursor: "pointer", textAlign: "left", fontSize: 13, color: userFilterId === m.id ? "#2563eb" : "#374151", fontWeight: userFilterId === m.id ? 600 : 400 }}>
+                    {m.name}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* ── Summary: Paid + Unpaid = Total ── */}
             <div className="purchase-sumbar">
