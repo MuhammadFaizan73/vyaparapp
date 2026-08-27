@@ -1177,7 +1177,20 @@ export function NewSaleForm({
     return [emptyRow(), emptyRow()];
   });
   const [discountPct, setDiscountPct] = useState("");
-  const [discountRs, setDiscountRs] = useState("");
+  // Older invoices never persisted their tax/discount breakdown — only the final total —
+  // so reopening one for edit with blank Discount/Tax fields would silently reprice it the
+  // moment it's saved again (e.g. Rs 2330 -> Rs 2318). Back-solve the missing amount as a
+  // Discount-Rs adjustment (negative when the original total was actually higher, i.e. it
+  // had tax/a surcharge baked in) so the total shown on open matches what's saved, and only
+  // moves if the user actually edits something.
+  const [discountRs, setDiscountRs] = useState(() => {
+    if (!initialSale) return "";
+    const rawSubtotal = lineItems
+      .filter((i) => i.name.trim() && i.qty > 0)
+      .reduce((s, i) => s + rowAmount(i), 0);
+    const diff = rawSubtotal - initialSale.total;
+    return Math.abs(diff) > 0.01 ? diff.toFixed(2) : "";
+  });
   const [taxRates, setTaxRates] = useState<TaxRate[]>([]);
   const [taxRateId, setTaxRateId] = useState("");
   const [roundOff, setRoundOff] = useState(true);
@@ -1208,6 +1221,18 @@ export function NewSaleForm({
   const [selectedCompanyFilters, setSelectedCompanyFilters] = useState<string[]>(
     () => (selectedCompanyId ? [selectedCompanyId] : []),
   );
+
+  // Editing an invoice must run in that invoice's own company context: the Company field
+  // below (CompanyDropdown) reads/writes the global selector, and save() persists whatever
+  // it's currently set to — so opening an edit while "All Companies" (or a different
+  // company) is globally selected would silently retag or un-tag this invoice on save.
+  const { setSelectedCompanyId } = useCompany();
+  useEffect(() => {
+    if (initialSale?.companyId && initialSale.companyId !== selectedCompanyId) {
+      setSelectedCompanyId(initialSale.companyId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Which store this sale draws stock from — hidden entirely for single-store
   // companies, so a tenant that never added a second store sees no change at all.

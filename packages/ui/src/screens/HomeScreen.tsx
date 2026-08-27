@@ -241,6 +241,18 @@ export function HomeScreen({ onNavigate }: Props) {
         <span className="hs-banner-sep">|</span>
         <span style={{ fontSize: 14 }}>💬</span>
         <a href="#" className="hs-banner-support">Get Instant Online Support</a>
+        <button
+          type="button"
+          className="hs-banner-print-btn"
+          title="Bulk Actions"
+          onClick={() => onNavigate?.("bulk-actions")}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="15" height="15">
+            <polyline points="6 9 6 2 18 2 18 9" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" strokeLinecap="round" strokeLinejoin="round" />
+            <rect x="6" y="14" width="12" height="8" />
+          </svg>
+        </button>
       </div>
 
       <div className="hs-body">

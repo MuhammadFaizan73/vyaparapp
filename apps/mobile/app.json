@@ -59,7 +59,8 @@
             "enableProguardInReleaseBuilds": false,
             "compileSdkVersion": 35,
             "targetSdkVersion": 35,
-            "buildToolsVersion": "35.0.0"
+            "buildToolsVersion": "35.0.0",
+            "enableMinifyInReleaseBuilds": false
           }
         }
       ],
@@ -68,9 +69,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "75412b40-f44b-4073-a38a-10c80e262863"
+        "projectId": "00626370-deea-4cb9-b4c9-e3fe14486c17"
       }
     },
-    "owner": "rootocloud"
+    "owner": "frank3213"
   }
 }

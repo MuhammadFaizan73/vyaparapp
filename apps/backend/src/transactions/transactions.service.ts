@@ -108,6 +108,30 @@ export class TransactionsService {
     return rows.map(toRow);
   }
 
+  // Backs the "Bulk Actions" screen — every transaction type in one date-filtered,
+  // party-filterable list. A dedicated method (not a reroute through listAll/
+  // listForParty) so its date bound + higher take can't accidentally change the
+  // behavior of those two, which other screens (recent-N lists, a party's full
+  // unbounded history) depend on staying exactly as they are.
+  async listBulk(
+    tenantId: string,
+    opts?: { from?: string; to?: string; companyId?: string; partyId?: string; type?: string; take?: number },
+  ): Promise<TransactionRow[]> {
+    const dateFilter = this.dateFilter(opts?.from, opts?.to);
+    const rows = await this.prisma.transaction.findMany({
+      where: {
+        tenantId,
+        ...(dateFilter && { date: dateFilter }),
+        ...companyIdWhere(opts?.companyId),
+        ...(opts?.partyId ? { partyId: opts.partyId } : {}),
+        ...(opts?.type ? { type: opts.type } : {}),
+      },
+      orderBy: { date: "desc" },
+      take: opts?.take ?? MAX_TRANSACTIONS_PER_PAGE,
+    });
+    return rows.map(toRow);
+  }
+
   // A date-only `to` (e.g. "2026-08-06") parses as midnight at the *start* of that
   // day — used bare as `lte`, it would exclude every transaction from later that same
   // day. Push it to the end of the day so "to today" actually includes today.

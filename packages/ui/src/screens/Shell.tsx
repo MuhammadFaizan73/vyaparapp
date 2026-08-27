@@ -81,6 +81,7 @@ import { ActivateLicenseModal } from "./ActivateLicenseModal";
 import { ReviewOrderModal } from "./ReviewOrderModal";
 import { HomeScreen } from "./HomeScreen";
 import { PartiesScreen } from "./PartiesScreen";
+import { BulkActionsScreen } from "./BulkActionsScreen";
 import { ItemsScreen } from "./ItemsScreen";
 import { StoresScreen } from "./StoresScreen";
 import { StockTransferScreen } from "./StockTransferScreen";
@@ -397,6 +398,7 @@ export function Shell({ status, onLogout, onLicenseActivated }: Props) {
     if (active === "sync-backup")           return "sync-backup";
     if (active === "sync-devices")          return "sync-devices";
     if (active === "team")                  return "team";
+    if (active === "bulk-actions")          return "bulk-actions";
     return "placeholder";
   })();
 
@@ -601,6 +603,7 @@ export function Shell({ status, onLogout, onLicenseActivated }: Props) {
             }}
           />
         )}
+        {screenKey === "bulk-actions" && <BulkActionsScreen isLocked={isLocked} onLockedAction={handleLockedAction} onNavigate={(screen) => setActive(screen)} />}
         {screenKey === "parties"     && <PartiesScreen  isLocked={isLocked} onLockedAction={handleLockedAction} />}
         {screenKey === "items"       && <ItemsScreen    isLocked={isLocked} onLockedAction={handleLockedAction} onOpenImportItems={() => setActive("utilities-import-items")} />}
         {screenKey === "stores-manage"   && <StoresScreen onOpenStockTransfer={() => setActive("stores-transfer")} />}

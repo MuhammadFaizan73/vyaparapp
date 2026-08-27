@@ -223,6 +223,20 @@ export class VyaparApiClient {
     return data;
   }
 
+  async getBulkTransactions(
+    opts?: { from?: string; to?: string; companyId?: string; partyId?: string; type?: string; take?: number },
+  ): Promise<Transaction[]> {
+    const params = new URLSearchParams();
+    if (opts?.from) params.set("from", opts.from);
+    if (opts?.to) params.set("to", opts.to);
+    if (opts?.companyId) params.set("companyId", opts.companyId);
+    if (opts?.partyId) params.set("partyId", opts.partyId);
+    if (opts?.type) params.set("type", opts.type);
+    if (opts?.take !== undefined) params.set("take", String(opts.take));
+    const { data } = await this.http.get<Transaction[]>(`/transactions/bulk?${params.toString()}`);
+    return data;
+  }
+
   async getTransaction(id: string): Promise<Transaction> {
     const { data } = await this.http.get<Transaction>(`/transactions/${id}`);
     return data;

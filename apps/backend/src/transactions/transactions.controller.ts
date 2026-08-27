@@ -66,6 +66,24 @@ export class TransactionsController {
     return this.transactionsService.getLastSalePrices(req.tenantId, partyId, itemName);
   }
 
+  // Backs the "Bulk Actions" screen — must be registered before the ":id" route below,
+  // otherwise Nest would match "bulk" as an :id param instead.
+  @Get("bulk")
+  bulk(
+    @Req() req: AuthedRequest,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+    @Query("companyId") companyId?: string,
+    @Query("partyId") partyId?: string,
+    @Query("type") type?: string,
+    @Query("take") take?: string,
+  ) {
+    return this.transactionsService.listBulk(req.tenantId, {
+      from, to, companyId, partyId, type,
+      take: take ? Number(take) : undefined,
+    });
+  }
+
   @Get(":id")
   findOne(@Req() req: AuthedRequest, @Param("id") id: string) {
     return this.transactionsService.findOne(req.tenantId, id);
