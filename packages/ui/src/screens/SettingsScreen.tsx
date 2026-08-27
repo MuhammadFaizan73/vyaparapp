@@ -1,6 +1,33 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "../lib/api";
 import type { TaxRate } from "@vyapar/api-client";
+import { InvoicePaper, THEME_MAP, COLOR_SWATCHES, THERMAL_THEMES } from "./InvoicePreviewModal";
+import type { SaleRow } from "./InvoicePreviewModal";
+
+// Reference order matches the real Vyapar app's theme gallery.
+const REGULAR_THEMES = [
+  "Tally Theme", "Landscape Theme 1", "Landscape Theme 2",
+  "Tax Theme 1", "Tax Theme 2", "Tax Theme 3", "Tax Theme 4", "Tax Theme 5", "Tax Theme 6",
+  "Double Divine", "French Elite",
+  "Theme 1", "Theme 2", "Theme 3", "Theme 4",
+];
+
+// Fixed sample invoice for the live theme/color preview — every theme shows the same
+// placeholder data so switching themes only changes layout, never the numbers.
+const PRINT_PREVIEW_SALE: SaleRow = {
+  id: "preview", partyId: "preview-party", tenantId: "preview", type: "sale",
+  number: "Inv. 101", date: "2019-07-02T12:30:00.000Z", total: 42.32, balance: 30.32,
+  notes: JSON.stringify([
+    { name: "ITEM 1", qty: 2, unit: "NONE", rate: 10, mrp: 10, discount: 1 },
+    { name: "ITEM 2", qty: 1, unit: "NONE", rate: 30, mrp: 30, discount: 0 },
+  ]),
+  companyId: null, bookerId: null, storeId: null, createdAt: "2019-07-02T12:30:00.000Z",
+  partyName: "Classic enterprises",
+} as unknown as SaleRow;
+const PRINT_PREVIEW_PARTY = {
+  id: "preview-party", name: "Classic enterprises", phone: "8888888888",
+  billingAddress: "Plot No. 1, Shop No. 8, Koramangala, Banglore, 560034",
+} as any;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -58,7 +85,9 @@ export type Settings = {
   prefixDeliveryChallan: string;
   prefixPaymentIn: string;
   // PRINT
-  printTheme: number;
+  printThemeName: string;
+  printColor: string;
+  thermalThemeName: string;
   makeRegularDefault: boolean;
   repeatHeader: boolean;
   companyName: string;
@@ -66,6 +95,8 @@ export type Settings = {
   companyEmail: string;
   companyPhone: string;
   showTinOnSale: boolean;
+  companyLogo: boolean;
+  printOriginalDuplicate: boolean;
   paperSize: string;
   orientation: string;
   companyNameSize: string;
@@ -126,9 +157,11 @@ const DEFAULT_SETTINGS: Settings = {
   termsAndConditions: true, termsText: "Thanks for doing business with us!", billingType: "full",
   prefixSale: "", prefixCreditNote: "", prefixSaleOrder: "", prefixPurchaseOrder: "",
   prefixEstimate: "", prefixProforma: "", prefixDeliveryChallan: "", prefixPaymentIn: "",
-  printTheme: 4, makeRegularDefault: true, repeatHeader: true,
+  printThemeName: "Tally Theme", printColor: "#3b82f6", thermalThemeName: "Thermal Theme 1",
+  makeRegularDefault: true, repeatHeader: true,
   companyName: "Godigi", companyAddress: "", companyEmail: "", companyPhone: "",
-  showTinOnSale: false, paperSize: "A4", orientation: "Portrait",
+  showTinOnSale: false, companyLogo: true, printOriginalDuplicate: false,
+  paperSize: "A4", orientation: "Portrait",
   companyNameSize: "Large", invoiceTextSize: "Medium",
   sendMsgToParty: true, webInvoiceLinkInMsg: true,
   autoMsgSales: true, autoMsgPurchase: true, autoMsgSaleReturn: true, autoMsgPurchaseReturn: true,
@@ -206,6 +239,8 @@ export function SettingsScreen({ onOpenStores }: SettingsScreenProps = {}) {
   const [appVersion, setAppVersion] = useState<string | null>(null);
   const [hasUpdateBridge, setHasUpdateBridge] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
+  const [printerType, setPrinterType] = useState<"regular" | "thermal">("regular");
+  const [layoutTab, setLayoutTab] = useState<"layout" | "colors">("layout");
 
   useEffect(() => {
     const bridge = (window as any).vyapar;
@@ -438,35 +473,71 @@ export function SettingsScreen({ onOpenStores }: SettingsScreenProps = {}) {
   }
 
   function Print() {
+    const isRegular = printerType === "regular";
+    const themeList = isRegular ? REGULAR_THEMES : THERMAL_THEMES;
+    const activeThemeKey: keyof Settings = isRegular ? "printThemeName" : "thermalThemeName";
+    const activeTheme = s[activeThemeKey] as string;
+    const tc = THEME_MAP[activeTheme] ?? THEME_MAP["Tally Theme"];
+
     return (
       <div className="st-print-layout">
         <div className="st-print-left">
           {/* Printer type tabs */}
           <div className="st-subtabs">
-            <button className="st-subtab st-subtab--active">REGULAR PRINTER</button>
-            <button className="st-subtab">THERMAL PRINTER</button>
+            <button
+              className={`st-subtab${isRegular ? " st-subtab--active" : ""}`}
+              onClick={() => setPrinterType("regular")}
+            >REGULAR PRINTER</button>
+            <button
+              className={`st-subtab${!isRegular ? " st-subtab--active" : ""}`}
+              onClick={() => setPrinterType("thermal")}
+            >THERMAL PRINTER</button>
           </div>
-          <div className="st-subtabs" style={{ marginTop: 12 }}>
-            <button className="st-subtab st-subtab--active">CHANGE LAYOUT</button>
-            <button className="st-subtab">CHANGE COLORS</button>
-          </div>
-
-          {/* Themes */}
-          <div className="st-themes">
-            {[1, 2, 3, 4].map(n => (
+          {isRegular && (
+            <div className="st-subtabs" style={{ marginTop: 12 }}>
               <button
-                key={n}
-                className={`st-theme${s.printTheme === n ? " st-theme--active" : ""}`}
-                onClick={() => set("printTheme", n)}
-              >
-                <div className="st-theme-preview">
-                  <div className="st-theme-line" /><div className="st-theme-line st-theme-line--short" />
-                  <div className="st-theme-line" /><div className="st-theme-line st-theme-line--short" />
-                </div>
-                <span>Theme {n}</span>
-              </button>
-            ))}
-          </div>
+                className={`st-subtab${layoutTab === "layout" ? " st-subtab--active" : ""}`}
+                onClick={() => setLayoutTab("layout")}
+              >CHANGE LAYOUT</button>
+              <button
+                className={`st-subtab${layoutTab === "colors" ? " st-subtab--active" : ""}`}
+                onClick={() => setLayoutTab("colors")}
+              >CHANGE COLORS</button>
+            </div>
+          )}
+
+          {(!isRegular || layoutTab === "layout") && (
+            <div className="st-themes">
+              {themeList.map(name => (
+                <button
+                  key={name}
+                  className={`st-theme${activeTheme === name ? " st-theme--active" : ""}`}
+                  onClick={() => set(activeThemeKey, name)}
+                >
+                  <div className="st-theme-preview">
+                    <div className="st-theme-line" /><div className="st-theme-line st-theme-line--short" />
+                    <div className="st-theme-line" /><div className="st-theme-line st-theme-line--short" />
+                  </div>
+                  <span>{name}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {isRegular && layoutTab === "colors" && (
+            <div className="st-color-grid">
+              {COLOR_SWATCHES.map(c => (
+                <button
+                  key={c}
+                  type="button"
+                  className={`st-swatch${s.printColor === c ? " st-swatch--active" : ""}`}
+                  style={{ background: c, border: c === "#ffffff" ? "1.5px solid #d1d5db" : "none" }}
+                  onClick={() => set("printColor", c)}
+                  title={c}
+                />
+              ))}
+            </div>
+          )}
 
           <SectionTitle title="Print Company Info / Header" />
           <Chk k="makeRegularDefault" label="Make Regular Printer Default" />
@@ -476,6 +547,7 @@ export function SettingsScreen({ onOpenStores }: SettingsScreenProps = {}) {
             <span className="st-field-label">Company Name</span>
             <input className="st-input" value={s.companyName} onChange={e => set("companyName", e.target.value)} />
           </div>
+          <Chk k="companyLogo" label="Company Logo" />
           <div className="st-labeled-field">
             <span className="st-field-label">Address</span>
             <input className="st-input" placeholder="Enter address" value={s.companyAddress} onChange={e => set("companyAddress", e.target.value)} />
@@ -489,54 +561,51 @@ export function SettingsScreen({ onOpenStores }: SettingsScreenProps = {}) {
             <input className="st-input" value={s.companyPhone} onChange={e => set("companyPhone", e.target.value)} />
           </div>
           <Chk k="showTinOnSale" label="TIN on Sale" />
+          <Chk k="printOriginalDuplicate" label="Print Original/Duplicate" />
 
-          <div className="st-field-row" style={{ marginTop: 12 }}>
-            <span className="st-field-label">Paper Size</span>
-            <select className="st-select" value={s.paperSize} onChange={e => set("paperSize", e.target.value)}>
-              {["A4", "A5", "Letter", "Legal"].map(p => <option key={p}>{p}</option>)}
-            </select>
+          <div className="st-field-row-pair" style={{ marginTop: 12 }}>
+            <div className="st-field-row">
+              <span className="st-field-label">Paper Size</span>
+              <select className="st-select" value={s.paperSize} onChange={e => set("paperSize", e.target.value)}>
+                {["A4", "A5", "Letter", "Legal"].map(p => <option key={p}>{p}</option>)}
+              </select>
+            </div>
+            <div className="st-field-row">
+              <span className="st-field-label">Orientation</span>
+              <select className="st-select" value={s.orientation} onChange={e => set("orientation", e.target.value)}>
+                <option>Portrait</option><option>Landscape</option>
+              </select>
+            </div>
           </div>
-          <div className="st-field-row">
-            <span className="st-field-label">Orientation</span>
-            <select className="st-select" value={s.orientation} onChange={e => set("orientation", e.target.value)}>
-              <option>Portrait</option><option>Landscape</option>
-            </select>
-          </div>
-          <div className="st-field-row">
-            <span className="st-field-label">Company Name Text Size</span>
-            <select className="st-select" value={s.companyNameSize} onChange={e => set("companyNameSize", e.target.value)}>
-              {["Small", "Medium", "Large"].map(p => <option key={p}>{p}</option>)}
-            </select>
-          </div>
-          <div className="st-field-row">
-            <span className="st-field-label">Invoice Text Size</span>
-            <select className="st-select" value={s.invoiceTextSize} onChange={e => set("invoiceTextSize", e.target.value)}>
-              {["Small", "Medium", "Large"].map(p => <option key={p}>{p}</option>)}
-            </select>
+          <div className="st-field-row-pair">
+            <div className="st-field-row">
+              <span className="st-field-label">Company Name Text Size</span>
+              <select className="st-select" value={s.companyNameSize} onChange={e => set("companyNameSize", e.target.value)}>
+                {["Small", "Medium", "Large"].map(p => <option key={p}>{p}</option>)}
+              </select>
+            </div>
+            <div className="st-field-row">
+              <span className="st-field-label">Invoice Text Size</span>
+              <select className="st-select" value={s.invoiceTextSize} onChange={e => set("invoiceTextSize", e.target.value)}>
+                {["Small", "Medium", "Large"].map(p => <option key={p}>{p}</option>)}
+              </select>
+            </div>
           </div>
         </div>
 
-        {/* Invoice preview */}
+        {/* Invoice preview — the real renderer, so what's picked here is exactly what
+            InvoicePreviewModal opens with on the next Sale invoice preview/print. */}
         <div className="st-invoice-preview">
-          <div className="st-inv-header">
-            <div>
-              <div className="st-inv-company">{s.companyName || "Company Name"}</div>
-              {s.companyPhone && <div className="st-inv-sub">Ph. no.: {s.companyPhone}</div>}
-            </div>
-            <div className="st-inv-logo">Image</div>
+          <div className="st-invoice-preview__scale">
+            <InvoicePaper
+              tc={tc}
+              color={isRegular ? s.printColor : "#111827"}
+              sale={PRINT_PREVIEW_SALE}
+              party={PRINT_PREVIEW_PARTY}
+              invoiceNumber={101}
+              received={12}
+            />
           </div>
-          <div className="st-inv-title">Sale</div>
-          <div className="st-inv-table-header">
-            <span>#</span><span>Item name</span><span>Qty</span><span>Price</span><span>Amount</span>
-          </div>
-          <div className="st-inv-row"><span>1</span><span>Item 1</span><span>2</span><span>Rs 100</span><span>Rs 200</span></div>
-          <div className="st-inv-row"><span>2</span><span>Item 2</span><span>1</span><span>Rs 500</span><span>Rs 500</span></div>
-          <div className="st-inv-total">
-            <span>Total</span><span>Rs 700.00</span>
-          </div>
-          {s.termsAndConditions && s.termsText && (
-            <div className="st-inv-terms">Terms and conditions {s.termsText}</div>
-          )}
         </div>
       </div>
     );
@@ -966,6 +1035,7 @@ const STYLES = `
 /* Content */
 .st-content {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 24px 28px;
 }
@@ -1227,44 +1297,48 @@ const STYLES = `
   margin-bottom: -2px;
 }
 .st-subtab--active { color: #dc2626; border-bottom-color: #dc2626; }
-.st-themes { display: flex; gap: 12px; margin: 16px 0; }
+.st-themes { display: flex; gap: 10px; margin: 12px 0; overflow-x: auto; padding-bottom: 6px; }
 .st-theme {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   background: #f8fafc;
   border: 2px solid #e5e7eb;
   border-radius: 8px;
-  padding: 10px 12px;
+  padding: 6px 8px;
   cursor: pointer;
-  font-size: 11px;
+  font-size: 10.5px;
   color: #64748b;
+  flex-shrink: 0;
+  width: 78px;
 }
+.st-theme span { white-space: normal; text-align: center; line-height: 1.2; }
 .st-theme--active { border-color: #3b82f6; background: #eff6ff; color: #1d4ed8; }
-.st-theme-preview { display: flex; flex-direction: column; gap: 3px; width: 50px; height: 36px; justify-content: center; }
+.st-theme-preview { display: flex; flex-direction: column; gap: 2px; width: 48px; height: 22px; justify-content: center; }
 .st-theme-line { height: 3px; background: #d1d5db; border-radius: 2px; }
 .st-theme-line--short { width: 60%; }
 .st-theme--active .st-theme-line { background: #3b82f6; }
+
+/* Color grid */
+.st-color-grid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 8px; margin: 12px 0; max-width: 340px; }
+.st-swatch { width: 24px; height: 24px; border-radius: 50%; cursor: pointer; padding: 0; }
+.st-swatch--active { outline: 2px solid #1e293b; outline-offset: 2px; }
+
+/* Field pairs — two selects side by side, halves the row count vs. stacking them */
+.st-field-row-pair { display: flex; gap: 20px; }
+.st-field-row-pair .st-field-row { flex: 1; margin-bottom: 10px; }
 
 /* Invoice preview */
 .st-invoice-preview {
   background: #fff;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
-  padding: 16px;
-  font-size: 11.5px;
-  color: #374151;
+  padding: 12px;
+  position: sticky;
+  top: 0;
 }
-.st-inv-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; border-bottom: 1px solid #e5e7eb; padding-bottom: 8px; }
-.st-inv-company { font-size: 14px; font-weight: 700; color: #1e293b; }
-.st-inv-sub { font-size: 11px; color: #64748b; margin-top: 2px; }
-.st-inv-logo { width: 48px; height: 32px; border: 1px dashed #d1d5db; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #94a3b8; border-radius: 4px; }
-.st-inv-title { text-align: center; font-size: 14px; font-weight: 700; color: #2563eb; margin: 8px 0; }
-.st-inv-table-header { display: grid; grid-template-columns: 24px 1fr 60px 80px 80px; gap: 6px; background: #3b82f6; color: #fff; padding: 4px 8px; font-size: 10.5px; font-weight: 600; border-radius: 4px; }
-.st-inv-row { display: grid; grid-template-columns: 24px 1fr 60px 80px 80px; gap: 6px; padding: 4px 8px; border-bottom: 1px solid #f1f5f9; font-size: 11px; }
-.st-inv-total { display: flex; justify-content: space-between; padding: 6px 8px; font-weight: 700; font-size: 12px; border-top: 1px solid #e5e7eb; margin-top: 4px; }
-.st-inv-terms { font-size: 10px; color: #64748b; margin-top: 6px; padding-top: 6px; border-top: 1px dashed #e5e7eb; }
+.st-invoice-preview__scale { width: 700px; zoom: 0.4; }
 
 /* Message layout */
 .st-msg-layout { display: grid; grid-template-columns: 1fr 380px; gap: 28px; align-items: start; }

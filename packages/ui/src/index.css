@@ -8199,6 +8199,38 @@ body,
 .sinv__sign-for { font-size: 11px; font-weight: 600; color: #374151; border-top: 1px solid #d1d5db; padding-top: 4px; }
 .sinv__sign-lbl { font-size: 10px; color: #9ca3af; }
 
+/* Bordered/grid look — Tally Theme, Landscape 1/2, Tax Theme 1/3 */
+.sinv--bordered { border: 1px solid #111827; }
+.sinv--bordered .sinv__meta { border-top: 1px solid #111827; border-bottom: 1px solid #111827; }
+.sinv--bordered .sinv__meta-col:first-child { border-right: 1px solid #111827; }
+.sinv--bordered .sinv__title { border-bottom: 1px solid #111827; }
+.sinv--bordered .sinv__tax-strip { border-top: 1px solid #111827; border-bottom: 1px solid #111827; }
+.sinv--bordered .sinv__tax-summary-table { border: 1px solid #111827; }
+
+/* Tax summary strip + HSN/SAC breakdown — Landscape 1/2, Tax Theme 1/3 */
+.sinv__tax-strip { display: flex; flex-wrap: wrap; border-top: 1px solid #e5e7eb; border-bottom: 1px solid #e5e7eb; }
+.sinv__tax-strip-item { flex: 1; min-width: 110px; padding: 6px 10px; font-size: 10px; display: flex; justify-content: space-between; gap: 8px; border-right: 1px solid #e5e7eb; }
+.sinv__tax-strip-item:last-child { border-right: none; }
+.sinv__tax-strip-item--bold { font-weight: 700; }
+.sinv__tax-summary-table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+.sinv__tax-summary-table th, .sinv__tax-summary-table td { border: 1px solid #e5e7eb; padding: 5px 8px; font-size: 10px; text-align: right; }
+.sinv__tax-summary-table th:first-child, .sinv__tax-summary-table td:first-child { text-align: left; }
+
+/* Banner header with rounded corner — Double Divine, French Elite */
+.sinv__banner {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px; border-radius: 0 0 34px 0;
+}
+.sinv__banner-logo { width: 40px; height: 40px; border-radius: 4px; background: rgba(255,255,255,0.15);
+  display: flex; align-items: center; justify-content: center; font-size: 9px; }
+.sinv__banner-company { font-size: 16px; font-weight: 700; }
+.sinv__banner-phone { font-size: 10px; padding: 3px 10px; border-radius: 12px; background: rgba(255,255,255,0.2); }
+.sinv__meta3 { display: flex; border-top: 1px solid #e5e7eb; border-bottom: 1px solid #e5e7eb; }
+.sinv__meta3 .sinv__meta-col { border-right: 1px solid #e5e7eb; }
+.sinv__meta3 .sinv__meta-col:last-child { border-right: none; }
+.sinv__bottom--beside { display: flex; gap: 0; }
+.sinv__saved-row { font-weight: 700; }
+
 /* ════════════════════════════════════════════
    THERMAL invoice (.tinv-*)
 ════════════════════════════════════════════ */

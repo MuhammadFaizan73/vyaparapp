@@ -1,4 +1,12 @@
-import { IsDateString, IsIn, IsNumber, IsOptional, IsString, IsUUID } from "class-validator";
+import { IsArray, IsDateString, IsIn, IsNumber, IsOptional, IsString, IsUUID, ValidateNested } from "class-validator";
+import { Type } from "class-transformer";
+
+// One entry in `allocations` — how much of this payment was applied against a
+// specific invoice transaction. See PaymentAllocation in schema.prisma.
+export class PaymentAllocationInputDto {
+  @IsUUID() invoiceId!: string;
+  @IsNumber() amount!: number;
+}
 
 export class CreateTransactionDto {
   @IsString() partyId!: string;
@@ -12,6 +20,7 @@ export class CreateTransactionDto {
   @IsOptional() @IsUUID() bookerId?: string;
   @IsOptional() @IsString() idempotencyKey?: string;
   @IsOptional() @IsUUID() storeId?: string;
+  @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => PaymentAllocationInputDto) allocations?: PaymentAllocationInputDto[];
 }
 
 export class UpdateTransactionDto {
@@ -23,4 +32,5 @@ export class UpdateTransactionDto {
   @IsOptional() @IsUUID() companyId?: string;
   @IsOptional() @IsUUID() bookerId?: string;
   @IsOptional() @IsUUID() storeId?: string;
+  @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => PaymentAllocationInputDto) allocations?: PaymentAllocationInputDto[];
 }

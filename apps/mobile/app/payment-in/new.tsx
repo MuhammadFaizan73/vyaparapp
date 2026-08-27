@@ -180,11 +180,35 @@ export default function NewPaymentInScreen() {
   // Load the party's outstanding sale invoices whenever the party changes, so the Link
   // modal has something to show. When this screen was opened from a Sale row's "Receive
   // Payment" menu (prefillSaleId set), pre-link that one invoice once it shows up here.
+  // When editing an existing payment, also restore which invoices it was previously
+  // linked to (and for how much) from the persisted PaymentAllocation rows — an invoice
+  // this payment already reduced (partially or to zero) gets its allocated amount added
+  // back here, matching what the backend will restore it to before re-applying on save.
   useEffect(() => {
     if (!selectedPartyId) { setPartyInvoices([]); setLinkedAmounts({}); return; }
     api.getPartyTransactions(selectedPartyId)
-      .then((txns) => {
-        const outstanding = txns.filter((t) => t.type === "sale" && t.balance > 0);
+      .then(async (txns) => {
+        let outstanding = txns.filter((t) => t.type === "sale" && t.balance > 0);
+        if (isEdit && params.editId) {
+          const existingAllocations = await api.getTransactionAllocations(params.editId).catch(() => []);
+          if (existingAllocations.length) {
+            const byId = new Map(outstanding.map((t) => [t.id, t]));
+            for (const alloc of existingAllocations) {
+              const existing = byId.get(alloc.invoiceId);
+              if (existing) {
+                existing.balance += alloc.amount;
+              } else {
+                const fetched = await api.getTransaction(alloc.invoiceId).catch(() => null);
+                if (fetched) {
+                  const withRestoredBalance = { ...fetched, balance: fetched.balance + alloc.amount };
+                  outstanding = [...outstanding, withRestoredBalance];
+                  byId.set(fetched.id, withRestoredBalance);
+                }
+              }
+            }
+            setLinkedAmounts(Object.fromEntries(existingAllocations.map((a) => [a.invoiceId, a.amount])));
+          }
+        }
         setPartyInvoices(outstanding);
         if (!isEdit && params.prefillSaleId && !prefillSeededRef.current) {
           const inv = outstanding.find((t) => t.id === params.prefillSaleId);
@@ -201,18 +225,10 @@ export default function NewPaymentInScreen() {
   const linkedTotal = Object.values(linkedAmounts).reduce((s, v) => s + v, 0);
   const unusedAmt = Math.max(0, receivedAmt - linkedTotal);
 
-  // Deducts each invoice's own entered link amount from its balance (capped at that
-  // invoice's balance, in case it changed since the modal was closed).
-  async function applyLinkedInvoiceDeductions() {
-    for (const [invId, amt] of Object.entries(linkedAmounts)) {
-      if (amt <= 0) continue;
-      const inv = partyInvoices.find((t) => t.id === invId);
-      if (!inv) continue;
-      const deduct = Math.min(inv.balance, amt);
-      try {
-        await api.updateTransaction(invId, { balance: Math.max(0, inv.balance - deduct) });
-      } catch { /* non-fatal — other linked invoices should still get deducted */ }
-    }
+  function buildAllocations(): { invoiceId: string; amount: number }[] {
+    return Object.entries(linkedAmounts)
+      .filter(([, amt]) => amt > 0)
+      .map(([invoiceId, amount]) => ({ invoiceId, amount }));
   }
 
   async function handleSave(goNew: boolean) {
@@ -227,13 +243,13 @@ export default function NewPaymentInScreen() {
           total: receivedAmt,
           balance: unusedAmt,
           notes: JSON.stringify({ paymentType }),
+          allocations: buildAllocations(),
         });
-        if (Object.keys(linkedAmounts).length > 0) await applyLinkedInvoiceDeductions();
         router.back();
         return;
       }
 
-      const payment: any = await api.createTransaction({
+      await api.createTransaction({
         partyId: selectedPartyId,
         type: "payment_in",
         number: String(receiptNo),
@@ -242,18 +258,8 @@ export default function NewPaymentInScreen() {
         balance: unusedAmt,
         notes: JSON.stringify({ paymentType }),
         idempotencyKey: idempotencyKeyRef.current,
+        allocations: buildAllocations(),
       });
-
-      // A retry after a perceived failure reuses the same idempotencyKey and gets back
-      // the ORIGINAL payment row rather than a new one (see transactions.service.ts) —
-      // good, that's the point. But it means this createdAt could be from well before
-      // "now" if the first attempt actually succeeded. Only reduce linked invoices when
-      // this really is a fresh row; otherwise the first successful call already did it,
-      // and doing it again on the replay would deduct the same amount twice.
-      const isFreshlyCreated = Date.now() - new Date(payment.createdAt).getTime() < 10000;
-      if (Object.keys(linkedAmounts).length > 0 && isFreshlyCreated) {
-        await applyLinkedInvoiceDeductions();
-      }
 
       if (goNew) {
         idempotencyKeyRef.current = generateIdempotencyKey();

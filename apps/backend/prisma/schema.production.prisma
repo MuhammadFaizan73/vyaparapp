@@ -45,6 +45,7 @@ model Tenant {
   isActive         Boolean            @default(true)
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
+  paymentAllocations PaymentAllocation[]
 }
 
 model Distributor {
@@ -325,12 +326,33 @@ model Transaction {
   createdAt DateTime             @default(now())
   history   TransactionHistory[]
   idempotencyKey String?
+  allocationsMade     PaymentAllocation[] @relation("PaymentAllocationPayment")
+  allocationsReceived PaymentAllocation[] @relation("PaymentAllocationInvoice")
 
   @@index([tenantId, type, date])
   @@index([tenantId, partyId])
   @@index([tenantId, companyId])
   @@index([tenantId, storeId])
   @@unique([tenantId, idempotencyKey])
+}
+
+// Records that a payment_in/payment_out transaction was applied against a specific
+// invoice, and how much — persisted so the link survives (unlike the old behavior of
+// just mutating the invoice's balance with no record of which payment did it), and so
+// it can be reversed cleanly when the payment is edited or deleted.
+model PaymentAllocation {
+  id            String      @id @default(uuid())
+  tenantId      String
+  tenant        Tenant      @relation(fields: [tenantId], references: [id])
+  paymentTxnId  String
+  paymentTxn    Transaction @relation("PaymentAllocationPayment", fields: [paymentTxnId], references: [id], onDelete: Cascade)
+  invoiceTxnId  String
+  invoiceTxn    Transaction @relation("PaymentAllocationInvoice", fields: [invoiceTxnId], references: [id], onDelete: Cascade)
+  amount        Float
+  createdAt     DateTime    @default(now())
+
+  @@index([tenantId, paymentTxnId])
+  @@index([tenantId, invoiceTxnId])
 }
 
 model TransactionHistory {

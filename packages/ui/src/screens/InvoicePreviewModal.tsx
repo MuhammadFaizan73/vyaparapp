@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import type { Transaction, Party } from "@vyapar/api-client";
+import { loadSettings } from "./SettingsScreen";
 
 /* ── helpers ── */
 function fmt(n: number) {
@@ -34,16 +35,24 @@ function isLight(hex: string): boolean {
 }
 
 /* ── theme config ── */
-type ThemeConfig = {
+export type ThemeConfig = {
   headerBand: boolean; colorTitle: boolean; colorTableHead: boolean;
   colorSectionHead: boolean; logoSide: "left"|"right"; thermal: boolean; twoColMeta: boolean;
+  bordered?: boolean; taxSummaryTable?: boolean; bannerRounded?: boolean; amountsBesideTable?: boolean;
 };
-const THEME_MAP: Record<string, ThemeConfig> = {
+export const THEME_MAP: Record<string, ThemeConfig> = {
   "Classic":          { headerBand:false, colorTitle:false, colorTableHead:false, colorSectionHead:false, logoSide:"left",  thermal:false, twoColMeta:true  },
+  "Tally Theme":      { headerBand:false, colorTitle:false, colorTableHead:false, colorSectionHead:false, logoSide:"left",  thermal:false, twoColMeta:true,  bordered:true },
+  "Landscape Theme 1":{ headerBand:false, colorTitle:false, colorTableHead:false, colorSectionHead:false, logoSide:"left",  thermal:false, twoColMeta:true,  bordered:true, taxSummaryTable:true },
+  "Landscape Theme 2":{ headerBand:false, colorTitle:false, colorTableHead:true,  colorSectionHead:true,  logoSide:"left",  thermal:false, twoColMeta:true,  bordered:true, taxSummaryTable:true },
+  "Tax Theme 1":      { headerBand:false, colorTitle:false, colorTableHead:false, colorSectionHead:false, logoSide:"left",  thermal:false, twoColMeta:true,  bordered:true, taxSummaryTable:true },
   "Tax Theme 2":      { headerBand:true,  colorTitle:true,  colorTableHead:true,  colorSectionHead:true,  logoSide:"left",  thermal:false, twoColMeta:true  },
+  "Tax Theme 3":      { headerBand:false, colorTitle:true,  colorTableHead:true,  colorSectionHead:true,  logoSide:"right", thermal:false, twoColMeta:true,  bordered:true, taxSummaryTable:true },
   "Tax Theme 4":      { headerBand:true,  colorTitle:false, colorTableHead:true,  colorSectionHead:false, logoSide:"left",  thermal:false, twoColMeta:true  },
   "Tax Theme 5":      { headerBand:false, colorTitle:true,  colorTableHead:true,  colorSectionHead:true,  logoSide:"right", thermal:false, twoColMeta:false },
   "Tax Theme 6":      { headerBand:false, colorTitle:false, colorTableHead:true,  colorSectionHead:false, logoSide:"left",  thermal:false, twoColMeta:true  },
+  "Double Divine":    { headerBand:true,  colorTitle:false, colorTableHead:true,  colorSectionHead:false, logoSide:"left",  thermal:false, twoColMeta:true,  bannerRounded:true, amountsBesideTable:true },
+  "French Elite":     { headerBand:true,  colorTitle:false, colorTableHead:true,  colorSectionHead:false, logoSide:"left",  thermal:false, twoColMeta:true,  bannerRounded:true },
   "Theme 1":          { headerBand:true,  colorTitle:true,  colorTableHead:true,  colorSectionHead:false, logoSide:"left",  thermal:false, twoColMeta:true  },
   "Theme 2":          { headerBand:true,  colorTitle:false, colorTableHead:true,  colorSectionHead:true,  logoSide:"left",  thermal:false, twoColMeta:true  },
   "Theme 3":          { headerBand:true,  colorTitle:true,  colorTableHead:true,  colorSectionHead:true,  logoSide:"left",  thermal:false, twoColMeta:true  },
@@ -56,13 +65,14 @@ const THEME_MAP: Record<string, ThemeConfig> = {
 };
 
 /* Sidebar theme categories — Vintage collapsible, Thermal listed directly */
-const COLLAPSIBLE_CATS = [
-  { id:"classic", label:"Classic Themes", themes:["Classic"] },
-  { id:"vintage", label:"Vintage Themes", themes:["Tax Theme 2","Tax Theme 4","Tax Theme 5","Tax Theme 6","Theme 1","Theme 2","Theme 3","Theme 4"] },
+export const COLLAPSIBLE_CATS = [
+  { id:"classic", label:"Classic Themes", themes:["Classic","Tally Theme"] },
+  { id:"landscape", label:"Landscape Themes", themes:["Landscape Theme 1","Landscape Theme 2"] },
+  { id:"vintage", label:"Vintage Themes", themes:["Tax Theme 1","Tax Theme 2","Tax Theme 3","Tax Theme 4","Tax Theme 5","Tax Theme 6","Double Divine","French Elite","Theme 1","Theme 2","Theme 3","Theme 4"] },
 ];
-const THERMAL_THEMES = ["Thermal Theme 1","Thermal Theme 2","Thermal Theme 3","Thermal Theme 4","Thermal Theme 5"];
+export const THERMAL_THEMES = ["Thermal Theme 1","Thermal Theme 2","Thermal Theme 3","Thermal Theme 4","Thermal Theme 5"];
 
-const COLOR_SWATCHES = [
+export const COLOR_SWATCHES = [
   "#a78bfa","#3b82f6","#9ca3af","#78716c","#a3e635",
   "#1d4ed8","#06b6d4","#16a34a","#d97706","#78350f",
   "#7c3aed","#6d28d9","#92400e","#a16207","#9333ea",
@@ -79,8 +89,8 @@ type Props = { sale: SaleRow; invoiceNumber: number; party?: Party; onClose: () 
    MODAL
 ═══════════════════════════════════════════════════════════ */
 export function InvoicePreviewModal({ sale, invoiceNumber, party, onClose }: Props) {
-  const [theme, setTheme]         = useState("Theme 3");
-  const [color, setColor]         = useState("#3b82f6");
+  const [theme, setTheme]         = useState(() => loadSettings().printThemeName || "Tally Theme");
+  const [color, setColor]         = useState(() => loadSettings().printColor || "#3b82f6");
   const [collapsed, setCollapsed] = useState<Record<string,boolean>>({ classic:true });
   const [doNotShow, setDoNotShow] = useState(false);
 
@@ -329,6 +339,54 @@ function itemAmount(item: { qty: number; rate: number; discount?: number }): num
   return item.qty * item.rate * (1 - (item.discount || 0) / 100);
 }
 
+// Per-invoice tax/discount breakdown isn't persisted anywhere (only the final total is —
+// see the Sale-edit total-drift fix), so this is a best-effort reconstruction from the raw
+// item subtotal vs. the saved total, purely for themes that show a Sub Total/Discount/Tax
+// row strip. It never fabricates a tax figure we don't actually have.
+function amountBreakdown(lineItems: Array<{ qty: number; rate: number; discount?: number }>, sale: { total: number; balance: number }) {
+  const subTotal = lineItems.reduce((s, i) => s + itemAmount(i), 0) || sale.total;
+  const discount = Math.max(0, subTotal - sale.total);
+  return { subTotal, discount, tax: 0, tcs: 0, total: sale.total, received: sale.total - sale.balance, balance: sale.balance, saved: discount };
+}
+
+function TaxSummaryBottom({ tc, color, fg, lineItems, sale }: {
+  tc: ThemeConfig; color: string; fg: string;
+  lineItems: Array<{ qty: number; rate: number; discount?: number }>; sale: { total: number; balance: number };
+}) {
+  const b = amountBreakdown(lineItems, sale);
+  const strip: [string, string][] = [
+    ["Sub Total", `Rs ${fmt(b.subTotal)}`],
+    ["Discount", `Rs ${fmt(b.discount)}`],
+    ["Tax", `Rs ${fmt(b.tax)}`],
+    ["TCS", `Rs ${fmt(b.tcs)}`],
+    ["Total", `Rs ${fmt(b.total)}`],
+    ["Received", `Rs ${fmt(b.received)}`],
+    ["Balance", `Rs ${fmt(b.balance)}`],
+    ["You Saved", `Rs ${fmt(b.saved)}`],
+  ];
+  return (
+    <>
+      <div className="sinv__tax-strip">
+        {strip.map(([label, value]) => (
+          <div key={label} className={`sinv__tax-strip-item${label === "Total" || label === "You Saved" ? " sinv__tax-strip-item--bold" : ""}`}>
+            <span>{label}</span><span>{value}</span>
+          </div>
+        ))}
+      </div>
+      <table className="sinv__tax-summary-table">
+        <thead>
+          <tr style={tc.colorTableHead ? { background: color, color: fg } : {}}>
+            <th>HSN/SAC</th><th>Taxable amount(Rs)</th><th>Rate(%)</th><th>Tax amount(Rs)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>—</td><td>Rs {fmt(b.subTotal)}</td><td>0%</td><td>Rs 0.00</td></tr>
+        </tbody>
+      </table>
+    </>
+  );
+}
+
 function InvoicePaperHeader({ tc, color, fg, companyName, companyPhone }: {
   tc: ThemeConfig; color: string; fg: string; companyName: string; companyPhone: string;
 }) {
@@ -351,7 +409,7 @@ function InvoicePaperHeader({ tc, color, fg, companyName, companyPhone }: {
   );
 }
 
-function InvoicePaper({ tc, color, sale, party, invoiceNumber, received }: {
+export function InvoicePaper({ tc, color, sale, party, invoiceNumber, received }: {
   tc: ThemeConfig; color: string; sale: SaleRow; party?: Party;
   invoiceNumber: number; received: number;
 }) {
@@ -699,9 +757,111 @@ function InvoicePaper({ tc, color, sale, party, invoiceNumber, received }: {
     </div>
   );
 
+  /* Banner header with rounded corner — Double Divine, French Elite */
+  if (tc.bannerRounded) {
+    const b = amountBreakdown(lineItems, sale);
+    return (
+      <div className="sinv">
+        <div className="sinv__banner" style={{ background: color, color: fg }}>
+          <div className="sinv__banner-logo">LOGO</div>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+            <div className="sinv__banner-company">{companyName}</div>
+            {companyPhone && <div className="sinv__banner-phone">{companyPhone}</div>}
+          </div>
+        </div>
+        <div className="sinv__title" style={{ color: "#111827" }}>{docTitle}</div>
+
+        <div className="sinv__meta3">
+          <div className="sinv__meta-col">
+            <div className="sinv__meta-hdr" style={tc.colorSectionHead ? { background: color, color: fg } : {}}>Bill To</div>
+            <div className="sinv__meta-body">
+              <div className="sinv__meta-name">{partyName}</div>
+              {partyAddress && <div className="sinv__meta-sub">{partyAddress}</div>}
+              {partyPhone && <div className="sinv__meta-sub">Contact No. : {partyPhone}</div>}
+            </div>
+          </div>
+          <div className="sinv__meta-col">
+            <div className="sinv__meta-hdr" style={tc.colorSectionHead ? { background: color, color: fg } : {}}>Transportation Details</div>
+            <div className="sinv__meta-body"><div className="sinv__meta-sub">—</div></div>
+          </div>
+          <div className="sinv__meta-col">
+            <div className="sinv__meta-hdr" style={tc.colorSectionHead ? { background: color, color: fg } : {}}>{docTitle} Details</div>
+            <div className="sinv__meta-body">
+              <div className="sinv__meta-sub">{docTitle} No. : {invoiceNumber}</div>
+              <div className="sinv__meta-sub">Date : {invoiceDate}</div>
+            </div>
+          </div>
+        </div>
+
+        <table className="sinv__table">
+          <thead>
+            <tr style={tc.colorTableHead ? { background: color, color: fg } : { background: "#f3f4f6" }}>
+              {["#","Item name","MRP","Quantity","Unit","Price/ Unit","Amount"].map((h) => (
+                <th key={h} className="sinv__th" style={{ color: tc.colorTableHead ? fg : "#374151" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {lineItems.length > 0 ? lineItems.map((item, idx) => (
+              <tr key={idx} className="sinv__tr">
+                <td className="sinv__td">{idx + 1}</td>
+                <td className="sinv__td">{item.name}</td>
+                <td className="sinv__td sinv__td--r">{item.mrp ? `Rs ${fmt(item.mrp)}` : "—"}</td>
+                <td className="sinv__td sinv__td--r">{item.qty}</td>
+                <td className="sinv__td">{item.unit !== "NONE" ? item.unit : "—"}</td>
+                <td className="sinv__td sinv__td--r">Rs {fmt(item.rate)}</td>
+                <td className="sinv__td sinv__td--r">Rs {fmt(itemAmount(item))}</td>
+              </tr>
+            )) : (
+              <tr className="sinv__tr">
+                <td className="sinv__td">1</td><td className="sinv__td">—</td>
+                <td className="sinv__td sinv__td--r">Rs {fmt(sale.total)}</td><td className="sinv__td sinv__td--r">1</td>
+                <td className="sinv__td">—</td>
+                <td className="sinv__td sinv__td--r">Rs {fmt(sale.total)}</td>
+                <td className="sinv__td sinv__td--r">Rs {fmt(sale.total)}</td>
+              </tr>
+            )}
+            <tr className="sinv__tr sinv__tr--total" style={tc.colorTableHead ? { background: color, color: fg } : {}}>
+              <td className="sinv__td" colSpan={2}><strong>Total</strong></td>
+              <td className="sinv__td" />
+              <td className="sinv__td sinv__td--r"><strong>{lineItems.reduce((s, i) => s + i.qty, 0) || 1}</strong></td>
+              <td className="sinv__td" colSpan={3} />
+            </tr>
+          </tbody>
+        </table>
+
+        <div className={tc.amountsBesideTable ? "sinv__bottom--beside" : "sinv__bottom"}>
+          <div className="sinv__bottom-l">
+            <div className="sinv__sec-hdr" style={tc.colorSectionHead ? { background: color, color: fg } : {}}>Terms And Conditions</div>
+            <div className="sinv__terms">Thanks for doing business with us!</div>
+            <div className="sinv__sec-hdr" style={tc.colorSectionHead ? { background: color, color: fg } : { marginTop: 10 }}>Invoice Amount In Words</div>
+            <div className="sinv__words">{numToWords(sale.total)}</div>
+          </div>
+          <div className="sinv__bottom-r">
+            <div className="sinv__amount-row"><span>Sub Total</span><span>Rs {fmt(b.subTotal)}</span></div>
+            <div className="sinv__amount-row"><span>Discount</span><span>Rs {fmt(b.discount)}</span></div>
+            <div className="sinv__amount-row"><span>Tax</span><span>Rs {fmt(b.tax)}</span></div>
+            <div className="sinv__amount-row sinv__amount-row--bold" style={tc.colorSectionHead ? { background: color, color: fg } : {}}><span>Total</span><span>Rs {fmt(b.total)}</span></div>
+            <div className="sinv__amount-row"><span>Received</span><span>Rs {fmt(b.received)}</span></div>
+            <div className="sinv__amount-row"><span>Balance</span><span>Rs {fmt(b.balance)}</span></div>
+            <div className="sinv__amount-row sinv__saved-row" style={tc.colorSectionHead ? { background: color, color: fg } : {}}><span>You Saved</span><span>Rs {fmt(b.saved)}</span></div>
+          </div>
+        </div>
+
+        <div className="sinv__sign-area">
+          <div />
+          <div className="sinv__sign">
+            <div className="sinv__sign-for">For : {companyName}</div>
+            <div className="sinv__sign-lbl">Authorized Signatory</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   /* Standard / Vintage */
   return (
-    <div className="sinv">
+    <div className={`sinv${tc.bordered ? " sinv--bordered" : ""}`}>
       {/* Header */}
       <InvoicePaperHeader tc={tc} color={color} fg={fg} companyName={companyName} companyPhone={companyPhone} />
 
@@ -772,27 +932,31 @@ function InvoicePaper({ tc, color, sale, party, invoiceNumber, received }: {
       </table>
 
       {/* Bottom */}
-      <div className="sinv__bottom">
-        <div className="sinv__bottom-l">
-          <div className="sinv__sec-hdr" style={tc.colorSectionHead ? { background: color, color: fg } : {}}>
-            Invoice Amount In Words
+      {tc.taxSummaryTable ? (
+        <TaxSummaryBottom tc={tc} color={color} fg={fg} lineItems={lineItems} sale={sale} />
+      ) : (
+        <div className="sinv__bottom">
+          <div className="sinv__bottom-l">
+            <div className="sinv__sec-hdr" style={tc.colorSectionHead ? { background: color, color: fg } : {}}>
+              Invoice Amount In Words
+            </div>
+            <div className="sinv__words">{numToWords(sale.total)}</div>
+            <div className="sinv__sec-hdr" style={tc.colorSectionHead ? { background: color, color: fg } : { marginTop: 10 }}>
+              Terms and Conditions
+            </div>
+            <div className="sinv__terms">Thanks for doing business with us!</div>
           </div>
-          <div className="sinv__words">{numToWords(sale.total)}</div>
-          <div className="sinv__sec-hdr" style={tc.colorSectionHead ? { background: color, color: fg } : { marginTop: 10 }}>
-            Terms and Conditions
+          <div className="sinv__bottom-r">
+            <div className="sinv__sec-hdr" style={tc.colorSectionHead ? { background: color, color: fg } : {}}>
+              Amounts
+            </div>
+            <div className="sinv__amount-row"><span>Sub Total</span><span>Rs {fmt(sale.total)}</span></div>
+            <div className="sinv__amount-row sinv__amount-row--bold"><span>Total</span><span>Rs {fmt(sale.total)}</span></div>
+            <div className="sinv__amount-row"><span>Received</span><span>Rs {fmt(received)}</span></div>
+            <div className="sinv__amount-row"><span>Balance</span><span>Rs {fmt(sale.balance)}</span></div>
           </div>
-          <div className="sinv__terms">Thanks for doing business with us!</div>
         </div>
-        <div className="sinv__bottom-r">
-          <div className="sinv__sec-hdr" style={tc.colorSectionHead ? { background: color, color: fg } : {}}>
-            Amounts
-          </div>
-          <div className="sinv__amount-row"><span>Sub Total</span><span>Rs {fmt(sale.total)}</span></div>
-          <div className="sinv__amount-row sinv__amount-row--bold"><span>Total</span><span>Rs {fmt(sale.total)}</span></div>
-          <div className="sinv__amount-row"><span>Received</span><span>Rs {fmt(received)}</span></div>
-          <div className="sinv__amount-row"><span>Balance</span><span>Rs {fmt(sale.balance)}</span></div>
-        </div>
-      </div>
+      )}
 
       {/* Signature */}
       <div className="sinv__sign-area">

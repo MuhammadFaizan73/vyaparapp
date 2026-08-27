@@ -109,4 +109,9 @@ export class TransactionsController {
   history(@Req() req: AuthedRequest, @Param("id") id: string) {
     return this.transactionsService.getHistory(req.tenantId, id);
   }
+
+  @Get(":id/allocations")
+  allocations(@Req() req: AuthedRequest, @Param("id") id: string) {
+    return this.transactionsService.getAllocations(req.tenantId, id);
+  }
 }

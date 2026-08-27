@@ -303,6 +303,11 @@ export class VyaparApiClient {
     return data;
   }
 
+  async getTransactionAllocations(id: string): Promise<Array<{ invoiceId: string; amount: number }>> {
+    const { data } = await this.http.get(`/transactions/${id}/allocations`);
+    return data;
+  }
+
   async getItems(opts?: { companyId?: string }): Promise<Item[]> {
     const { data } = await this.http.get<Item[]>("/items", { params: opts });
     return data;

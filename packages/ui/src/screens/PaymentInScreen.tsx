@@ -614,12 +614,40 @@ export function PaymentInForm({
     ? parties.filter((p) => p.name.toLowerCase().includes(customer.toLowerCase()))
     : parties;
 
-  /* Load party's outstanding sale invoices when party changes */
+  /* Load party's outstanding sale invoices when party changes, and — when editing an
+   * existing payment — restore which invoices it was previously linked to. An invoice
+   * this payment already reduced (partially or to zero) is added back to its balance
+   * here to the amount it would be after the backend reverses this payment's old
+   * allocations on save, so the existing min(balance, remaining) split below computes
+   * the right numbers whether or not the user actually changes anything. */
   useEffect(() => {
     if (!selectedPartyId) { setPartyInvoices([]); setLinkedInvoiceIds(new Set()); return; }
     api.getPartyTransactions(selectedPartyId)
-      .then((txns) => setPartyInvoices(txns.filter((t) => t.type === "sale" && t.balance > 0)))
+      .then(async (txns) => {
+        let invoices = txns.filter((t) => t.type === "sale" && t.balance > 0);
+        if (isEdit && initialRow) {
+          const existingAllocations = await api.getTransactionAllocations(initialRow.id).catch(() => []);
+          if (existingAllocations.length) {
+            const byId = new Map(invoices.map((t) => [t.id, t]));
+            for (const alloc of existingAllocations) {
+              const existing = byId.get(alloc.invoiceId);
+              if (existing) {
+                existing.balance += alloc.amount;
+              } else {
+                const fetched = await api.getTransaction(alloc.invoiceId).catch(() => null);
+                if (fetched) {
+                  invoices = [...invoices, { ...fetched, balance: fetched.balance + alloc.amount }];
+                  byId.set(fetched.id, invoices[invoices.length - 1]);
+                }
+              }
+            }
+            setLinkedInvoiceIds(new Set(existingAllocations.map((a) => a.invoiceId)));
+          }
+        }
+        setPartyInvoices(invoices);
+      })
       .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPartyId]);
 
   useEffect(() => {
@@ -652,6 +680,22 @@ export function PaymentInForm({
     if (!paymentType.trim()) { setError("Enter a payment type."); return; }
     setSaving(true);
     const notesJson = JSON.stringify({ paymentType, receiptNo });
+
+    /* Which invoices this payment applies to, and how much — sent to the backend as
+     * `allocations` so it can persist the link (PaymentAllocation) instead of just
+     * mutating each invoice's balance with no record of which payment did it. */
+    let remaining = linkedTotal;
+    const allocations: { invoiceId: string; amount: number }[] = [];
+    for (const invId of Array.from(linkedInvoiceIds)) {
+      if (remaining <= 0) break;
+      const inv = partyInvoices.find((t) => t.id === invId);
+      if (!inv) continue;
+      const deduct = Math.min(inv.balance, remaining);
+      if (deduct <= 0) continue;
+      allocations.push({ invoiceId: invId, amount: deduct });
+      remaining -= deduct;
+    }
+
     try {
       if (isEdit && initialRow) {
         await api.updateTransaction(initialRow.id, {
@@ -661,6 +705,7 @@ export function PaymentInForm({
           balance: unusedAmt,
           notes: notesJson,
           companyId: selectedCompanyId ?? null,
+          allocations,
         });
       } else {
         await api.createTransaction({
@@ -672,18 +717,8 @@ export function PaymentInForm({
           balance: unusedAmt,
           notes: notesJson,
           companyId: selectedCompanyId ?? undefined,
+          allocations,
         });
-      }
-
-      /* Reduce balance on each linked sale invoice */
-      let remaining = linkedTotal;
-      for (const invId of Array.from(linkedInvoiceIds)) {
-        if (remaining <= 0) break;
-        const inv = partyInvoices.find((t) => t.id === invId);
-        if (!inv) continue;
-        const deduct = Math.min(inv.balance, remaining);
-        await api.updateTransaction(invId, { balance: Math.max(0, inv.balance - deduct) });
-        remaining -= deduct;
       }
 
       if (mode === "new") {

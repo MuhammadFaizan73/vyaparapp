@@ -1,7 +1,8 @@
 import { Injectable, NotFoundException, ForbiddenException } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { StockService, STOCK_MOVING_TYPES } from "../stores/stock.service";
-import { CreateTransactionDto, UpdateTransactionDto } from "./transactions.dto";
+import { CreateTransactionDto, UpdateTransactionDto, PaymentAllocationInputDto } from "./transactions.dto";
 import { companyIdWhere } from "../common/company-filter.util";
 
 const MAX_TRANSACTIONS_PER_PAGE = 200;
@@ -249,6 +250,67 @@ export class TransactionsService {
     return agg._sum.total ?? 0;
   }
 
+  // How much of `paymentTxnId` was applied against which invoices — used by the
+  // client to restore its "linked invoices" checkboxes when opening a payment for edit.
+  async getAllocations(tenantId: string, paymentTxnId: string): Promise<Array<{ invoiceId: string; amount: number }>> {
+    const rows = await this.prisma.paymentAllocation.findMany({
+      where: { tenantId, paymentTxnId },
+      select: { invoiceTxnId: true, amount: true },
+    });
+    return rows.map((r) => ({ invoiceId: r.invoiceTxnId, amount: r.amount }));
+  }
+
+  // Creates the PaymentAllocation rows for a fresh set of links and deducts each
+  // amount from its invoice's balance — clamped to what the invoice actually still
+  // owes, in case it changed (e.g. another payment landed) since the client last saw it.
+  private async applyAllocations(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    paymentTxnId: string,
+    allocations: PaymentAllocationInputDto[],
+  ): Promise<void> {
+    for (const alloc of allocations) {
+      const invoice = await tx.transaction.findUnique({ where: { id: alloc.invoiceId } });
+      if (!invoice || invoice.tenantId !== tenantId) continue;
+      const amount = Math.min(alloc.amount, invoice.balance);
+      if (amount <= 0) continue;
+      await tx.paymentAllocation.create({ data: { tenantId, paymentTxnId, invoiceTxnId: invoice.id, amount } });
+      await tx.transaction.update({ where: { id: invoice.id }, data: { balance: invoice.balance - amount } });
+    }
+  }
+
+  // Undoes every allocation this payment made — restores each linked invoice's balance
+  // and removes the allocation rows. Used before re-applying a fresh set on edit, and
+  // as half of the full reversal on delete.
+  private async reversePaymentAllocations(tx: Prisma.TransactionClient, tenantId: string, paymentTxnId: string): Promise<void> {
+    const existing = await tx.paymentAllocation.findMany({ where: { tenantId, paymentTxnId } });
+    for (const a of existing) {
+      const invoice = await tx.transaction.findUnique({ where: { id: a.invoiceTxnId } });
+      if (invoice) {
+        await tx.transaction.update({ where: { id: invoice.id }, data: { balance: invoice.balance + a.amount } });
+      }
+    }
+    if (existing.length) await tx.paymentAllocation.deleteMany({ where: { tenantId, paymentTxnId } });
+  }
+
+  // Full reversal for delete: this transaction might be the payment side of some
+  // allocations (restore the invoices it paid down) AND/OR the invoice side of others
+  // (restore the payments' unused balance) — e.g. deleting a Sale invoice that already
+  // had a Payment-In linked against it. Both directions are cleaned up so no dangling
+  // PaymentAllocation row is left pointing at a transaction that's about to be gone.
+  private async reverseAllAllocationsForTxn(tx: Prisma.TransactionClient, tenantId: string, txnId: string): Promise<void> {
+    await this.reversePaymentAllocations(tx, tenantId, txnId);
+
+    const asInvoice = await tx.paymentAllocation.findMany({ where: { tenantId, invoiceTxnId: txnId } });
+    for (const a of asInvoice) {
+      const payment = await tx.transaction.findUnique({ where: { id: a.paymentTxnId } });
+      if (payment) {
+        await tx.transaction.update({ where: { id: payment.id }, data: { balance: payment.balance + a.amount } });
+      }
+    }
+    if (asInvoice.length) await tx.paymentAllocation.deleteMany({ where: { tenantId, invoiceTxnId: txnId } });
+  }
+
   async create(tenantId: string, dto: CreateTransactionDto, caller: Caller): Promise<TransactionRow> {
     // A client that resends a create after a slow/timed-out response (a real risk on the
     // weak connections this app targets) would otherwise land two identical invoices —
@@ -298,6 +360,9 @@ export class TransactionsService {
           },
         });
         await this.stock.applyTxnMovement(tx, tenantId, { type: dto.type, storeId, notes: dto.notes, sign: 1 });
+        if (dto.allocations?.length) {
+          await this.applyAllocations(tx, tenantId, created.id, dto.allocations);
+        }
         return created;
       });
       return toRow(transaction);
@@ -344,6 +409,7 @@ export class TransactionsService {
           sign: -1,
         });
       }
+      await this.reverseAllAllocationsForTxn(tx, tenantId, id);
       await tx.transaction.delete({ where: { id } });
     });
   }
@@ -435,6 +501,14 @@ export class TransactionsService {
           notes: dto.notes !== undefined ? dto.notes : existing.notes,
           sign: 1,
         });
+      }
+      // Only touched when the client sends a set (even []) — omitting the field
+      // entirely leaves this payment's existing links untouched.
+      if (dto.allocations !== undefined) {
+        await this.reversePaymentAllocations(tx, tenantId, id);
+        if (dto.allocations.length) {
+          await this.applyAllocations(tx, tenantId, id, dto.allocations);
+        }
       }
       return updated;
     });

@@ -306,6 +306,22 @@ export const TransactionSchema = z.object({
 });
 export type Transaction = z.infer<typeof TransactionSchema>;
 
+// One entry in a payment_in/payment_out's `allocations` — how much of this payment
+// was applied against a specific invoice (sale/purchase) transaction. Persisted as
+// PaymentAllocation rows so the link survives, unlike the old behavior of just
+// mutating the invoice's balance with no record of which payment did it.
+export const PaymentAllocationInputSchema = z.object({
+  invoiceId: z.string().uuid(),
+  amount: z.number(),
+});
+export type PaymentAllocationInput = z.infer<typeof PaymentAllocationInputSchema>;
+
+export const PaymentAllocationSchema = z.object({
+  invoiceId: z.string().uuid(),
+  amount: z.number(),
+});
+export type PaymentAllocation = z.infer<typeof PaymentAllocationSchema>;
+
 export const CreateTransactionRequestSchema = z.object({
   partyId: z.string().uuid(),
   type: z.enum(["sale","purchase","payment_in","payment_out","credit_note","debit_note","expense","opening_balance","estimate","proforma_invoice","sale_order","purchase_order","delivery_challan"]),
@@ -318,6 +334,7 @@ export const CreateTransactionRequestSchema = z.object({
   bookerId: z.string().uuid().nullable().optional(),
   storeId: z.string().uuid().nullable().optional(),
   idempotencyKey: z.string().optional(),
+  allocations: z.array(PaymentAllocationInputSchema).optional(),
 });
 export type CreateTransactionRequest = z.infer<typeof CreateTransactionRequestSchema>;
 
@@ -330,6 +347,10 @@ export const UpdateTransactionRequestSchema = z.object({
   companyId: z.string().uuid().nullable().optional(),
   bookerId: z.string().uuid().nullable().optional(),
   storeId: z.string().uuid().nullable().optional(),
+  // When provided (even as []), replaces this payment's existing allocations —
+  // reversing the old ones' effect on their invoices before applying the new set.
+  // Omitted entirely, existing allocations are left untouched.
+  allocations: z.array(PaymentAllocationInputSchema).optional(),
 });
 export type UpdateTransactionRequest = z.infer<typeof UpdateTransactionRequestSchema>;
 
