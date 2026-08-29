@@ -14,6 +14,7 @@ import { api, getPermissions, getRole, getStaffName, getStaffContact, getMemberI
 import { canEditSale } from "../../src/permissions";
 import { setHandoffTxn } from "../../src/txnHandoff";
 import { buildInvoiceHtml } from "../../src/invoiceHtml";
+import { useInvoiceHtmlOptions } from "../../src/useSettings";
 import type { Transaction, Party } from "@vyapar/api-client";
 
 type Tab = "txn" | "party";
@@ -60,6 +61,7 @@ function TxnCard({ item, permissions, memberId, canDelete, onChanged }: {
   const badge = getBadge(item.type, item.balance);
   const [busy, setBusy] = useState<"download" | "share" | "delete" | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const invoiceHtmlOpts = useInvoiceHtmlOptions();
 
   function openDetail() {
     setHandoffTxn(item);
@@ -69,7 +71,7 @@ function TxnCard({ item, permissions, memberId, canDelete, onChanged }: {
   async function handleDownload() {
     setBusy("download");
     try {
-      await Print.printAsync({ html: buildInvoiceHtml(item, item.number ?? item.id.slice(0, 8)) });
+      await Print.printAsync({ html: buildInvoiceHtml(item, item.number ?? item.id.slice(0, 8), invoiceHtmlOpts) });
     } catch {
       Alert.alert("Error", "Could not open printer.");
     } finally {
@@ -80,7 +82,7 @@ function TxnCard({ item, permissions, memberId, canDelete, onChanged }: {
   async function handleShare() {
     setBusy("share");
     try {
-      const { uri } = await Print.printToFileAsync({ html: buildInvoiceHtml(item, item.number ?? item.id.slice(0, 8)) });
+      const { uri } = await Print.printToFileAsync({ html: buildInvoiceHtml(item, item.number ?? item.id.slice(0, 8), invoiceHtmlOpts) });
       await Sharing.shareAsync(uri, { mimeType: "application/pdf", dialogTitle: "Share Invoice" });
     } catch {
       Alert.alert("Error", "Could not generate PDF.");

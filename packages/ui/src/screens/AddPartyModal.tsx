@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import type { Party, PartyGroup } from "@vyapar/api-client";
 import { api } from "../lib/api";
 import { useCompany } from "../lib/CompanyContext";
+import { loadPermissions } from "../lib/permissions";
 import type { PartySettings } from "./PartySettingsDrawer";
 import { DEFAULT_PARTY_SETTINGS } from "./PartySettingsDrawer";
 
@@ -20,6 +21,9 @@ type Tab = "address" | "credit" | "fields";
 
 export function AddPartyModal({ onClose, onSaved, party, settings = DEFAULT_PARTY_SETTINGS, defaultType }: Props) {
   const isEdit = !!party;
+  // null = owner/unrestricted; a team member needs the explicit grant.
+  const permissions = loadPermissions();
+  const canSetOpeningBalance = permissions === null || permissions.includes("parties_opening_balance");
   const [tab, setTab] = useState<Tab>("address");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -410,18 +414,20 @@ export function AddPartyModal({ onClose, onSaved, party, settings = DEFAULT_PART
           {tab === "credit" && (
             <div className="party-modal__credit">
               <div className="party-modal__credit-row">
-                <div className="party-modal__credit-field">
-                  <label className="party-modal__credit-label">Opening Balance (Rs)</label>
-                  <input
-                    className="party-modal__input"
-                    placeholder="0.00"
-                    type="number"
-                    min="0"
-                    value={openingBalance}
-                    onChange={(e) => setOpeningBalance(e.target.value)}
-                  />
-                  <p className="party-modal__credit-hint">Balance already owed to/from this party</p>
-                </div>
+                {settings.showOpeningBalance && canSetOpeningBalance && (
+                  <div className="party-modal__credit-field">
+                    <label className="party-modal__credit-label">Opening Balance (Rs)</label>
+                    <input
+                      className="party-modal__input"
+                      placeholder="0.00"
+                      type="number"
+                      min="0"
+                      value={openingBalance}
+                      onChange={(e) => setOpeningBalance(e.target.value)}
+                    />
+                    <p className="party-modal__credit-hint">Balance already owed to/from this party</p>
+                  </div>
+                )}
                 <div className="party-modal__credit-field">
                   <label className="party-modal__credit-label">Credit Limit (Rs)</label>
                   <input

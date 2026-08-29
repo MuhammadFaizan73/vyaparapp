@@ -93,9 +93,16 @@ function PrefixDropdown({ label, value, onPress }: { label: string; value: strin
   );
 }
 
+// Moved into /settings (Transaction tab) — this route now just redirects there.
+// The body is exported so the unified Settings screen can mount it directly.
 export default function TransactionSettingsScreen() {
-  const insets = useSafeAreaInsets();
   const router = useRouter();
+  React.useEffect(() => { router.replace("/settings?tab=transaction" as never); }, []);
+  return null;
+}
+
+export function TransactionSettingsBody() {
+  const insets = useSafeAreaInsets();
   const { settings, update, loaded } = useTransactionSettings();
 
   const [dropdown, setDropdown] = useState<{
@@ -121,18 +128,7 @@ export default function TransactionSettingsScreen() {
   }
 
   return (
-    <View style={[s.screen, { paddingTop: insets.top }]}>
-      {/* App bar */}
-      <View style={s.appBar}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={8}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
-        <Text style={s.appBarTitle}>Transaction</Text>
-        <TouchableOpacity hitSlop={8}>
-          <Ionicons name="search-outline" size={22} color="#fff" />
-        </TouchableOpacity>
-      </View>
-
+    <View style={{ flex: 1 }}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}>
 
         {/* ── Transaction Header ── */}

@@ -278,6 +278,9 @@ export function PaymentInScreen({ isLocked = false, onLockedAction }: Props) {
         <button type="button" className="dc-icon-btn" onClick={() => exportPaymentsToExcel(rows, filterFrom, filterTo)}>
           📊 Excel Report
         </button>
+        <button type="button" className="dc-icon-btn" onClick={() => window.print()}>
+          🖨 Print
+        </button>
       </div>
 
       {/* ── Firm (company) filter panel ── */}

@@ -13,6 +13,7 @@ import { api, getPermissions, getMemberId } from "../../src/auth";
 import { setHandoffTxn, takeHandoffTxn, type TxnWithParty } from "../../src/txnHandoff";
 import { buildInvoiceHtml, fmt, formatDate, parseNoteItems } from "../../src/invoiceHtml";
 import { canEditSale } from "../../src/permissions";
+import { useInvoiceHtmlOptions } from "../../src/useSettings";
 
 type BadgeCfg = { label: string; bg: string; fg: string };
 
@@ -51,6 +52,7 @@ export default function TransactionDetailScreen() {
   const [memberId, setMemberId] = useState<string | null>(null);
   const [canDelete, setCanDelete] = useState(true);
   const [busy, setBusy] = useState<"download" | "share" | "delete" | null>(null);
+  const invoiceHtmlOpts = useInvoiceHtmlOptions();
 
   useEffect(() => {
     Promise.all([getPermissions(), getMemberId()]).then(([perms, mid]) => {
@@ -79,7 +81,7 @@ export default function TransactionDetailScreen() {
     if (!txn) return;
     setBusy("download");
     try {
-      await Print.printAsync({ html: buildInvoiceHtml(txn, txn.number ?? txn.id.slice(0, 8)) });
+      await Print.printAsync({ html: buildInvoiceHtml(txn, txn.number ?? txn.id.slice(0, 8), invoiceHtmlOpts) });
     } catch {
       Alert.alert("Error", "Could not open printer.");
     } finally {
@@ -91,7 +93,7 @@ export default function TransactionDetailScreen() {
     if (!txn) return;
     setBusy("share");
     try {
-      const { uri } = await Print.printToFileAsync({ html: buildInvoiceHtml(txn, txn.number ?? txn.id.slice(0, 8)) });
+      const { uri } = await Print.printToFileAsync({ html: buildInvoiceHtml(txn, txn.number ?? txn.id.slice(0, 8), invoiceHtmlOpts) });
       await Sharing.shareAsync(uri, { mimeType: "application/pdf", dialogTitle: "Share Invoice" });
     } catch {
       Alert.alert("Error", "Could not generate PDF.");

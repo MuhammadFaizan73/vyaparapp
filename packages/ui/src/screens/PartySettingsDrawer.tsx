@@ -10,6 +10,7 @@ export type PartySettings = {
   additionalField3: boolean;
   dateField: boolean;
   inviteParties: boolean;
+  showOpeningBalance: boolean;
 };
 
 export const DEFAULT_PARTY_SETTINGS: PartySettings = {
@@ -22,6 +23,7 @@ export const DEFAULT_PARTY_SETTINGS: PartySettings = {
   additionalField3: false,
   dateField: false,
   inviteParties: true,
+  showOpeningBalance: true,
 };
 
 const STORAGE_KEY = "vyapar_party_settings";
@@ -74,6 +76,11 @@ export function PartySettingsDrawer({ onClose, onSaved }: Props) {
         <div className="ps-drawer__body">
 
           {/* Main fields */}
+          <ToggleRow
+            label="Show Opening Balance"
+            checked={s.showOpeningBalance}
+            onChange={() => toggle("showOpeningBalance")}
+          />
           <ToggleRow
             label="TIN number"
             checked={s.tinNumber}

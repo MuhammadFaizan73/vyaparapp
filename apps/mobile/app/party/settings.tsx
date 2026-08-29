@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import {
   View, Text, TouchableOpacity, Switch, ScrollView, StyleSheet, ActivityIndicator,
 } from "react-native";
@@ -8,10 +8,16 @@ import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../src/theme";
 import { usePartySettings, type PartySettings } from "../../src/usePartySettings";
 
+// Moved into /settings (Party tab) — this route now just redirects there.
 export default function PartySettingsScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
+  React.useEffect(() => { router.replace("/settings?tab=party" as never); }, []);
+  return null;
+}
+
+export function PartySettingsBody() {
   const { settings, toggle, save } = usePartySettings();
+  const insets = useSafeAreaInsets();
   const [additionalOpen, setAdditionalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState(false);
@@ -25,18 +31,14 @@ export default function PartySettingsScreen() {
   }
 
   return (
-    <View style={[s.screen, { paddingTop: insets.top }]}>
-      {/* Header */}
-      <View style={s.header}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={8}>
-          <Ionicons name="chevron-back" size={24} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={s.headerTitle}>Party Settings</Text>
-        <View style={{ width: 32 }} />
-      </View>
-
+    <View style={{ flex: 1 }}>
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}>
 
+        <ToggleRow
+          label="Show Opening Balance"
+          value={settings.showOpeningBalance}
+          onToggle={() => toggle("showOpeningBalance")}
+        />
         <ToggleRow label="TIN number"              value={settings.tinNumber}           onToggle={() => toggle("tinNumber")} />
         <ToggleRow label="Party Shipping Address"  value={settings.shippingAddress}     onToggle={() => toggle("shippingAddress")} />
         <ToggleRow

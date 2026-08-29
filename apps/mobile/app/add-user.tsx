@@ -57,6 +57,7 @@ export const ALL_PERMISSIONS: Permission[] = [
   { id: "parties_create",  label: "Add Parties",         group: "Parties" },
   { id: "parties_edit",    label: "Edit Parties",         group: "Parties" },
   { id: "parties_balance", label: "View Party Balance",  group: "Parties" },
+  { id: "parties_opening_balance", label: "Set Opening Balance", group: "Parties" },
   // Items
   { id: "items_view",   label: "View Items",   group: "Items" },
   { id: "items_create", label: "Add Items",    group: "Items" },
@@ -203,7 +204,7 @@ const ROLE_DEFAULT_PERMISSIONS: Record<string, string[]> = {
     "sale_edit_own", "sale_edit_all", "sale_delete",
     "purchase_view", "purchase_create", "purchase_order_view", "purchase_return_view",
     "payment_out_view", "purchase_edit_own", "purchase_edit_all", "purchase_delete",
-    "parties_view", "parties_create", "parties_edit", "parties_balance",
+    "parties_view", "parties_create", "parties_edit", "parties_balance", "parties_opening_balance",
     "items_view", "items_create", "items_edit", "items_delete",
     "reports_view", "reports_export",
     "cash_view", "cash_create",

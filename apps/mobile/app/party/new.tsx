@@ -7,7 +7,7 @@ import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../src/theme";
-import { api, getMemberId } from "../../src/auth";
+import { api, getMemberId, getPermissions } from "../../src/auth";
 import { usePartySettings } from "../../src/usePartySettings";
 import { useSelectedCompany } from "../../src/useSelectedCompany";
 import type { PartyGroup } from "@vyapar/api-client";
@@ -16,6 +16,11 @@ export default function NewPartyScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { settings } = usePartySettings();
+  // null permissions = owner/unrestricted; a team member needs the explicit grant.
+  const [canSetOpeningBalance, setCanSetOpeningBalance] = useState(true);
+  useEffect(() => {
+    getPermissions().then((perms) => setCanSetOpeningBalance(perms === null || perms.includes("parties_opening_balance")));
+  }, []);
 
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -172,7 +177,9 @@ export default function NewPartyScreen() {
           <FormRow label="Party Name *" value={name} onChangeText={setName} placeholder="Enter name" autoFocus />
           <FormRow label="Contact Number" value={phone} onChangeText={setPhone} placeholder="+92 ..." keyboardType="phone-pad" />
           <FormRow label="Email Address" value={email} onChangeText={setEmail} placeholder="—" keyboardType="email-address" autoCapitalize="none" />
-          <FormRow label="Opening Balance" value={openingBalance} onChangeText={setOpeningBalance} placeholder="0.00" keyboardType="numeric" />
+          {settings.showOpeningBalance && canSetOpeningBalance && (
+            <FormRow label="Opening Balance" value={openingBalance} onChangeText={setOpeningBalance} placeholder="0.00" keyboardType="numeric" />
+          )}
           <FormRow label="Billing Address" value={billingAddress} onChangeText={setBillingAddress} placeholder="—" />
 
           {/* Shipping Address — conditional */}

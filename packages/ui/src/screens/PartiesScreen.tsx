@@ -224,6 +224,9 @@ export function PartiesScreen({ isLocked = false, onLockedAction }: PartiesScree
                 <button type="button" className="page-header__dropdown-item" onClick={handleExportParties}>
                   Export All Parties to Excel
                 </button>
+                <button type="button" className="page-header__dropdown-item" onClick={() => window.print()}>
+                  Print All Parties
+                </button>
                 <button type="button" className="page-header__dropdown-item" onClick={() => setShowImportPhone(true)}>Import from Phone</button>
                 <button type="button" className="page-header__dropdown-item">Import Via Google Contacts</button>
                 <button type="button" className="page-header__dropdown-item">Party Statement (Report)</button>

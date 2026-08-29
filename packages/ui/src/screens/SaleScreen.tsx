@@ -13,6 +13,7 @@ import { PaymentInForm, RECENT_ROWS_LIMIT } from "./PaymentInScreen";
 import { DeliveryChallanModal } from "./DeliveryChallanModal";
 import { CompanyDropdown } from "./CompanyDropdown";
 import { loadSettings } from "./SettingsScreen";
+import { loadPartySettings } from "./PartySettingsDrawer";
 
 /* ── helpers ── */
 function fmt(n: number) {
@@ -646,6 +647,9 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
 
               <button type="button" className="dc-icon-btn" onClick={() => exportSalesToExcel(filtered, parties, filterFrom, filterTo)}>
                 📊 Excel Report
+              </button>
+              <button type="button" className="dc-icon-btn" onClick={() => window.print()}>
+                🖨 Print
               </button>
 
               {/* Search toggle */}
@@ -2866,6 +2870,7 @@ export function NewSaleForm({
     {/* Modals — outside ternary so they work in both Lite and Full mode */}
     {showAddParty && (
       <AddPartyModal
+        settings={loadPartySettings()}
         onClose={() => setShowAddParty(false)}
         onSaved={(party) => {
           setCustomer(party.name);
