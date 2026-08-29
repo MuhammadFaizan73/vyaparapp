@@ -1,6 +1,7 @@
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import { api } from "../lib/api";
+import { useCompany } from "../lib/CompanyContext";
 
 type TargetKey =
   | "name" | "sku" | "companyTag" | "category"
@@ -131,22 +132,10 @@ export function ImportItemsPage({ onGoToItems }: Props) {
   const [importedCount, setImportedCount] = useState(0);
   const [failedCount, setFailedCount] = useState(0);
 
-  const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
-  const [companyTag, setCompanyTag] = useState("");
-  // `companies` entries (other than the synthetic "__main__" row) now carry real Company
-  // UUIDs — resolve the selected name back to its id so imported items get a real companyId,
-  // not just the legacy free-text companyTag.
-  const selectedCompanyId = companies.find((c) => c.name === companyTag && c.id !== "__main__")?.id;
-
-  useMemo(() => {
-    api.getTenant().then((t) => {
-      const mainName = t.companyName || t.phone || "My Company";
-      const extras: Array<{ id: string; name: string }> = Array.isArray(t.extraCompanies) ? t.extraCompanies : [];
-      const all = [{ id: "__main__", name: mainName }, ...extras];
-      setCompanies(all);
-      setCompanyTag(mainName);
-    }).catch(() => {});
-  }, []);
+  // Same Company list + selection as the header's global switcher (CompanyDropdown) —
+  // an item imported here must land under the company that's actually selected app-wide,
+  // not a second, disconnected "which company" state local to this page.
+  const { companies, selectedCompanyId, setSelectedCompanyId, selectedCompany } = useCompany();
 
   function parseFile(file: File) {
     setParseError(null);
@@ -247,9 +236,9 @@ export function ImportItemsPage({ onGoToItems }: Props) {
           itemLocation: r.itemLocation || undefined,
           taxRate: r.taxRate,
           inclusiveOfTax: r.inclusiveOfTax || undefined,
-          companyTag: r.companyTag || companyTag || undefined,
+          companyTag: r.companyTag || selectedCompany?.name || undefined,
           companyId: (r.companyTag
-            ? companies.find((c) => c.name.toLowerCase() === r.companyTag.trim().toLowerCase() && c.id !== "__main__")?.id
+            ? companies.find((c) => c.name.toLowerCase() === r.companyTag.trim().toLowerCase())?.id
             : selectedCompanyId) || undefined,
         });
         ok++;
@@ -282,8 +271,9 @@ export function ImportItemsPage({ onGoToItems }: Props) {
         {companies.length > 1 && stage !== "done" && (
           <div className="impg-header__company">
             <label>Import into</label>
-            <select value={companyTag} onChange={(e) => setCompanyTag(e.target.value)}>
-              {companies.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+            <select value={selectedCompanyId ?? ""} onChange={(e) => setSelectedCompanyId(e.target.value || null)}>
+              <option value="" disabled>Select a company…</option>
+              {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
         )}

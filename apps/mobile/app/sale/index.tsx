@@ -15,6 +15,7 @@ import { api, getPermissions, getMemberId } from "../../src/auth";
 import { canEditSale } from "../../src/permissions";
 import { setHandoffTxn } from "../../src/txnHandoff";
 import { buildInvoiceHtml, fmt, formatDate } from "../../src/invoiceHtml";
+import { useInvoiceHtmlOptions } from "../../src/useSettings";
 import { DateRangeFilterBar, type DateRange, getRange, isWithinRange } from "../../src/components/DateRangeFilter";
 import type { Transaction, Party } from "@vyapar/api-client";
 
@@ -118,6 +119,7 @@ export default function SaleListScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [partyMap, setPartyMap] = useState<Record<string, string>>({});
   const [canCreate, setCanCreate] = useState(true);
+  const invoiceHtmlOpts = useInvoiceHtmlOptions();
   const [permissions, setPermissions] = useState<string[] | null>(null);
   const [memberId, setMemberId] = useState<string | null>(null);
   const [canDelete, setCanDelete] = useState(true);
@@ -293,7 +295,7 @@ export default function SaleListScreen() {
 
   async function handlePrint(sale: SaleRow, idx: number) {
     try {
-      await Print.printAsync({ html: buildInvoiceHtml(sale, idx + 1) });
+      await Print.printAsync({ html: buildInvoiceHtml(sale, idx + 1, invoiceHtmlOpts) });
     } catch {
       Alert.alert("Print failed", "Could not open printer.");
     }
@@ -301,7 +303,7 @@ export default function SaleListScreen() {
 
   async function handleSharePdf(sale: SaleRow, idx: number) {
     try {
-      const { uri } = await Print.printToFileAsync({ html: buildInvoiceHtml(sale, idx + 1) });
+      const { uri } = await Print.printToFileAsync({ html: buildInvoiceHtml(sale, idx + 1, invoiceHtmlOpts) });
       await Sharing.shareAsync(uri, { mimeType: "application/pdf", dialogTitle: "Share Invoice" });
     } catch {
       Alert.alert("Error", "Could not generate PDF.");
@@ -321,7 +323,7 @@ export default function SaleListScreen() {
   async function handleExportAllPdf() {
     if (filtered.length === 0) { Alert.alert("No data", "No sales to export."); return; }
     try {
-      const pages = filtered.map((s, i) => buildInvoiceHtml(s, i + 1)).join('<div style="page-break-after:always"></div>');
+      const pages = filtered.map((s, i) => buildInvoiceHtml(s, i + 1, invoiceHtmlOpts)).join('<div style="page-break-after:always"></div>');
       const { uri } = await Print.printToFileAsync({ html: pages });
       await Sharing.shareAsync(uri, { mimeType: "application/pdf", dialogTitle: "Export Sales" });
     } catch {
@@ -338,6 +340,7 @@ export default function SaleListScreen() {
         total: sale.total,
         balance: sale.total,
         notes: sale.notes ?? undefined,
+        companyId: sale.companyId ?? undefined,
       });
       await fetchSales();
       Alert.alert("Duplicated", "Sale has been duplicated successfully.");

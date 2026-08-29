@@ -1,6 +1,7 @@
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import { api } from "../lib/api";
+import { useCompany } from "../lib/CompanyContext";
 
 const SALE_REPORT_SHEET = "Sale Report";
 const ITEM_DETAILS_SHEET = "Item Details";
@@ -175,21 +176,10 @@ export function ImportSaleHistoryPage({ onGoToParties }: Props) {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [progress, setProgress] = useState<JobProgress | null>(null);
 
-  const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
-  const [companyTag, setCompanyTag] = useState("");
-  // `companies` entries (other than the synthetic "__main__" row) carry real Company UUIDs —
-  // resolve the selected name back to its id so imported invoices get a real companyId too.
-  const selectedCompanyId = companies.find((c) => c.name === companyTag && c.id !== "__main__")?.id;
-
-  useMemo(() => {
-    api.getTenant().then((t) => {
-      const mainName = t.companyName || t.phone || "My Company";
-      const extras: Array<{ id: string; name: string }> = Array.isArray(t.extraCompanies) ? t.extraCompanies : [];
-      const all = [{ id: "__main__", name: mainName }, ...extras];
-      setCompanies(all);
-      setCompanyTag(mainName);
-    }).catch(() => {});
-  }, []);
+  // Same Company list + selection as the header's global switcher (CompanyDropdown) —
+  // an invoice imported here must land under the company that's actually selected app-wide,
+  // not a second, disconnected "which company" state local to this page.
+  const { companies, selectedCompanyId, setSelectedCompanyId, selectedCompany } = useCompany();
 
   function parseFile(file: File) {
     setParseError(null);
@@ -240,7 +230,7 @@ export function ImportSaleHistoryPage({ onGoToParties }: Props) {
     setProgress({ status: "processing", total: summary.invoices.length, processed: 0, itemsCreated: 0, partiesCreated: 0, invoicesImported: 0, invoicesSkipped: 0 });
     try {
       const { jobId } = await api.startSaleHistoryImport({
-        companyTag: companyTag || undefined,
+        companyTag: selectedCompany?.name || undefined,
         companyId: selectedCompanyId ?? undefined,
         items: summary.items.map((i) => ({ name: i.name, unit: i.unit, sku: i.sku, salePrice: i.salePrice })),
         parties: summary.parties.map((p) => ({ name: p.name, phone: p.phone })),
@@ -280,8 +270,9 @@ export function ImportSaleHistoryPage({ onGoToParties }: Props) {
         {companies.length > 1 && stage === "preview" && (
           <div className="impg-header__company">
             <label>Import into</label>
-            <select value={companyTag} onChange={(e) => setCompanyTag(e.target.value)}>
-              {companies.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+            <select value={selectedCompanyId ?? ""} onChange={(e) => setSelectedCompanyId(e.target.value || null)}>
+              <option value="" disabled>Select a company…</option>
+              {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
         )}

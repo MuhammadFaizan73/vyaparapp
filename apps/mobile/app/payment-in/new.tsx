@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../src/theme";
 import { useParties } from "../../src/useParties";
+import { useSelectedCompany } from "../../src/useSelectedCompany";
 import { api } from "../../src/auth";
 import type { Transaction } from "@vyapar/api-client";
 
@@ -88,6 +89,7 @@ export default function NewPaymentInScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { parties } = useParties();
+  const { selectedCompanyId } = useSelectedCompany();
   const params = useLocalSearchParams<{
     prefillPartyId?: string;
     prefillPartyName?: string;
@@ -259,6 +261,7 @@ export default function NewPaymentInScreen() {
         notes: JSON.stringify({ paymentType }),
         idempotencyKey: idempotencyKeyRef.current,
         allocations: buildAllocations(),
+        companyId: selectedCompanyId ?? undefined,
       });
 
       if (goNew) {
