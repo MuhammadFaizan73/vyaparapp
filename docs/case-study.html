@@ -1,0 +1,541 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vyapar Pakistan — Engineering Case Study</title>
+<style>
+  :root {
+    --paper: #f6f4ef;
+    --paper-raised: #fffdf9;
+    --ink: #1b1d1f;
+    --ink-soft: #5b5e61;
+    --ink-faint: #8a8d8f;
+    --line: #ddd7c8;
+    --line-strong: #c9c1ab;
+    --desktop: #3b82f6;
+    --desktop-soft: #eaf1fe;
+    --mobile: #0f5a72;
+    --mobile-soft: #e8f2f4;
+    --ok: #3f7d4e;
+    --ok-soft: #e7f0e9;
+    --warn: #a8711f;
+    --warn-soft: #f5ecdb;
+    --plan: #6b6e72;
+    --plan-soft: #eceae4;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #14171a;
+      --paper-raised: #1b1f23;
+      --ink: #edeeee;
+      --ink-soft: #a5a9ac;
+      --ink-faint: #74787b;
+      --line: #2b2f33;
+      --line-strong: #3a3f44;
+      --desktop: #6ea1ff;
+      --desktop-soft: #1c2a42;
+      --mobile: #3fa9c4;
+      --mobile-soft: #16292d;
+      --ok: #6fbf82;
+      --ok-soft: #1c2c1f;
+      --warn: #d9a552;
+      --warn-soft: #2e2717;
+      --plan: #9a9ea1;
+      --plan-soft: #232629;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #14171a; --paper-raised: #1b1f23; --ink: #edeeee; --ink-soft: #a5a9ac; --ink-faint: #74787b;
+    --line: #2b2f33; --line-strong: #3a3f44;
+    --desktop: #6ea1ff; --desktop-soft: #1c2a42;
+    --mobile: #3fa9c4; --mobile-soft: #16292d;
+    --ok: #6fbf82; --ok-soft: #1c2c1f;
+    --warn: #d9a552; --warn-soft: #2e2717;
+    --plan: #9a9ea1; --plan-soft: #232629;
+  }
+  :root[data-theme="light"] {
+    --paper: #f6f4ef; --paper-raised: #fffdf9; --ink: #1b1d1f; --ink-soft: #5b5e61; --ink-faint: #8a8d8f;
+    --line: #ddd7c8; --line-strong: #c9c1ab;
+    --desktop: #3b82f6; --desktop-soft: #eaf1fe;
+    --mobile: #0f5a72; --mobile-soft: #e8f2f4;
+    --ok: #3f7d4e; --ok-soft: #e7f0e9;
+    --warn: #a8711f; --warn-soft: #f5ecdb;
+    --plan: #6b6e72; --plan-soft: #eceae4;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; }
+  :focus-visible { outline: 2px solid var(--desktop); outline-offset: 2px; }
+
+  .page {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 0 28px 96px;
+  }
+
+  /* ---------- Masthead ---------- */
+  .masthead {
+    padding: 64px 0 36px;
+    border-bottom: 1px solid var(--line-strong);
+  }
+  .masthead .eyebrow {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin: 0 0 18px;
+  }
+  .masthead h1 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: clamp(38px, 6vw, 58px);
+    line-height: 1.05;
+    margin: 0 0 14px;
+    text-wrap: balance;
+    letter-spacing: -0.01em;
+  }
+  .masthead .dek {
+    font-size: 18px;
+    color: var(--ink-soft);
+    max-width: 640px;
+    margin: 0 0 28px;
+    text-wrap: pretty;
+  }
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 28px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--ink-soft);
+  }
+  .meta-row dt {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-faint);
+    font-size: 10.5px;
+    margin-bottom: 4px;
+  }
+  .meta-row dd { margin: 0; color: var(--ink); }
+
+  /* ---------- Layout: rail + content ---------- */
+  .layout {
+    display: grid;
+    grid-template-columns: 148px minmax(0, 1fr);
+    gap: 40px;
+    margin-top: 8px;
+  }
+  @media (max-width: 720px) {
+    .layout { grid-template-columns: 1fr; }
+    .rail { display: none; }
+  }
+  .rail-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    position: sticky;
+    top: 28px;
+  }
+
+  section.block {
+    padding: 52px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  section.block:last-child { border-bottom: none; }
+
+  h2 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 27px;
+    margin: 0 0 16px;
+    letter-spacing: -0.005em;
+  }
+  h3 {
+    font-family: var(--sans);
+    font-weight: 650;
+    font-size: 15px;
+    margin: 0 0 8px;
+  }
+  p { max-width: 66ch; margin: 0 0 14px; }
+  p.lede { font-size: 16.5px; color: var(--ink-soft); max-width: 62ch; }
+
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border-radius: 3px;
+    font-weight: 600;
+  }
+  .tag.desktop { background: var(--desktop-soft); color: var(--desktop); }
+  .tag.mobile { background: var(--mobile-soft); color: var(--mobile); }
+  .tag::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  /* ---------- Architecture diagram ---------- */
+  .diagram {
+    border: 1px solid var(--line-strong);
+    background: var(--paper-raised);
+    border-radius: 4px;
+    padding: 28px 24px;
+    margin: 20px 0 8px;
+    overflow-x: auto;
+  }
+  .diagram-row {
+    display: flex;
+    gap: 14px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 18px;
+  }
+  .diagram-node {
+    border: 1px solid var(--line-strong);
+    background: var(--paper);
+    border-radius: 3px;
+    padding: 10px 16px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    text-align: center;
+    min-width: 120px;
+  }
+  .diagram-node.accent-d { border-color: var(--desktop); color: var(--desktop); }
+  .diagram-node.accent-m { border-color: var(--mobile); color: var(--mobile); }
+  .diagram-node .sub { display: block; font-size: 10.5px; color: var(--ink-faint); margin-top: 3px; }
+  .diagram-connector {
+    text-align: center;
+    color: var(--ink-faint);
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    margin: 4px 0;
+  }
+  .diagram-spine {
+    height: 22px;
+    border-left: 1px dashed var(--line-strong);
+    margin: 0 auto;
+    width: 1px;
+  }
+
+  /* ---------- Client cards ---------- */
+  .client-card {
+    border-left: 3px solid var(--line-strong);
+    padding-left: 22px;
+    margin-bottom: 8px;
+  }
+  .client-card.desktop { border-left-color: var(--desktop); }
+  .client-card.mobile { border-left-color: var(--mobile); }
+
+  .stat-strip {
+    display: flex;
+    gap: 32px;
+    flex-wrap: wrap;
+    margin: 18px 0 22px;
+    padding: 16px 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+  .stat {
+    font-family: var(--mono);
+  }
+  .stat .n {
+    font-size: 26px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    display: block;
+    line-height: 1.1;
+  }
+  .stat .l {
+    font-size: 11px;
+    color: var(--ink-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  ul.feature-list { margin: 0 0 14px; padding-left: 0; list-style: none; }
+  ul.feature-list li {
+    padding: 7px 0;
+    border-bottom: 1px solid var(--line);
+    display: grid;
+    grid-template-columns: 168px 1fr;
+    gap: 14px;
+    font-size: 14.5px;
+  }
+  ul.feature-list li:last-child { border-bottom: none; }
+  ul.feature-list b { font-weight: 650; }
+  @media (max-width: 560px) {
+    ul.feature-list li { grid-template-columns: 1fr; gap: 2px; }
+  }
+
+  /* ---------- Comparison table ---------- */
+  .table-wrap { overflow-x: auto; margin: 18px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 560px; }
+  th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-faint);
+    font-weight: 600;
+    border-bottom: 1px solid var(--line-strong);
+  }
+  td.num, th.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  tr:last-child td { border-bottom: none; }
+
+  .status {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .status.shipped { background: var(--ok-soft); color: var(--ok); }
+  .status.progress { background: var(--warn-soft); color: var(--warn); }
+  .status.planned { background: var(--plan-soft); color: var(--plan); }
+
+  .foot-note {
+    font-size: 12.5px;
+    color: var(--ink-faint);
+    max-width: 62ch;
+    margin-top: 8px;
+  }
+
+  .closing {
+    font-family: var(--serif);
+    font-size: 20px;
+    line-height: 1.5;
+    max-width: 58ch;
+    color: var(--ink);
+  }
+
+  code {
+    font-family: var(--mono);
+    font-size: 0.92em;
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="masthead">
+    <p class="eyebrow">Engineering Case Study · Internal Build Record</p>
+    <h1>Vyapar Pakistan</h1>
+    <p class="dek">A multi-tenant business management platform — invoicing, inventory, and customer ledgers — built as one backend serving a native Desktop app and a full-featured Mobile app for Pakistani SMBs.</p>
+    <dl class="meta-row">
+      <div><dt>Build window</dt><dd>Apr – Jul 2026 (~12 weeks)</dd></div>
+      <div><dt>Clients</dt><dd>Desktop (Electron), Mobile (Expo)</dd></div>
+      <div><dt>Backend</dt><dd>NestJS + Prisma, SQLite → Postgres</dd></div>
+      <div><dt>Identity model</dt><dd>Phone number = tenant</dd></div>
+    </dl>
+  </header>
+
+  <div class="layout">
+    <div class="rail"></div>
+    <main>
+
+      <section class="block" id="brief">
+        <div class="layout" style="margin:0;">
+          <div class="rail"><div class="rail-label">Brief</div></div>
+          <div>
+            <h2>One ledger, two front doors</h2>
+            <p class="lede">Pakistani shopkeepers run their business from two devices at once: a desktop at the counter for billing, and a phone in the pocket for the road. Vyapar Pakistan was commissioned to serve both from a single source of truth — a shopkeeper enters a sale on the phone during a delivery run and sees it reflected on the desktop register by the time they're back at the shop.</p>
+            <p>The build was scoped under an exclusive-distribution licensing agreement, with a fixed list of contractual features (company-isolated invoicing, a GPS-tracked salesman module, Excel-to-form paste, bilingual voice entry, tiered subscriptions) that had to ship alongside the core accounting workflows. That contract is the scorecard used later in this document.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="block" id="architecture">
+        <div class="layout" style="margin:0;">
+          <div class="rail"><div class="rail-label">Architecture</div></div>
+          <div>
+            <h2>Shared backend, native front ends</h2>
+            <p>Both clients talk to the same NestJS API over HTTP + JWT and never touch the database directly. A tenant is resolved by phone number, not email or device — the same number on Desktop and Mobile resolves to the same company, same items, same ledgers. Two supporting packages keep the clients honest: <code>@vyapar/shared-types</code> (Zod schemas as the API contract) and <code>@vyapar/api-client</code> (the one HTTP layer every UI calls through).</p>
+            <div class="diagram">
+              <div class="diagram-row">
+                <div class="diagram-node accent-d">Desktop<span class="sub">Electron + React + Vite</span></div>
+                <div class="diagram-node accent-m">Mobile<span class="sub">Expo + React Native</span></div>
+                <div class="diagram-node">Admin console<span class="sub">React + Vite</span></div>
+              </div>
+              <div class="diagram-connector">HTTP + JWT · shared-types · api-client</div>
+              <div class="diagram-spine"></div>
+              <div class="diagram-row" style="margin-top:6px;">
+                <div class="diagram-node">NestJS API<span class="sub">17 modules</span></div>
+              </div>
+              <div class="diagram-connector">Prisma</div>
+              <div class="diagram-spine"></div>
+              <div class="diagram-row" style="margin-top:6px;">
+                <div class="diagram-node">SQLite (dev) → PostgreSQL (prod)</div>
+              </div>
+            </div>
+            <p class="foot-note">A browser client (<code>apps/web</code>) is scaffolded but not yet built out — it will reuse the same <code>packages/ui</code> screens as Desktop, since Electron just renders a Chromium window around the React bundle.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="block" id="desktop">
+        <div class="layout" style="margin:0;">
+          <div class="rail"><div class="rail-label">Desktop</div></div>
+          <div>
+            <span class="tag desktop">Electron · React · Vite</span>
+            <h2 style="margin-top:14px;">The counter register</h2>
+            <p class="lede">Built for the person standing at the shop counter: card-based invoicing rather than a spreadsheet grid, fast keyboard-first data entry, and bulk import for shopkeepers migrating years of ledgers out of Excel.</p>
+
+            <div class="stat-strip">
+              <div class="stat"><span class="n">30</span><span class="l">shared screens in packages/ui</span></div>
+              <div class="stat"><span class="n">#3b82f6</span><span class="l">desktop accent blue</span></div>
+              <div class="stat"><span class="n">1</span><span class="l">renderer, reused by future web client</span></div>
+            </div>
+
+            <ul class="feature-list">
+              <li><b>Sale &amp; purchase entry</b><span>Card-based invoice screen with an Add Items modal, print/PDF preview, and delivery-challan generation — kept deliberately off the spreadsheet-grid pattern common in this category.</span></li>
+              <li><b>Excel → form paste</b><span>Copy a block of cells from any spreadsheet and paste directly into Items or Parties; a column-mapping modal (<code>ExcelColumnsModal</code>) resolves which column feeds which field.</span></li>
+              <li><b>Multi-company isolation</b><span>Items carry a <code>companyTag</code>; the sale screen, items list, and every report filter by the active company so stock and revenue never cross-contaminate.</span></li>
+              <li><b>Cash, bank &amp; loans</b><span>Dedicated Cash-in-Hand, Bank Accounts, and Loan Account screens sit alongside the transaction ledger, not bolted on as an afterthought.</span></li>
+              <li><b>Licensing &amp; sync</b><span>Onboarding, license-gate, activation-modal, and a Sync/Share screen mirror the same trial → license flow that governs Mobile.</span></li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="block" id="mobile">
+        <div class="layout" style="margin:0;">
+          <div class="rail"><div class="rail-label">Mobile</div></div>
+          <div>
+            <span class="tag mobile">Expo · React Native</span>
+            <h2 style="margin-top:14px;">The one in your pocket</h2>
+            <p class="lede">Mobile carries the full transaction lifecycle plus everything that only makes sense in the field: salesman GPS tracking, weekly shop assignments, and device-session control for a team sharing one license.</p>
+
+            <div class="stat-strip">
+              <div class="stat"><span class="n">65</span><span class="l">screens under apps/mobile/app</span></div>
+              <div class="stat"><span class="n">#0f5a72</span><span class="l">mobile accent teal</span></div>
+              <div class="stat"><span class="n">12</span><span class="l">transaction types covered</span></div>
+            </div>
+
+            <ul class="feature-list">
+              <li><b>Full transaction set</b><span>Sale, purchase, sale/purchase orders, sale/purchase returns, credit/debit notes, delivery notes, estimates, and proforma invoices — each with its own list + form pair.</span></li>
+              <li><b>Salesman GPS module</b><span>Weekly shop assignments surface automatically on login; live location pings and check-in/check-out logs (<code>ShopVisit</code>, <code>LocationPing</code>) record which shops were actually visited and what was sold there.</span></li>
+              <li><b>Team &amp; device control</b><span>Role-based staff invites, a single-active-device policy per license, and a device-session manager so a shared license can't be logged into indefinitely many phones at once.</span></li>
+              <li><b>Voice-assisted search</b><span>A mic button on the Sale screen drives voice search over the transaction list via <code>@react-native-voice/voice</code>, with a text-search fallback when the native module isn't available (e.g. Expo Go).</span></li>
+              <li><b>Party &amp; location tools</b><span>Customer/party creation with a map-based location picker, phone-contact import, and party statements — built for a salesperson who's standing in front of the shop, not at a desk.</span></li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="block" id="scoreboard">
+        <div class="layout" style="margin:0;">
+          <div class="rail"><div class="rail-label">Scoreboard</div></div>
+          <div>
+            <h2>Against the contract</h2>
+            <p>The licensing agreement fixed six binding requirements before a line of code was written. Here's where each one stands against what's actually in the repo today, not the roadmap.</p>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Requirement</th><th>Status</th><th>Where it lives</th></tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Company-based invoicing &amp; product filtering</td>
+                    <td><span class="status shipped">Shipped</span></td>
+                    <td>Items/companyTag filtering in <code>items.service.ts</code>, reports, and both Sale screens</td>
+                  </tr>
+                  <tr>
+                    <td>Salesman module — weekly assignment + GPS tracking</td>
+                    <td><span class="status shipped">Shipped</span></td>
+                    <td><code>PartyAssignment</code>, <code>LocationPing</code>, <code>ShopVisit</code> models + Mobile salesman-tracking &amp; my-visits screens</td>
+                  </tr>
+                  <tr>
+                    <td>Separate Cotton &amp; Box inventory ledgers</td>
+                    <td><span class="status planned">Planned</span></td>
+                    <td>Not yet in schema — general Item model only</td>
+                  </tr>
+                  <tr>
+                    <td>Subscription packages (monthly/yearly/custom) + expiry alerts</td>
+                    <td><span class="status shipped">Shipped</span></td>
+                    <td>License model with per-platform plans; expiry notification logic landed alongside single-device policy</td>
+                  </tr>
+                  <tr>
+                    <td>Excel copy-paste with smart column mapping</td>
+                    <td><span class="status shipped">Shipped</span></td>
+                    <td><code>ImportExcelModal</code> + <code>ExcelColumnsModal</code> in packages/ui, wired to Items and Parties</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="foot-note">Four of five requirements shown are live in both clients' data model today; Cotton &amp; Box ledgers remain scoped, not started.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="block" id="numbers">
+        <div class="layout" style="margin:0;">
+          <div class="rail"><div class="rail-label">By the numbers</div></div>
+          <div>
+            <h2>What's actually in the repo</h2>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Surface</th><th class="num">Count</th><th>Detail</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td>Mobile screens</td><td class="num">65</td><td>Full CRUD across 12 transaction types + team/device/location tooling</td></tr>
+                  <tr><td>Shared Desktop/Web screens</td><td class="num">30</td><td><code>packages/ui/src/screens</code>, reused by Electron today and the Web client later</td></tr>
+                  <tr><td>Backend modules</td><td class="num">17</td><td>Auth, license, parties, items, transactions, cash-bank, loan-accounts, team, devices, location, reports, admin, and more</td></tr>
+                  <tr><td>Prisma models</td><td class="num">12+</td><td>Tenant, License, Party, Item, Transaction, TeamMember, LocationPing, ShopVisit, LoanAccount, BankAccount, DeviceSession…</td></tr>
+                  <tr><td>Client apps in the monorepo</td><td class="num">4</td><td>Desktop, Mobile, Web (scaffold), Admin console</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="block" id="ahead">
+        <div class="layout" style="margin:0;">
+          <div class="rail"><div class="rail-label">What's ahead</div></div>
+          <div>
+            <h2>Still to come</h2>
+            <ul class="feature-list">
+              <li><b>Offline-first sync</b><span>PowerSync is architected for but not yet installed — each client gets a local SQLite mirror so field sales keep working with no signal.</span></li>
+              <li><b>Web client</b><span><code>apps/web</code> exists as a shell; it inherits packages/ui's 30 screens rather than a rebuild.</span></li>
+              <li><b>OTP verification</b><span>Phone-number registration is currently unverified — SMS OTP is scoped as a later phase.</span></li>
+              <li><b>Cotton &amp; Box ledgers</b><span>The one contract item still open, tracked in the scoreboard above.</span></li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <p class="closing">Two front ends, one ledger — a shopkeeper's phone and their counter never disagree about what's been sold.</p>
+
+    </main>
+  </div>
+</div>
+</body>
+</html>
