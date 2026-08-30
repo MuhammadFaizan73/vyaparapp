@@ -268,6 +268,26 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
   const [parties, setParties] = useState<Party[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const { companies, selectedCompanyId, companyFilter } = useCompany();
+
+  /* ── salesman (booker) filter — same pattern as Payment-In's user filter ── */
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [salesmanFilterId, setSalesmanFilterId] = useState("");
+  const [showSalesmanPanel, setShowSalesmanPanel] = useState(false);
+  const [salesmanPanelPos, setSalesmanPanelPos] = useState({ top: 0, left: 0 });
+  const salesmanPanelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    api.listTeamMembers().then(setTeamMembers).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!showSalesmanPanel) return;
+    function handler(e: MouseEvent) {
+      if (salesmanPanelRef.current && !salesmanPanelRef.current.contains(e.target as Node)) setShowSalesmanPanel(false);
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showSalesmanPanel]);
   const [loading, setLoading] = useState(true);
   // Loaded once per session (the JWT doesn't change without a fresh login) — governs
   // whether View/Edit/Delete show at all in the row menu below, matching mobile's
@@ -381,7 +401,7 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
         // Explicit take — the backend defaults to a 200-row cap (its guard against an
         // unbounded all-time fetch) even when a date range is passed, which silently
         // dropped the oldest invoices in any month with more than 200 sales.
-        api.getTransactionsByType("sale", { from: filterFrom, to: filterTo, companyId: companyFilter ?? undefined, take: 10000 }),
+        api.getTransactionsByType("sale", { from: filterFrom, to: filterTo, companyId: companyFilter ?? undefined, bookerId: salesmanFilterId || undefined, take: 10000 }),
         api.getParties(),
         api.getItems(),
       ]);
@@ -397,7 +417,7 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
     setLoading(true);
     loadSales().finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterFrom, filterTo, companyFilter]);
+  }, [filterFrom, filterTo, companyFilter, salesmanFilterId]);
 
   /* close row menu on outside click */
   useEffect(() => {
@@ -665,6 +685,13 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
                 setShowDatePanel((v) => !v);
               }}>📅 {fmtChip(filterFrom)} To {fmtChip(filterTo)}</button>
 
+              {/* Salesman chip */}
+              <button type="button" className="sale-filterbar__chip" onClick={(e) => {
+                const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                setSalesmanPanelPos({ top: r.bottom + 6, left: r.left });
+                setShowSalesmanPanel((v) => !v);
+              }}>{salesmanFilterId ? (teamMembers.find((m) => m.id === salesmanFilterId)?.name ?? "All Salesmen") : "All Salesmen"} ▾</button>
+
               <div className="sale-filterbar__spacer" />
 
               <button type="button" className="dc-icon-btn" onClick={() => exportSalesToExcel(filtered, parties, filterFrom, filterTo)}>
@@ -746,6 +773,24 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
                   <button type="button" onClick={() => setShowDatePanel(false)}
                     style={{ padding: "6px 16px", background: "#3b82f6", color: "#fff", border: "none", borderRadius: 6, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>Apply</button>
                 </div>
+              </div>
+            )}
+
+            {/* Salesman filter panel */}
+            {showSalesmanPanel && (
+              <div ref={salesmanPanelRef} style={{ position: "fixed", top: salesmanPanelPos.top, left: salesmanPanelPos.left, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, boxShadow: "0 8px 28px rgba(0,0,0,0.13)", zIndex: 700, width: 220, padding: "6px 0", maxHeight: 320, overflowY: "auto" }}>
+                <button type="button" onClick={() => { setSalesmanFilterId(""); setShowSalesmanPanel(false); }}
+                  style={{ display: "block", width: "100%", padding: "8px 14px", background: !salesmanFilterId ? "#eff6ff" : "none", border: "none", cursor: "pointer", textAlign: "left", fontSize: 13, color: !salesmanFilterId ? "#2563eb" : "#374151", fontWeight: !salesmanFilterId ? 600 : 400 }}>
+                  All Salesmen
+                </button>
+                {teamMembers.length === 0 ? (
+                  <div style={{ padding: "8px 14px", fontSize: 12, color: "#9ca3af" }}>No team members yet.</div>
+                ) : teamMembers.map((m) => (
+                  <button key={m.id} type="button" onClick={() => { setSalesmanFilterId(m.id); setShowSalesmanPanel(false); }}
+                    style={{ display: "block", width: "100%", padding: "8px 14px", background: salesmanFilterId === m.id ? "#eff6ff" : "none", border: "none", cursor: "pointer", textAlign: "left", fontSize: 13, color: salesmanFilterId === m.id ? "#2563eb" : "#374151", fontWeight: salesmanFilterId === m.id ? 600 : 400 }}>
+                    {m.name}
+                  </button>
+                ))}
               </div>
             )}
 
