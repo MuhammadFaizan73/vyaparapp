@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import * as XLSX from "xlsx";
 
 import { api } from "../lib/api";
+import { exportRowsToPdf } from "../lib/pdfExport";
 import { loadMemberId, loadPermissions, canEditSale, canDeleteSale } from "../lib/permissions";
 import type { Transaction, Party, Item, Company, TeamMember, TaxRate } from "@vyapar/api-client";
 import { useCompany } from "../lib/CompanyContext";
@@ -221,6 +222,27 @@ function exportSalesToExcel(rows: SaleRow[], parties: Party[], from: string, to:
   XLSX.utils.book_append_sheet(book, XLSX.utils.json_to_sheet(saleReportRows), "Sale Report");
   XLSX.utils.book_append_sheet(book, XLSX.utils.json_to_sheet(itemDetailRows), "Item Details");
   XLSX.writeFile(book, `SaleInvoices_${from}_to_${to}.xlsx`);
+}
+
+// Same invoice-level rows as exportSalesToExcel's "Sale Report" sheet — line items don't
+// fit a one-page PDF summary the way they do a second Excel sheet.
+function exportSalesToPdf(rows: SaleRow[], parties: Party[], from: string, to: string) {
+  const phoneByPartyId = new Map(parties.map((p) => [p.id, p.phone ?? ""]));
+  const saleReportRows = rows.map((s, idx) => {
+    const paymentType = parseSaleNotes(s.notes).paymentType;
+    return {
+      "Date": ddmmyyyy(s.date),
+      "Invoice No": s.number ?? `#${idx + 1}`,
+      "Party Name": s.partyName,
+      "Party Phone No.": phoneByPartyId.get(s.partyId) ?? "",
+      "Total Amount": s.total,
+      "Payment Type": paymentType === "Credit" ? "Credit" : (paymentType || "Cash"),
+      "Received/Paid": s.total - s.balance,
+      "Balance Due": s.balance,
+      "Status": s.balance === 0 ? "Paid" : "Unpaid",
+    };
+  });
+  exportRowsToPdf(saleReportRows, "Sale Invoices", `SaleInvoices_${from}_to_${to}`);
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -647,6 +669,9 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
 
               <button type="button" className="dc-icon-btn" onClick={() => exportSalesToExcel(filtered, parties, filterFrom, filterTo)}>
                 📊 Excel Report
+              </button>
+              <button type="button" className="dc-icon-btn" onClick={() => exportSalesToPdf(filtered, parties, filterFrom, filterTo)}>
+                📄 Export to PDF
               </button>
               <button type="button" className="dc-icon-btn" onClick={() => window.print()}>
                 🖨 Print

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import type { Party, Transaction, Item } from "@vyapar/api-client";
 import { api } from "../lib/api";
+import { exportRowsToPdf } from "../lib/pdfExport";
 import { NewSaleForm, type SaleRow } from "./SaleScreen";
 import { PaymentInForm, type PiRow } from "./PaymentInScreen";
 import { AddPartyModal } from "./AddPartyModal";
@@ -186,6 +187,20 @@ export function PartiesScreen({ isLocked = false, onLockedAction }: PartiesScree
     XLSX.writeFile(wb, "parties_export.xlsx");
   }
 
+  function handleExportPartiesPdf() {
+    const companyName = (id: string | null | undefined) => companies.find((c) => c.id === id)?.name ?? "";
+    const rows = parties.map((p) => ({
+      "Name": p.name,
+      "Contact No.": p.phone ?? "",
+      "Email ID": p.email ?? "",
+      "Address": p.billingAddress ?? "",
+      "Opening Balance": p.balance ?? "",
+      "Party Type": p.partyType ? p.partyType.charAt(0).toUpperCase() + p.partyType.slice(1) : "",
+      "Company": companyName(p.companyId),
+    }));
+    exportRowsToPdf(rows, "Parties", "parties_export");
+  }
+
   return (
     <>
       <div className="page-header">
@@ -223,6 +238,9 @@ export function PartiesScreen({ isLocked = false, onLockedAction }: PartiesScree
                 </button>
                 <button type="button" className="page-header__dropdown-item" onClick={handleExportParties}>
                   Export All Parties to Excel
+                </button>
+                <button type="button" className="page-header__dropdown-item" onClick={handleExportPartiesPdf}>
+                  Export All Parties to PDF
                 </button>
                 <button type="button" className="page-header__dropdown-item" onClick={() => window.print()}>
                   Print All Parties

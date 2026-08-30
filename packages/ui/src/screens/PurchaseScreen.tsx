@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import * as XLSX from "xlsx";
 import { api, loadTenant } from "../lib/api";
+import { exportRowsToPdf } from "../lib/pdfExport";
 import type { Transaction, Party, Item, TeamMember } from "@vyapar/api-client";
 import { useCompany } from "../lib/CompanyContext";
 import { useStores } from "../lib/useStores";
@@ -100,6 +101,29 @@ function exportPurchasesToExcel(rows: PurchaseRow[], parties: Party[], from: str
   XLSX.utils.book_append_sheet(book, XLSX.utils.json_to_sheet(reportRows), "Sale Report");
   XLSX.utils.book_append_sheet(book, XLSX.utils.json_to_sheet(itemRows), "Item Details");
   XLSX.writeFile(book, `Purchases_${from}_to_${to}.xlsx`);
+}
+
+// Same invoice-level rows as exportPurchasesToExcel's "Sale Report" sheet.
+function exportPurchasesToPdf(rows: PurchaseRow[], parties: Party[], from: string, to: string) {
+  const phoneByPartyId = new Map(parties.map((p) => [p.id, p.phone ?? ""]));
+  const parseNotes = (n: string | null | undefined): { paymentType?: string } => {
+    try { return JSON.parse(n ?? "{}"); } catch { return {}; }
+  };
+  const reportRows = rows.map((r, idx) => {
+    const paymentType = parseNotes(r.notes).paymentType;
+    return {
+      "Date": ddmmyyyy(r.date),
+      "Invoice No": r.number ?? `#${idx + 1}`,
+      "Party Name": r.partyName,
+      "Party Phone No.": phoneByPartyId.get(r.partyId) ?? "",
+      "Total Amount": r.total,
+      "Payment Type": paymentType === "Credit" ? "Credit" : (paymentType || "Cash"),
+      "Received/Paid": r.total - r.balance,
+      "Balance Due": r.balance,
+      "Status": r.balance === 0 ? "Paid" : "Unpaid",
+    };
+  });
+  exportRowsToPdf(reportRows, "Purchase Invoices", `Purchases_${from}_to_${to}`);
 }
 
 type PurchaseRow = Transaction & { partyName: string; runningBalance?: number };
@@ -411,6 +435,9 @@ export function PurchaseScreen({ isLocked = false, onLockedAction, activeKey = "
               <div className="purchase-datebar__spacer" />
               <button type="button" className="purchase-datebar__icon-btn" title="Export to Excel" onClick={() => exportPurchasesToExcel(filtered, parties, filterFrom, filterTo)}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+              </button>
+              <button type="button" className="purchase-datebar__icon-btn" title="Export to PDF" onClick={() => exportPurchasesToPdf(filtered, parties, filterFrom, filterTo)}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><text x="7" y="18" fontSize="7" fill="currentColor" stroke="none">PDF</text></svg>
               </button>
               <button type="button" className="purchase-datebar__icon-btn" title="Print" onClick={() => window.print()}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>

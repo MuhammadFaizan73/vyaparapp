@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import * as XLSX from "xlsx";
 import { api } from "../lib/api";
+import { exportRowsToPdf } from "../lib/pdfExport";
 import type { Transaction, Party, TeamMember } from "@vyapar/api-client";
 import { useCompany } from "../lib/CompanyContext";
 
@@ -103,6 +104,20 @@ function exportPaymentsToExcel(rows: PiRow[], from: string, to: string) {
   const book = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(book, sheet, "Payment-In");
   XLSX.writeFile(book, `PaymentIn_${from}_to_${to}.xlsx`);
+}
+
+function exportPaymentsToPdf(rows: PiRow[], from: string, to: string) {
+  const reportRows = rows.map((r, idx) => ({
+    "Date": ddmmyyyyPI(r.date),
+    "Reference No": r.number ?? `#${idx + 1}`,
+    "Party Name": r.partyName,
+    "Total Amount": r.total,
+    "Payment Type": getPaymentType(r.notes),
+    "Received": r.total - r.balance,
+    "Running Balance": r.runningBalance,
+    "Status": r.balance === 0 ? "Used" : "Unused",
+  }));
+  exportRowsToPdf(reportRows, "Payment-In", `PaymentIn_${from}_to_${to}`);
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -277,6 +292,9 @@ export function PaymentInScreen({ isLocked = false, onLockedAction }: Props) {
         <div className="pi-filterbar__spacer" />
         <button type="button" className="dc-icon-btn" onClick={() => exportPaymentsToExcel(rows, filterFrom, filterTo)}>
           📊 Excel Report
+        </button>
+        <button type="button" className="dc-icon-btn" onClick={() => exportPaymentsToPdf(rows, filterFrom, filterTo)}>
+          📄 Export to PDF
         </button>
         <button type="button" className="dc-icon-btn" onClick={() => window.print()}>
           🖨 Print

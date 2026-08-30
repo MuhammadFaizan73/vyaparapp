@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import * as XLSX from "xlsx";
 import { api } from "../lib/api";
+import { exportRowsToPdf } from "../lib/pdfExport";
 import type { Item } from "@vyapar/api-client";
 import { useCompany } from "../lib/CompanyContext";
 import { useStores } from "../lib/useStores";
@@ -385,6 +386,13 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Items");
     XLSX.writeFile(wb, "items_export.xlsx");
+  }
+
+  function handleExportItemsPdf() {
+    const rows = displayedItems.map((it) =>
+      Object.fromEntries(ITEM_IMPORT_FIELDS.map((f) => [f.label, (it as any)[f.key] ?? ""])),
+    );
+    exportRowsToPdf(rows, "Items", "items_export");
   }
 
   function handleDownloadItemsTemplate() {
@@ -1062,6 +1070,9 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
                   </div>
                   <button type="button" className="items-excel-btn" title="Export to Excel" onClick={handleExportItems}>
                     <ExcelIcon />
+                  </button>
+                  <button type="button" className="items-excel-btn" title="Export to PDF" onClick={handleExportItemsPdf}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                   </button>
                   <button type="button" className="items-excel-btn" title="Print" onClick={() => window.print()}>
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
