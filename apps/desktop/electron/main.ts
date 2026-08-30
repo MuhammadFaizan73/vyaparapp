@@ -3,6 +3,9 @@ import path from "node:path";
 import { autoUpdater } from "electron-updater";
 
 const isDev = !app.isPackaged;
+// Short enough that a client with the dashboard open notices a fresh deploy within a
+// couple of minutes of the release finishing, not up to half an hour later.
+const UPDATE_CHECK_INTERVAL_MS = 2 * 60 * 1000;
 let mainWindow: BrowserWindow | null = null;
 
 type UpdateStatusPayload =
@@ -50,6 +53,11 @@ function setupAutoUpdater() {
   });
 
   autoUpdater.checkForUpdates();
+
+  // A client can leave the dashboard open for hours without ever restarting, and the
+  // startup-only check above would then never notice a release published after launch —
+  // re-check periodically so the "Update ready" dialog can still show up mid-session.
+  setInterval(() => autoUpdater.checkForUpdates(), UPDATE_CHECK_INTERVAL_MS);
 }
 
 function createWindow() {
