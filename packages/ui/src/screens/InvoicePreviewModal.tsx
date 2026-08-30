@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { jsPDF } from "jspdf";
+import html2canvas from "html2canvas";
 import type { Transaction, Party } from "@vyapar/api-client";
 import { loadSettings } from "./SettingsScreen";
 
@@ -89,13 +91,42 @@ type Props = { sale: SaleRow; invoiceNumber: number; party?: Party; onClose: () 
    MODAL
 ═══════════════════════════════════════════════════════════ */
 export function InvoicePreviewModal({ sale, invoiceNumber, party, onClose }: Props) {
-  const [theme, setTheme]         = useState(() => loadSettings().printThemeName || "Tally Theme");
+  // "Tally Theme" is deliberately bare (no color band, no colored headers) — a nicer,
+  // fully color-branded theme is a better first impression than an unconfigured install.
+  const [theme, setTheme]         = useState(() => loadSettings().printThemeName || "Theme 3");
   const [color, setColor]         = useState(() => loadSettings().printColor || "#3b82f6");
   const [collapsed, setCollapsed] = useState<Record<string,boolean>>({ classic:true });
   const [doNotShow, setDoNotShow] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const paperRef = useRef<HTMLDivElement>(null);
 
   const received = sale.total - sale.balance;
   const tc = THEME_MAP[theme] ?? THEME_MAP["Theme 3"];
+
+  // Renders exactly the paper the user is already looking at (whatever theme/color they
+  // picked in the sidebar) to an image, then drops that image onto a PDF page sized to match —
+  // same WYSIWYG guarantee as printing, but as a file instead of a print-dialog round trip.
+  async function handleDownloadPdf() {
+    if (!paperRef.current || downloading) return;
+    setDownloading(true);
+    try {
+      const node = paperRef.current;
+      const canvas = await html2canvas(node, { scale: 2, backgroundColor: "#ffffff" });
+      const imgData = canvas.toDataURL("image/png");
+      const pxToMm = 25.4 / 96;
+      const widthMm = canvas.width * pxToMm / 2;
+      const heightMm = canvas.height * pxToMm / 2;
+      const doc = new jsPDF({
+        orientation: heightMm > widthMm ? "portrait" : "landscape",
+        unit: "mm",
+        format: [widthMm, heightMm],
+      });
+      doc.addImage(imgData, "PNG", 0, 0, widthMm, heightMm);
+      doc.save(`Invoice_${sale.number ?? invoiceNumber}.pdf`);
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   return createPortal(
     <div className="ipv-overlay">
@@ -221,7 +252,7 @@ export function InvoicePreviewModal({ sale, invoiceNumber, party, onClose }: Pro
 
           {/* ── Center: invoice paper ── */}
           <div className="ipv-center">
-            <div className={`ipv-paper${tc.thermal ? " ipv-paper--thermal" : ""}`}>
+            <div ref={paperRef} className={`ipv-paper${tc.thermal ? " ipv-paper--thermal" : ""}`}>
               <InvoicePaper
                 tc={tc} color={color} sale={sale} party={party}
                 invoiceNumber={invoiceNumber} received={received}
@@ -255,7 +286,7 @@ export function InvoicePreviewModal({ sale, invoiceNumber, party, onClose }: Pro
 
             <div className="ipv-share__divider" />
 
-            <button type="button" className="ipv-action-card">
+            <button type="button" className="ipv-action-card" disabled={downloading} onClick={handleDownloadPdf}>
               <span className="ipv-action-card__icon ipv-action-card__icon--outline">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="20" height="20" strokeLinecap="round">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -264,12 +295,12 @@ export function InvoicePreviewModal({ sale, invoiceNumber, party, onClose }: Pro
                 </svg>
               </span>
               <div>
-                <div className="ipv-action-card__lbl">Download</div>
+                <div className="ipv-action-card__lbl">{downloading ? "Preparing…" : "Download"}</div>
                 <div className="ipv-action-card__sub">PDF</div>
               </div>
             </button>
 
-            <button type="button" className="ipv-action-card">
+            <button type="button" className="ipv-action-card" onClick={() => window.print()}>
               <span className="ipv-action-card__icon ipv-action-card__icon--outline">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="20" height="20" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="6 9 6 2 18 2 18 9"/>
@@ -283,7 +314,7 @@ export function InvoicePreviewModal({ sale, invoiceNumber, party, onClose }: Pro
               </div>
             </button>
 
-            <button type="button" className="ipv-action-card ipv-action-card--primary">
+            <button type="button" className="ipv-action-card ipv-action-card--primary" onClick={() => window.print()}>
               <span className="ipv-action-card__icon ipv-action-card__icon--filled">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="20" height="20" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="6 9 6 2 18 2 18 9"/>

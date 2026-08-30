@@ -7984,6 +7984,49 @@ body,
   background: #f3f4f6; overflow: hidden;
 }
 
+/* Printing/saving from inside the preview must produce just the invoice paper —
+   the theme sidebar, share panel, and top/action bars are editor chrome, not part
+   of the document. Same convention as .dc-paper's print rule for Delivery Challan. */
+@media print {
+  .ipv-overlay { position: static; inset: auto; }
+  .ipv-root { background: none; overflow: visible; }
+  .ipv-topbar, .ipv-actionbar, .ipv-sidebar, .ipv-share { display: none !important; }
+  .ipv-body { display: block !important; }
+  .ipv-center { display: block !important; }
+  .ipv-paper { box-shadow: none !important; border: none !important; margin: 0 !important; }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   BULK INVOICE PREVIEW MODAL  (.bipv-*)  — the Sale Invoices list's
+   "Export to PDF" / bulk print, one real invoice paper per page.
+═══════════════════════════════════════════════════════════ */
+.bipv-overlay {
+  position: fixed; inset: 0; z-index: 600;
+  background: #f3f4f6; overflow-y: auto;
+}
+.bipv-root { min-height: 100%; }
+.bipv-actionbar {
+  position: sticky; top: 0; z-index: 1;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 20px; background: #fff; border-bottom: 1px solid #e5e7eb;
+}
+.bipv-actionbar__title { font-weight: 600; font-size: 14px; color: #111827; }
+.bipv-actionbar__actions { display: flex; gap: 8px; }
+.bipv-btn {
+  padding: 7px 14px; border-radius: 8px; border: 1px solid #d1d5db;
+  background: #fff; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.bipv-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.bipv-btn--primary { background: #3b82f6; color: #fff; border-color: #3b82f6; }
+.bipv-pages { display: flex; flex-direction: column; align-items: center; gap: 24px; padding: 24px; }
+
+@media print {
+  .bipv-overlay { position: static; inset: auto; background: none; overflow: visible; }
+  .bipv-actionbar { display: none !important; }
+  .bipv-pages { padding: 0; gap: 0; }
+  .bipv-page { box-shadow: none !important; border: none !important; margin: 0 !important; }
+}
+
 /* ── Top bar ── */
 .ipv-topbar {
   display: flex; align-items: center;
