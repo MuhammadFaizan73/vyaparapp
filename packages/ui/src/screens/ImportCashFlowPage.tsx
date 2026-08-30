@@ -5,13 +5,17 @@ import { useCompany } from "../lib/CompanyContext";
 
 const REQUIRED_HEADERS = ["Date", "Name", "Type", "Cash In Amount", "Cash Out Amount"];
 
-// The app's own two Cash Flow report exports (desktop ReportsScreen, mobile reports/[type])
-// don't use these exact column names — accept their real headers too, instead of forcing
-// users to hand-edit a file the app itself produced.
+// The app's own report exports don't use these exact column names — accept their real
+// headers too, instead of forcing users to hand-edit a file the app itself produced.
+// Covers both the dedicated Cash Flow report (Party/"Cash In"/"Cash Out") and the
+// All Transactions report (Party Name/Received/Paid) — the latter has no separate
+// Cash In / Cash Out columns, but a Payment-In row only ever has Received populated
+// and a Payment-Out row only ever has Paid populated, so they line up 1:1 with
+// Cash In Amount / Cash Out Amount once the Type column is used to pick a side.
 const HEADER_ALIASES: Record<string, string[]> = {
-  "Name": ["Name", "Party"],
-  "Cash In Amount": ["Cash In Amount", "Cash In"],
-  "Cash Out Amount": ["Cash Out Amount", "Cash Out"],
+  "Name": ["Name", "Party", "Party Name"],
+  "Cash In Amount": ["Cash In Amount", "Cash In", "Received"],
+  "Cash Out Amount": ["Cash Out Amount", "Cash Out", "Paid"],
   "Reference No": ["Reference No", "Ref No.", "Ref #"],
 };
 
