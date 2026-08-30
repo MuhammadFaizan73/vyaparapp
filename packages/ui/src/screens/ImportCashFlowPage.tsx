@@ -5,6 +5,23 @@ import { useCompany } from "../lib/CompanyContext";
 
 const REQUIRED_HEADERS = ["Date", "Name", "Type", "Cash In Amount", "Cash Out Amount"];
 
+// The app's own two Cash Flow report exports (desktop ReportsScreen, mobile reports/[type])
+// don't use these exact column names — accept their real headers too, instead of forcing
+// users to hand-edit a file the app itself produced.
+const HEADER_ALIASES: Record<string, string[]> = {
+  "Name": ["Name", "Party"],
+  "Cash In Amount": ["Cash In Amount", "Cash In"],
+  "Cash Out Amount": ["Cash Out Amount", "Cash Out"],
+  "Reference No": ["Reference No", "Ref No.", "Ref #"],
+};
+
+function canonicalizeHeader(h: string): string {
+  for (const [canonical, aliases] of Object.entries(HEADER_ALIASES)) {
+    if (aliases.includes(h)) return canonical;
+  }
+  return h;
+}
+
 type RawRow = Record<string, unknown>;
 
 type CashFlowEntry = {
@@ -148,13 +165,18 @@ export function ImportCashFlowPage({ onGoToParties }: Props) {
         const ws = wb.Sheets[wb.SheetNames[0]!];
         if (!ws) { setParseError("This file has no readable sheet."); return; }
         const headerRow = (XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1 })[0] ?? []) as unknown[];
-        const cleanHeaders = headerRow.map((h) => String(h ?? "").trim()).filter(Boolean);
+        const cleanHeaders = headerRow.map((h) => canonicalizeHeader(String(h ?? "").trim())).filter(Boolean);
         const missing = REQUIRED_HEADERS.filter((h) => !cleanHeaders.includes(h));
         if (missing.length) {
           setParseError(`This doesn't look like a cash flow export. Missing columns: ${missing.join(", ")}`);
           return;
         }
-        const rows = XLSX.utils.sheet_to_json<RawRow>(ws, { defval: "" });
+        const rawRows = XLSX.utils.sheet_to_json<RawRow>(ws, { defval: "" });
+        const rows = rawRows.map((r) => {
+          const out: RawRow = {};
+          for (const [k, v] of Object.entries(r)) out[canonicalizeHeader(k.trim())] = v;
+          return out;
+        });
         setSummary(buildSummary(rows));
         setStage("preview");
       } catch {
