@@ -290,18 +290,35 @@ export class BulkImportService {
         // Payment-Out -> Purchase-bill allocation would be the symmetric move, but
         // nobody's asked for that yet — only auto-link the Payment-In / Sale side.
         let remaining = e.amount;
-        const allocations: Array<{ invoiceId: string; amount: number }> = [];
+        const invoiceAllocations: Array<{ invoiceId: string; amount: number }> = [];
+        let openingBalanceApplied = 0;
         if (e.type === "payment_in") {
+          // A positive Party.openingBalance is a Receivable (the party owed us before any
+          // invoice existed) — same kind of debt as a Sale invoice, just with no Transaction
+          // row (or date) of its own, so it can't hold a PaymentAllocation. Party has no
+          // opening-balance date field, so its own createdAt stands in for "oldest possible
+          // debt" — it necessarily predates every invoice on that party. A negative
+          // openingBalance is a Payable (we owe them); only Payment-Out should reduce that.
+          const party = await tx.party.findUnique({ where: { id: partyId }, select: { openingBalance: true, createdAt: true } });
           const outstanding = await tx.transaction.findMany({
             where: { tenantId, partyId, type: "sale", balance: { gt: 0 } },
             orderBy: { date: "asc" },
-            select: { id: true, balance: true },
+            select: { id: true, balance: true, date: true },
           });
-          for (const inv of outstanding) {
+
+          type Debt = { date: Date; kind: "opening" | "invoice"; invoiceId?: string; balance: number };
+          const debts: Debt[] = outstanding.map((inv) => ({ date: inv.date, kind: "invoice", invoiceId: inv.id, balance: inv.balance }));
+          if (party && party.openingBalance > 0) {
+            debts.push({ date: party.createdAt, kind: "opening", balance: party.openingBalance });
+          }
+          debts.sort((a, b) => a.date.getTime() - b.date.getTime());
+
+          for (const debt of debts) {
             if (remaining <= 0) break;
-            const applied = Math.min(remaining, inv.balance);
+            const applied = Math.min(remaining, debt.balance);
             if (applied <= 0) continue;
-            allocations.push({ invoiceId: inv.id, amount: applied });
+            if (debt.kind === "invoice") invoiceAllocations.push({ invoiceId: debt.invoiceId!, amount: applied });
+            else openingBalanceApplied += applied;
             remaining -= applied;
           }
         }
@@ -323,7 +340,10 @@ export class BulkImportService {
           },
         });
 
-        for (const a of allocations) {
+        if (openingBalanceApplied > 0) {
+          await tx.party.update({ where: { id: partyId }, data: { openingBalance: { decrement: openingBalanceApplied } } });
+        }
+        for (const a of invoiceAllocations) {
           await tx.paymentAllocation.create({ data: { tenantId, paymentTxnId: txn.id, invoiceTxnId: a.invoiceId, amount: a.amount } });
           await tx.transaction.update({ where: { id: a.invoiceId }, data: { balance: { decrement: a.amount } } });
         }
