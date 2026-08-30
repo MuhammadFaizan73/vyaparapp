@@ -265,16 +265,14 @@ export class BulkImportService {
     const existingTxns = await this.prisma.transaction.findMany({ where: { tenantId }, select: { number: true, type: true } });
     const seenTxnKeys = new Set(existingTxns.filter((t) => t.number).map((t) => `${t.type}:${t.number}`));
 
-    // 3. Build + batch-insert payment_in / payment_out transactions.
+    // 3. Create payment_in / payment_out transactions, auto-linking each Payment-In to
+    // the same party's outstanding Sale invoices — oldest first (FIFO), the same
+    // convention a customer paying down old debt before new debt follows in practice.
+    // This needs each row's real id before the next step, and needs every prior entry's
+    // allocations already applied so later entries see up-to-date invoice balances —
+    // both rule out the batched createMany() used elsewhere, so this runs one row at a
+    // time inside its own transaction (payment + its allocations succeed or fail together).
     const entries = dto.entries ?? [];
-    let buffer: Array<{ tenantId: string; partyId: string; type: string; number: string; date: Date; total: number; balance: number; notes: string; companyId: string | null }> = [];
-
-    const flush = async () => {
-      if (!buffer.length) return;
-      await this.prisma.transaction.createMany({ data: buffer });
-      job.entriesImported += buffer.length;
-      buffer = [];
-    };
 
     for (const e of entries) {
       job.processed++;
@@ -288,24 +286,51 @@ export class BulkImportService {
       }
       seenTxnKeys.add(key);
 
-      buffer.push({
-        tenantId,
-        partyId,
-        type: e.type,
-        number: e.number,
-        date,
-        total: e.amount,
-        // PaymentInScreen/PurchaseScreen store the full amount as `balance` when nothing has
-        // been linked to a specific invoice yet — matches that "unapplied" convention exactly,
-        // since this import has no invoice-linking data to consume any of it.
-        balance: e.amount,
-        notes: JSON.stringify({ paymentType: "Cash", receiptNo: e.number, description: e.description }),
-        companyId: dto.companyId || null,
+      await this.prisma.$transaction(async (tx) => {
+        // Payment-Out -> Purchase-bill allocation would be the symmetric move, but
+        // nobody's asked for that yet — only auto-link the Payment-In / Sale side.
+        let remaining = e.amount;
+        const allocations: Array<{ invoiceId: string; amount: number }> = [];
+        if (e.type === "payment_in") {
+          const outstanding = await tx.transaction.findMany({
+            where: { tenantId, partyId, type: "sale", balance: { gt: 0 } },
+            orderBy: { date: "asc" },
+            select: { id: true, balance: true },
+          });
+          for (const inv of outstanding) {
+            if (remaining <= 0) break;
+            const applied = Math.min(remaining, inv.balance);
+            if (applied <= 0) continue;
+            allocations.push({ invoiceId: inv.id, amount: applied });
+            remaining -= applied;
+          }
+        }
+
+        const txn = await tx.transaction.create({
+          data: {
+            tenantId,
+            partyId,
+            type: e.type,
+            number: e.number,
+            date,
+            total: e.amount,
+            // Whatever wasn't consumed by an allocation above stays as this payment's own
+            // unapplied balance — same "unused amount" convention PaymentInScreen's manual
+            // entry form already uses.
+            balance: remaining,
+            notes: JSON.stringify({ paymentType: "Cash", receiptNo: e.number, description: e.description }),
+            companyId: dto.companyId || null,
+          },
+        });
+
+        for (const a of allocations) {
+          await tx.paymentAllocation.create({ data: { tenantId, paymentTxnId: txn.id, invoiceTxnId: a.invoiceId, amount: a.amount } });
+          await tx.transaction.update({ where: { id: a.invoiceId }, data: { balance: { decrement: a.amount } } });
+        }
       });
 
-      if (buffer.length >= CHUNK_SIZE) await flush();
+      job.entriesImported++;
     }
-    await flush();
 
     job.status = "done";
   }
