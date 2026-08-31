@@ -7,7 +7,7 @@ import { colors } from "../../src/theme";
 import { clearToken, getRole, getPermissions } from "../../src/auth";
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>["name"];
-type ExpandedSection = "sale" | "purchase" | null;
+type ExpandedSection = "sale" | "purchase" | "utilities" | null;
 
 interface SubItem {
   label: string;
@@ -31,6 +31,17 @@ const PURCHASE_ITEMS: SubItem[] = [
   { label: "Purchase Return",   icon: "return-up-back-outline",  route: "/purchase-return" },
   { label: "Purchase Order",    icon: "clipboard-outline",       route: "/purchase-order" },
   { label: "Debit Note",        icon: "document-outline",        route: "/debit-note" },
+];
+
+// Same 5 Excel imports as desktop's "Utilities" nav section (packages/ui's
+// ImportItemsPage/ImportSaleHistoryPage/ImportPurchaseHistoryPage/ImportCashFlowPage/
+// ImportExpensesPage) — ported to their own mobile screens under app/import-*.tsx.
+const UTILITY_ITEMS: SubItem[] = [
+  { label: "Import Items",            icon: "cube-outline",          route: "/import-items" },
+  { label: "Import Sale History",     icon: "receipt-outline",       route: "/import-sale-history" },
+  { label: "Import Purchase History", icon: "cart-outline",          route: "/import-purchase-history" },
+  { label: "Import Cash Flow",        icon: "swap-vertical-outline", route: "/import-cash-flow" },
+  { label: "Import Expenses",         icon: "wallet-outline",        route: "/import-expenses" },
 ];
 
 interface MenuRow {
@@ -226,6 +237,7 @@ export default function MenuScreen() {
         <View style={styles.group}>
           {renderExpandableSection("sale", "Sale", "receipt-outline", "#fff0f4", "#e11d48", SALE_ITEMS)}
           {renderExpandableSection("purchase", "Purchase", "cart-outline", "#f0fdf4", "#15803d", PURCHASE_ITEMS)}
+          {renderExpandableSection("utilities", "Import Data", "cloud-upload-outline", "#e0e7ff", "#4338ca", UTILITY_ITEMS)}
 
           {/* Expenses */}
           <TouchableOpacity style={styles.row} onPress={() => router.push("/expense" as never)} activeOpacity={0.7}>
