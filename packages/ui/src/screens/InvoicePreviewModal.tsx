@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 import type { Transaction, Party } from "@vyapar/api-client";
-import { loadSettings } from "./SettingsScreen";
+import { loadSettings, saveSettings } from "./SettingsScreen";
 
 /* ── helpers ── */
 function fmt(n: number) {
@@ -95,6 +95,7 @@ export function InvoicePreviewModal({ sale, invoiceNumber, party, onClose }: Pro
   // fully color-branded theme is a better first impression than an unconfigured install.
   const [theme, setTheme]         = useState(() => loadSettings().printThemeName || "Theme 3");
   const [color, setColor]         = useState(() => loadSettings().printColor || "#3b82f6");
+  const [companyName, setCompanyNameState] = useState(() => loadSettings().companyName || "My Company");
   const [collapsed, setCollapsed] = useState<Record<string,boolean>>({ classic:true });
   const [doNotShow, setDoNotShow] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -102,6 +103,11 @@ export function InvoicePreviewModal({ sale, invoiceNumber, party, onClose }: Pro
 
   const received = sale.total - sale.balance;
   const tc = THEME_MAP[theme] ?? THEME_MAP["Theme 3"];
+
+  function setCompanyName(name: string) {
+    setCompanyNameState(name);
+    saveSettings({ ...loadSettings(), companyName: name });
+  }
 
   // Renders exactly the paper the user is already looking at (whatever theme/color they
   // picked in the sidebar) to an image, then drops that image onto a PDF page sized to match —
@@ -176,7 +182,17 @@ export function InvoicePreviewModal({ sale, invoiceNumber, party, onClose }: Pro
           {/* ── Left sidebar ── */}
           <aside className="ipv-sidebar">
             <div className="ipv-sidebar__head">Preview</div>
-            <div className="ipv-sidebar__subhead">Select Theme</div>
+
+            <div className="ipv-sidebar__subhead">Company Name</div>
+            <input
+              type="text"
+              className="ipv-company-input"
+              value={companyName}
+              onChange={(e) => setCompanyName(e.target.value)}
+              placeholder="My Company"
+            />
+
+            <div className="ipv-sidebar__subhead" style={{ marginTop: 14 }}>Select Theme</div>
 
             {/* Collapsible categories */}
             {COLLAPSIBLE_CATS.map((cat) => {
@@ -255,7 +271,7 @@ export function InvoicePreviewModal({ sale, invoiceNumber, party, onClose }: Pro
             <div ref={paperRef} className={`ipv-paper${tc.thermal ? " ipv-paper--thermal" : ""}`}>
               <InvoicePaper
                 tc={tc} color={color} sale={sale} party={party}
-                invoiceNumber={invoiceNumber} received={received}
+                invoiceNumber={invoiceNumber} received={received} companyName={companyName}
               />
             </div>
           </div>
@@ -440,12 +456,12 @@ function InvoicePaperHeader({ tc, color, fg, companyName, companyPhone }: {
   );
 }
 
-export function InvoicePaper({ tc, color, sale, party, invoiceNumber, received }: {
+export function InvoicePaper({ tc, color, sale, party, invoiceNumber, received, companyName: companyNameProp }: {
   tc: ThemeConfig; color: string; sale: SaleRow; party?: Party;
-  invoiceNumber: number; received: number;
+  invoiceNumber: number; received: number; companyName?: string;
 }) {
   const fg = isLight(color) ? "#111827" : "#ffffff";
-  const companyName = "Rootocloud";
+  const companyName = companyNameProp || loadSettings().companyName || "My Company";
   const companyPhone = party?.phone ?? "";
   const partyName    = sale.partyName;
   const partyAddress = party?.billingAddress ?? "";
