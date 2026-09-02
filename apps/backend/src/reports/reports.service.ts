@@ -81,12 +81,26 @@ function parseDate(d?: string): Date | undefined {
   return isNaN(dt.getTime()) ? undefined : dt;
 }
 
+// This app has one country of users, and every stored `date` is a UTC instant for *Pakistan*
+// midnight — but `d.getFullYear()/getMonth()/getDate()` read the calendar day in the *server
+// process's* timezone (Railway's container, not necessarily Pakistan), so a report's day
+// boundary could land up to several hours off from what "that day" means in Pakistan. Reading
+// the day via Intl with an explicit Asia/Karachi zone, then anchoring the boundary back to
+// that same zone with an explicit +05:00 offset, makes this correct regardless of server TZ.
+const PK_TZ = 'Asia/Karachi';
+function pkDateParts(d: Date): { y: number; m: number; day: number } {
+  const [y, m, day] = new Intl.DateTimeFormat('en-CA', { timeZone: PK_TZ, year: 'numeric', month: '2-digit', day: '2-digit' })
+    .format(d).split('-').map(Number);
+  return { y, m, day };
+}
 function startOfDay(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+  const { y, m, day } = pkDateParts(d);
+  return new Date(`${y}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}T00:00:00+05:00`);
 }
 
 function endOfDay(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+  const { y, m, day } = pkDateParts(d);
+  return new Date(`${y}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}T23:59:59.999+05:00`);
 }
 
 function buildDateFilter(from?: string, to?: string) {

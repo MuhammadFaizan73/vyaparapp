@@ -12,15 +12,19 @@ import { loadSettings } from "./SettingsScreen";
 function fmt(n: number) {
   return n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
-function today() { return new Date().toISOString().slice(0, 10); }
+// Every date is a UTC instant for Pakistan midnight (this app has one country of users) —
+// formatting/filtering without pinning this zone uses the viewing device's own timezone
+// instead, silently shifting dates by a day. See SaleScreen.tsx for the same fix.
+const PK_TZ = "Asia/Karachi";
+function today() { return new Date().toLocaleDateString("en-CA", { timeZone: PK_TZ }); }
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-PK", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return new Date(iso).toLocaleDateString("en-PK", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: PK_TZ });
 }
 function fmtChip(iso: string) {
-  return new Date(iso).toLocaleDateString("en-PK", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return new Date(iso).toLocaleDateString("en-PK", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: PK_TZ });
 }
 function getPresetRange(preset: string): { from: string; to: string } {
-  const now = new Date();
+  const now = new Date(new Date().toLocaleString("en-US", { timeZone: PK_TZ }));
   const y = now.getFullYear(), m = now.getMonth();
   const pad = (n: number) => String(n).padStart(2, "0");
   const iso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -233,7 +237,7 @@ export function SaleTxnScreen({ activeKey, isLocked = false, onLockedAction }: P
   }, [showDatePanel]);
 
   const filteredRows = rows.filter((r) => {
-    const d = r.date.slice(0, 10);
+    const d = new Date(r.date).toLocaleDateString("en-CA", { timeZone: PK_TZ });
     if (d < filterFrom || d > filterTo) return false;
     if (filterSearch.trim()) {
       const q = filterSearch.toLowerCase();
@@ -1621,7 +1625,7 @@ function TxnLinkPaymentModal({ partyName, creditAmount, invoices, linkedIds, onD
                 return (
                   <tr key={inv.id} style={{ borderBottom: "1px solid #f0f0f0", cursor: "pointer", background: isChecked ? "#eff6ff" : "#fff" }} onClick={() => toggle(inv.id)}>
                     <td style={{ ...tdStyle, width: 36 }}><input type="checkbox" checked={isChecked} readOnly onClick={(e) => { e.stopPropagation(); toggle(inv.id); }} /></td>
-                    <td style={tdStyle}>{new Date(inv.date).toLocaleDateString("en-PK", { day: "2-digit", month: "2-digit", year: "numeric" })}</td>
+                    <td style={tdStyle}>{new Date(inv.date).toLocaleDateString("en-PK", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: PK_TZ })}</td>
                     <td style={tdStyle}>#{inv.number ?? "–"}</td>
                     <td style={tdStyle}>Rs {fmt(inv.total)}</td>
                     <td style={tdStyle}>Rs {fmt(inv.balance)}</td>

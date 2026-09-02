@@ -445,7 +445,10 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
   }, [showDatePanel]);
 
   const filtered = sales.filter((s) => {
-    const d = s.date.slice(0, 10);
+    // s.date is a UTC instant for Pakistan midnight — slicing the raw UTC string gives the
+    // wrong calendar day for any timestamp before 05:00 PKT (which is every imported historical
+    // record, always stored at exact midnight). Convert to Pakistan's own date first.
+    const d = new Date(s.date).toLocaleDateString("en-CA", { timeZone: PK_TZ });
     if (d < filterFrom || d > filterTo) return false;
     if (filter === "unpaid" && s.balance === 0) return false;
     if (filter === "paid" && s.balance > 0) return false;

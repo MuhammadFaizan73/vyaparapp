@@ -133,16 +133,18 @@ export class TransactionsService {
     return rows.map(toRow);
   }
 
-  // A date-only `to` (e.g. "2026-08-06") parses as midnight at the *start* of that
-  // day — used bare as `lte`, it would exclude every transaction from later that same
-  // day. Push it to the end of the day so "to today" actually includes today.
+  // `from`/`to` are date-only strings ("2026-08-06") meaning a calendar day in Pakistan (this
+  // app has one country of users) — but every stored `date` is a UTC instant for *Pakistan*
+  // midnight, i.e. 19:00 UTC the previous day. Parsing "2026-09-01" bare gives UTC midnight,
+  // 5 hours before Pakistan's actual midnight, so a bare `gte` silently excluded any
+  // transaction timestamped in the first ~5 hours of every Pakistani day (any imported
+  // historical data, which is always stored at exact midnight). Anchoring both boundaries to
+  // an explicit +05:00 offset makes the range mean what it says regardless of server timezone.
   private dateFilter(from?: string, to?: string) {
     if (!from && !to) return undefined;
-    const toEndOfDay = to ? new Date(to) : undefined;
-    if (toEndOfDay) toEndOfDay.setUTCHours(23, 59, 59, 999);
     return {
-      ...(from && { gte: new Date(from) }),
-      ...(toEndOfDay && { lte: toEndOfDay }),
+      ...(from && { gte: new Date(`${from}T00:00:00+05:00`) }),
+      ...(to && { lte: new Date(`${to}T23:59:59.999+05:00`) }),
     };
   }
 
