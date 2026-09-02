@@ -251,6 +251,10 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
   // rendered (independent of the totals, which still sum the full filtered set) fixes that
   // without touching the data layer.
   const [visibleCount, setVisibleCount] = useState(ROWS_PER_PAGE);
+  // Database-aggregated total/balance for the current date+company+salesman filter, with no
+  // row cap — the header totals use this instead of summing the (possibly capped) `sales`
+  // array whenever no further client-only filter (paid/unpaid, search) narrows the set.
+  const [serverSummary, setServerSummary] = useState<{ count: number; total: number; balance: number } | null>(null);
 
   /* ── date / search filters ── */
   const initRange = getPresetRange("This Month");
@@ -396,19 +400,27 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
      triggers a fresh, still-bounded fetch rather than an unbounded one. */
   async function loadSales() {
     try {
-      const [txns, ps, its] = await Promise.all([
+      const opts = { from: filterFrom, to: filterTo, companyId: companyFilter ?? undefined, bookerId: salesmanFilterId || undefined };
+      const [txns, ps, its, summary] = await Promise.all([
         // Explicit take — the backend defaults to a 200-row cap (its guard against an
         // unbounded all-time fetch) even when a date range is passed, which silently
         // dropped the oldest invoices in any month with more than 200 sales.
-        api.getTransactionsByType("sale", { from: filterFrom, to: filterTo, companyId: companyFilter ?? undefined, bookerId: salesmanFilterId || undefined, take: 10000 }),
+        // Still a hard cap though: a range with more than 10,000 sales (this has happened —
+        // an 11,001-invoice business's "Total Sale" undercounted by the oldest 1,001 once
+        // its date filter widened past that) silently drops the oldest rows beyond it. The
+        // header totals below don't depend on this array for that reason — they come from
+        // getTransactionsSummary, a database aggregate with no row cap.
+        api.getTransactionsByType("sale", { ...opts, take: 10000 }),
         api.getParties(),
         api.getItems(),
+        api.getTransactionsSummary("sale", opts),
       ]);
       const map: Record<string, string> = {};
       ps.forEach((p: Party) => { map[p.id] = p.name; });
       setSales(txns.map((t) => ({ ...t, partyName: map[t.partyId] ?? "Unknown" })));
       setParties(ps);
       setItems(its);
+      setServerSummary(summary);
     } catch { /* offline */ }
   }
 
@@ -459,9 +471,12 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
     return true;
   });
 
-  const totalSale     = filtered.reduce((s, i) => s + i.total, 0);
-  const totalReceived = filtered.reduce((s, i) => s + (i.total - i.balance), 0);
-  const totalBalance  = filtered.reduce((s, i) => s + i.balance, 0);
+  // The only client-only narrowing getTransactionsSummary can't express is paid/unpaid and
+  // text search — once neither is active, its uncapped database aggregate is authoritative.
+  const useServerTotals = serverSummary && filter === "all" && !filterSearch.trim();
+  const totalSale     = useServerTotals ? serverSummary.total : filtered.reduce((s, i) => s + i.total, 0);
+  const totalBalance  = useServerTotals ? serverSummary.balance : filtered.reduce((s, i) => s + i.balance, 0);
+  const totalReceived = totalSale - totalBalance;
 
   function handleAddSale() {
     if (isLocked) { onLockedAction?.(); return; }
