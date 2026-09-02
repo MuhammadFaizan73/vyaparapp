@@ -20,15 +20,25 @@ import { loadPartySettings } from "./PartySettingsDrawer";
 function fmt(n: number) {
   return n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
+// Every date is stored as a UTC instant representing midnight Pakistan time (this app has one
+// country of users). Formatting without a fixed timeZone would instead use the *viewing
+// device's* system timezone — on a desktop/web client whose OS clock isn't set to Pakistan,
+// that silently shifts dates by a day (e.g. a 1-Sept invoice showing as 31-Aug).
+const PK_TZ = "Asia/Karachi";
+const ROWS_PER_PAGE = 300;
 function fmtChip(iso: string) {
-  return new Date(iso).toLocaleDateString("en-PK", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return new Date(iso).toLocaleDateString("en-PK", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: PK_TZ });
 }
 function getPresetRange(preset: string): { from: string; to: string } {
-  const now = new Date();
-  const y = now.getFullYear(), m = now.getMonth();
+  // "now" must be Pakistan's wall-clock date, not the viewing device's — a desktop/web client
+  // whose OS clock isn't set to Pakistan would otherwise compute "This Month" against the wrong
+  // day, silently hiding or including invoices at the month boundary.
+  const nowPK = new Date(new Date().toLocaleString("en-US", { timeZone: PK_TZ }));
+  const y = nowPK.getFullYear(), m = nowPK.getMonth();
   const pad = (n: number) => String(n).padStart(2, "0");
   const iso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  const todayStr = iso(now);
+  const todayStr = iso(nowPK);
+  const now = nowPK;
   switch (preset) {
     case "Today": return { from: todayStr, to: todayStr };
     case "This Week": {
@@ -65,10 +75,12 @@ function numToWords(n: number): string {
   return (conv(int)||"Zero")+" Rupees"+(dec>0 ? " and "+conv(dec)+" Paise" : "")+" only";
 }
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-PK", { day: "2-digit", month: "short", year: "2-digit" });
+  return new Date(iso).toLocaleDateString("en-PK", { day: "2-digit", month: "short", year: "2-digit", timeZone: PK_TZ });
 }
 function today() {
-  return new Date().toISOString().slice(0, 10);
+  // UTC-slice rolls to the next/previous calendar day during Pakistan's early-morning hours
+  // (UTC+5) — use Pakistan's own wall-clock date instead (en-CA locale gives YYYY-MM-DD).
+  return new Date().toLocaleDateString("en-CA", { timeZone: PK_TZ });
 }
 
 /* ── types ── */
@@ -234,6 +246,11 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
   const subTab: SubTab = ACTIVE_KEY_TO_SUBTAB[activeKey] ?? "invoices";
   const [filter, setFilter] = useState<"all" | "unpaid" | "paid">("all");
   const [sales, setSales] = useState<SaleRow[]>([]);
+  // Rendering every row of a wide date range (thousands of invoices) as one large mounted DOM
+  // tree is what actually hangs the page — the fetch itself is already bounded. Slicing what's
+  // rendered (independent of the totals, which still sum the full filtered set) fixes that
+  // without touching the data layer.
+  const [visibleCount, setVisibleCount] = useState(ROWS_PER_PAGE);
 
   /* ── date / search filters ── */
   const initRange = getPresetRange("This Month");
@@ -397,9 +414,18 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
 
   useEffect(() => {
     setLoading(true);
+    setVisibleCount(ROWS_PER_PAGE);
     loadSales().finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterFrom, filterTo, companyFilter, salesmanFilterId]);
+
+  // Also reset the render window when the in-memory filter/search narrows or widens the
+  // result set — otherwise switching from "This Month" to "unpaid only" would leave the count
+  // stuck wherever the previous, larger list had scrolled to.
+  useEffect(() => {
+    setVisibleCount(ROWS_PER_PAGE);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filter, filterSearch]);
 
   /* close row menu on outside click */
   useEffect(() => {
@@ -530,7 +556,7 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
                     .map((row) => {
                       const notes = parseNotes(row.notes);
                       const isClosed = row.balance === 0;
-                      const dueDate = notes.dueDate ? new Date(notes.dueDate).toLocaleDateString("en-PK",{day:"2-digit",month:"2-digit",year:"numeric"}) : "—";
+                      const dueDate = notes.dueDate ? new Date(notes.dueDate).toLocaleDateString("en-PK",{day:"2-digit",month:"2-digit",year:"numeric",timeZone:PK_TZ}) : "—";
                       const dueSuffix = notes.dueDate && new Date(notes.dueDate).toDateString() === new Date().toDateString() ? " Due: Today" : "";
                       return (
                         <tr key={row.id} className={`dc-row${!isClosed?" dc-row--open":""}`}>
@@ -817,7 +843,7 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
                   <span style={{ textAlign: "center" }}>STATUS</span>
                   <span />
                 </div>
-                {filtered.map((sale, idx) => {
+                {filtered.slice(0, visibleCount).map((sale, idx) => {
                   const pal = partyColor(sale.partyName);
                   const isPaid = sale.balance === 0;
                   return (
@@ -863,6 +889,16 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
                     </div>
                   );
                 })}
+                {filtered.length > visibleCount && (
+                  <button
+                    type="button"
+                    className="sale-empty__btn"
+                    style={{ margin: "16px auto", display: "block" }}
+                    onClick={() => setVisibleCount((c) => c + ROWS_PER_PAGE)}
+                  >
+                    Load {Math.min(ROWS_PER_PAGE, filtered.length - visibleCount)} more (showing {visibleCount} of {filtered.length})
+                  </button>
+                )}
               </div>
             )}
           </>
@@ -1058,7 +1094,7 @@ function PaymentHistoryModal({ sale, onClose }: { sale: SaleRow; onClose: () => 
                   try { pt = (JSON.parse(t.notes ?? "{}") as { paymentType?: string }).paymentType ?? "Cash"; } catch { /* */ }
                   return (
                     <tr key={t.id} style={{ borderBottom: "1px solid #f0f0f0" }}>
-                      <td style={{ padding: "8px 10px" }}>{new Date(t.date).toLocaleDateString("en-PK", { day: "2-digit", month: "short", year: "2-digit" })}</td>
+                      <td style={{ padding: "8px 10px" }}>{new Date(t.date).toLocaleDateString("en-PK", { day: "2-digit", month: "short", year: "2-digit", timeZone: PK_TZ })}</td>
                       <td style={{ padding: "8px 10px" }}>#{t.number ?? "—"}</td>
                       <td style={{ padding: "8px 10px" }}>Rs {t.total.toLocaleString()}</td>
                       <td style={{ padding: "8px 10px", color: t.balance > 0 ? "#16a34a" : "#9ca3af" }}>Rs {t.balance.toLocaleString()}</td>
@@ -1099,6 +1135,7 @@ function ViewHistoryModal({ sale, onClose }: { sale: SaleRow; onClose: () => voi
     return d.toLocaleString("en-GB", {
       day: "2-digit", month: "2-digit", year: "numeric",
       hour: "2-digit", minute: "2-digit", hour12: true,
+      timeZone: PK_TZ,
     });
   }
 
@@ -3046,7 +3083,7 @@ function LinkPaymentModal({
                 return (
                   <tr key={t.id} className={isChecked ? "lpm-tr--selected" : ""} onClick={() => toggle(t.id)} style={{ cursor: "pointer" }}>
                     <td><input type="checkbox" checked={isChecked} readOnly onClick={(e) => { e.stopPropagation(); toggle(t.id); }} /></td>
-                    <td>{new Date(t.date).toLocaleDateString("en-PK", { day: "2-digit", month: "2-digit", year: "numeric" })}</td>
+                    <td>{new Date(t.date).toLocaleDateString("en-PK", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: PK_TZ })}</td>
                     <td>{t.type === "payment_in" ? "Payment-In" : t.type}</td>
                     <td>{t.number ?? "–"}</td>
                     <td>{fmt(t.total)}</td>
