@@ -10,20 +10,23 @@ import { RECENT_ROWS_LIMIT } from "./PaymentInScreen";
 function fmt(n: number) {
   return n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
+// Every date is a UTC instant for Pakistan midnight (this app has one country of users) —
+// formatting/computing "today" without pinning this zone uses the viewing device's own
+// timezone instead, silently shifting dates by a day. See SaleScreen.tsx for the same fix.
+const PK_TZ = "Asia/Karachi";
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-PK", { day: "2-digit", month: "short", year: "2-digit" });
+  return new Date(iso).toLocaleDateString("en-PK", { day: "2-digit", month: "short", year: "2-digit", timeZone: PK_TZ });
 }
-function today() { return new Date().toISOString().slice(0, 10); }
+function today() { return new Date().toLocaleDateString("en-CA", { timeZone: PK_TZ }); }
 function fmtChip(iso: string) {
-  return new Date(iso).toLocaleDateString("en-PK", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return new Date(iso).toLocaleDateString("en-PK", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: PK_TZ });
 }
 function ddmmyyyy(iso: string) {
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+  const [y, m, d] = new Date(iso).toLocaleDateString("en-CA", { timeZone: PK_TZ }).split("-");
+  return `${d}/${m}/${y}`;
 }
 function getPresetRange(preset: string): { from: string; to: string } {
-  const now = new Date();
+  const now = new Date(new Date().toLocaleString("en-US", { timeZone: PK_TZ }));
   const y = now.getFullYear(), m = now.getMonth();
   const pad = (n: number) => String(n).padStart(2, "0");
   const iso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -156,6 +159,7 @@ const TAB_CONFIG: Record<string, { txnType: TxnType; title: string; addLabel: st
 };
 
 const UNITS = ["NONE", "Pcs", "Kg", "Gm", "L", "ML", "Box", "Pack", "Bag", "Mtr", "Ft"];
+const ROWS_PER_PAGE = 300;
 
 function emptyRow(): LineItem {
   return { id: Date.now().toString() + Math.random(), name: "", mrp: 0, qty: 0, unit: "NONE", rate: 0 };
@@ -184,6 +188,11 @@ export function PurchaseScreen({ isLocked = false, onLockedAction, activeKey = "
   const [search, setSearch]   = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [purchases, setPurchases] = useState<PurchaseRow[]>([]);
+  // Rendering every fetched row (up to 10,000) as one mounted DOM tree is what hangs this
+  // page for a business with a large history (Purchase, Payment-Out, Expense, etc. all share
+  // this component) — the header total already comes from getTransactionsSummary (uncapped),
+  // so only the row list needs windowing. Same fix as SaleScreen.tsx/PaymentInScreen.tsx.
+  const [visibleCount, setVisibleCount] = useState(ROWS_PER_PAGE);
   const [summary, setSummary] = useState({ count: 0, total: 0, balance: 0 });
   const [parties,  setParties]   = useState<Party[]>([]);
   const [items,    setItems]     = useState<Item[]>([]);
@@ -270,9 +279,18 @@ export function PurchaseScreen({ isLocked = false, onLockedAction, activeKey = "
 
   useEffect(() => {
     setLoading(true);
+    setVisibleCount(ROWS_PER_PAGE);
     loadPurchases().finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeKey, companyFilter, filterFrom, filterTo, firmFilterId, userFilterId]);
+
+  // Also reset the render window when the in-memory filter/search narrows or widens the
+  // result set — otherwise switching to "unpaid only" would leave the count stuck wherever
+  // the previous, larger list had scrolled to.
+  useEffect(() => {
+    setVisibleCount(ROWS_PER_PAGE);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filter, search]);
   useEffect(() => {
     if (!menuId) return;
     const close = () => setMenuId(null);
@@ -591,7 +609,7 @@ export function PurchaseScreen({ isLocked = false, onLockedAction, activeKey = "
                   </div>
                   {filtered.length === 0 ? (
                     <div className="purchase-loading" style={{ padding: "40px" }}>No results for "{search}"</div>
-                  ) : filtered.map((purchase, idx) => {
+                  ) : filtered.slice(0, visibleCount).map((purchase, idx) => {
                     const pal = partyColor(purchase.partyName);
                     const isPaid = purchase.balance === 0;
                     const isSelected = selectedId === purchase.id;
@@ -626,6 +644,16 @@ export function PurchaseScreen({ isLocked = false, onLockedAction, activeKey = "
                       </div>
                     );
                   })}
+                  {filtered.length > visibleCount && (
+                    <button
+                      type="button"
+                      className="purchase-row__icon-btn"
+                      style={{ width: "auto", padding: "8px 16px", margin: "16px auto", display: "block" }}
+                      onClick={() => setVisibleCount((c) => c + ROWS_PER_PAGE)}
+                    >
+                      Load {Math.min(ROWS_PER_PAGE, filtered.length - visibleCount)} more (showing {visibleCount} of {filtered.length})
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -1360,7 +1388,7 @@ function InvoicePreview({
   const companyName  = "Rootocloud";
 
   const fmtDate = (iso: string) =>
-    new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" }).replace(/\//g, "-");
+    new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: PK_TZ }).replace(/\//g, "-");
 
   function selectTheme(name: string, color: string) {
     setSelectedTheme(name);
@@ -1852,7 +1880,7 @@ function StandalonePaymentOutModal({
 
   // Format date for display  (dd/mm/yyyy)
   const displayDate = date
-    ? new Date(date).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" })
+    ? new Date(date).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: PK_TZ })
     : "";
 
   async function save() {
@@ -2659,7 +2687,7 @@ function PurchaseReturnSubScreen({ isLocked, onLockedAction }: { isLocked?: bool
                 return (
                   <tr key={row.id} className="dr-row">
                     <td className="dr-td dr-td--num">{idx + 1}</td>
-                    <td className="dr-td">{new Date(row.date).toLocaleDateString("en-GB").replace(/\//g, "/")}</td>
+                    <td className="dr-td">{new Date(row.date).toLocaleDateString("en-GB", { timeZone: PK_TZ }).replace(/\//g, "/")}</td>
                     <td className="dr-td" style={{ color: "#6b7280" }}>{row.number ?? idx + 1}</td>
                     <td className="dr-td dr-td--party">{row.partyName}</td>
                     <td className="dr-td" style={{ color: "#9ca3af" }}>—</td>
@@ -2993,7 +3021,7 @@ function DebitNoteForm({
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <span style={{ fontSize: 13, color: billDate ? "#111827" : "#9ca3af", fontWeight: billDate ? 600 : 400 }}>
                   {billDate
-                    ? new Date(billDate).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" }).replace(/\//g, "/")
+                    ? new Date(billDate).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: PK_TZ }).replace(/\//g, "/")
                     : "DD/MM/YYYY"}
                 </span>
                 <label style={{ cursor: "pointer", position: "relative" }}>
@@ -3008,7 +3036,7 @@ function DebitNoteForm({
               <span className="nsf-invoice-meta__lbl">Date</span>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <span style={{ fontSize: 13, color: "#111827", fontWeight: 600 }}>
-                  {new Date(date).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" }).replace(/\//g, "/")}
+                  {new Date(date).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: PK_TZ }).replace(/\//g, "/")}
                 </span>
                 <label style={{ cursor: "pointer", position: "relative" }}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
@@ -3310,7 +3338,7 @@ function PurchasePreviewModal({
 
   const subtotal  = items.reduce((s, i) => s + i.qty * i.rate, 0);
   const paid      = purchase.total - purchase.balance;
-  const dateStr   = new Date(purchase.date).toLocaleDateString("en-PK", { day:"2-digit", month:"2-digit", year:"numeric" }).replace(/\//g, "-");
+  const dateStr   = new Date(purchase.date).toLocaleDateString("en-PK", { day:"2-digit", month:"2-digit", year:"numeric", timeZone: PK_TZ }).replace(/\//g, "-");
 
   function printPreview() {
     const el = document.getElementById("purchase-preview-content");
@@ -3888,7 +3916,7 @@ function ExpenseSubScreen({ isLocked, onLockedAction }: { isLocked?: boolean; on
                     const isPaid = row.balance === 0;
                     return (
                       <tr key={row.id} className="exp-row">
-                        <td className="exp-td">{new Date(row.date).toLocaleDateString("en-GB").replace(/\//g, "/")}</td>
+                        <td className="exp-td">{new Date(row.date).toLocaleDateString("en-GB", { timeZone: PK_TZ }).replace(/\//g, "/")}</td>
                         <td className="exp-td" style={{ color: "#6b7280" }}>#{idx + 1}</td>
                         <td className="exp-td exp-td--party">{row.partyName}</td>
                         <td className="exp-td">{getPayTypeFromRow(row)}</td>
@@ -4117,7 +4145,7 @@ function ExpenseForm({
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <span style={{ fontSize: 13, color: expDate ? "#111827" : "#9ca3af" }}>
                   {expDate
-                    ? new Date(expDate).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" }).replace(/\//g, "/")
+                    ? new Date(expDate).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: PK_TZ }).replace(/\//g, "/")
                     : "DD/MM/YYYY"}
                 </span>
                 <label style={{ cursor: "pointer", position: "relative" }}>
