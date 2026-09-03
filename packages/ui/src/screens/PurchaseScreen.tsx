@@ -3693,33 +3693,57 @@ function ExpenseSubScreen({ isLocked, onLockedAction }: { isLocked?: boolean; on
   const [txnSearch, setTxnSearch] = useState("");
   const { companyFilter } = useCompany();
 
-  const now = new Date();
-  const fmtDMY = (d: Date) =>
-    `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
-  const startDateStr = fmtDMY(new Date(now.getFullYear(), now.getMonth(), 1));
-  const endDateStr   = fmtDMY(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+  // The date bar used to be decorative — a static label with no onClick, and load()
+  // ignored it entirely (always fetching just the newest RECENT_ROWS_LIMIT rows regardless
+  // of any date). That's why picking a date range did nothing, and why a business whose
+  // most recent Expense data predates the current calendar month (imported history, e.g.)
+  // saw last month's rows under a "This Month" label. Wired to the same filterFrom/filterTo/
+  // filterPreset + getPresetRange pattern the sibling tabs already use.
+  const initExpRange = getPresetRange("This Month");
+  const [filterPreset, setFilterPreset] = useState("This Month");
+  const [filterFrom, setFilterFrom] = useState(initExpRange.from);
+  const [filterTo, setFilterTo] = useState(initExpRange.to);
+  const [showDatePanel, setShowDatePanel] = useState(false);
+  const [datePanelPos, setDatePanelPos] = useState({ top: 0, left: 0 });
+  const datePanelRef = useRef<HTMLDivElement>(null);
+  const [summary, setSummary] = useState({ count: 0, total: 0, balance: 0 });
+
+  useEffect(() => {
+    if (!showDatePanel) return;
+    function handler(e: MouseEvent) {
+      if (datePanelRef.current && !datePanelRef.current.contains(e.target as Node)) setShowDatePanel(false);
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showDatePanel]);
+
+  const startDateStr = fmtChip(filterFrom);
+  const endDateStr   = fmtChip(filterTo);
 
   async function load() {
     try {
       // Note: the category breakdown below is grouped from a JSON field inside `notes`,
-      // not a real column, so it can only reflect this capped, most-recent window — a
-      // proper category aggregate would need a dedicated backend endpoint doing the
-      // grouping in SQL, which this doesn't attempt.
+      // not a real column, so it can only reflect this capped, most-recent (now
+      // date-range-bounded) window — a proper category aggregate would need a dedicated
+      // backend endpoint doing the grouping in SQL, which this doesn't attempt. The overall
+      // "All Expenses" total below does NOT have this limitation — it uses the accurate
+      // uncapped summary aggregate instead of summing these capped rows.
       const companyId = companyFilter ?? undefined;
       const [ps, txns, sum] = await Promise.all([
         api.getParties(),
-        api.getTransactionsByType("expense", { take: RECENT_ROWS_LIMIT, companyId }),
-        api.getTransactionsSummary("expense", { companyId }),
+        api.getTransactionsByType("expense", { from: filterFrom, to: filterTo, take: RECENT_ROWS_LIMIT, companyId }),
+        api.getTransactionsSummary("expense", { from: filterFrom, to: filterTo, companyId }),
       ]);
       setParties(ps);
       const map: Record<string, string> = {};
       ps.forEach(p => { map[p.id] = p.name; });
       setRows(txns.map(t => ({ ...t, partyName: map[t.partyId] ?? "—" })));
+      setSummary(sum);
       setNextNum(sum.count + 1);
     } catch { /* offline */ }
   }
 
-  useEffect(() => { setLoading(true); load().finally(() => setLoading(false)); }, [companyFilter]);
+  useEffect(() => { setLoading(true); load().finally(() => setLoading(false)); }, [companyFilter, filterFrom, filterTo]);
 
   function getCategoryFromRow(row: PurchaseRow): string {
     try { return JSON.parse(row.notes ?? "{}").category ?? "Uncategorized"; } catch { return "Uncategorized"; }
@@ -3743,8 +3767,12 @@ function ExpenseSubScreen({ isLocked, onLockedAction }: { isLocked?: boolean; on
     ? txnRows.filter(r => r.partyName.toLowerCase().includes(txnSearch.toLowerCase()))
     : txnRows;
 
-  const totalAmount  = filteredTxns.reduce((s, r) => s + r.total, 0);
-  const totalBalance = filteredTxns.reduce((s, r) => s + r.balance, 0);
+  // "All Expenses" with no search narrowing can use the accurate uncapped summary; any
+  // category/search narrowing has to fall back to summing the capped rows fetched above,
+  // same known limitation the category breakdown already has (see the comment in load()).
+  const useServerTotal = !selectedCat && !txnSearch;
+  const totalAmount  = useServerTotal ? summary.total : filteredTxns.reduce((s, r) => s + r.total, 0);
+  const totalBalance = useServerTotal ? summary.balance : filteredTxns.reduce((s, r) => s + r.balance, 0);
 
   function handleAdd() {
     if (isLocked) { onLockedAction?.(); return; }
@@ -3780,15 +3808,21 @@ function ExpenseSubScreen({ isLocked, onLockedAction }: { isLocked?: boolean; on
     <div className="exp-root">
       {/* Date bar */}
       <div className="purchase-datebar">
-        <button type="button" className="purchase-datebar__period">This Month <span>▾</span></button>
+        <button type="button" className="purchase-datebar__period" onClick={(e) => {
+          const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+          setDatePanelPos({ top: r.bottom + 6, left: r.left });
+          setShowDatePanel((v) => !v);
+        }}>{filterPreset} <span>▾</span></button>
         <div className="purchase-datebar__range">
-          <button type="button" className="purchase-datebar__between-btn">Between</button>
+          <button type="button" className="purchase-datebar__between-btn" onClick={(e) => {
+            const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            setDatePanelPos({ top: r.bottom + 6, left: r.left });
+            setShowDatePanel((v) => !v);
+          }}>Between</button>
           <span className="purchase-datebar__date-val">{startDateStr}</span>
           <span className="purchase-datebar__to">To</span>
           <span className="purchase-datebar__date-val">{endDateStr}</span>
         </div>
-        <button type="button" className="purchase-datebar__chip">ALL FIRMS <span>▾</span></button>
-        <button type="button" className="purchase-datebar__chip">ALL USERS <span>▾</span></button>
         <div className="purchase-datebar__spacer" />
         <button type="button" className="purchase-datebar__icon-btn" title="Excel">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
@@ -3797,6 +3831,47 @@ function ExpenseSubScreen({ isLocked, onLockedAction }: { isLocked?: boolean; on
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
         </button>
       </div>
+
+      {showDatePanel && (
+        <div ref={datePanelRef} style={{ position: "fixed", top: datePanelPos.top, left: datePanelPos.left, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, boxShadow: "0 8px 28px rgba(0,0,0,0.13)", zIndex: 700, width: 340, padding: "12px 0 16px" }}>
+          <div style={{ padding: "0 14px 10px", fontSize: 11, fontWeight: 700, color: "#9ca3af", letterSpacing: 0.8, textTransform: "uppercase" }}>Quick Select</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2px 0" }}>
+            {["Today", "This Week", "This Month", "Last Month", "This Quarter", "This Year"].map((p) => (
+              <button key={p} type="button"
+                onClick={() => {
+                  const r = getPresetRange(p);
+                  setFilterPreset(p); setFilterFrom(r.from); setFilterTo(r.to);
+                  setShowDatePanel(false);
+                }}
+                style={{ padding: "8px 14px", background: filterPreset === p ? "#eff6ff" : "none", border: "none", cursor: "pointer", textAlign: "left", fontSize: 13, color: filterPreset === p ? "#2563eb" : "#374151", fontWeight: filterPreset === p ? 600 : 400 }}
+                onMouseEnter={(e) => { if (filterPreset !== p) e.currentTarget.style.background = "#f9fafb"; }}
+                onMouseLeave={(e) => { if (filterPreset !== p) e.currentTarget.style.background = "none"; }}
+              >{p}</button>
+            ))}
+          </div>
+          <div style={{ height: 1, background: "#f3f4f6", margin: "10px 0" }} />
+          <div style={{ padding: "0 14px 4px", fontSize: 11, fontWeight: 700, color: "#9ca3af", letterSpacing: 0.8, textTransform: "uppercase" }}>Custom Range</div>
+          <div style={{ display: "flex", gap: 8, padding: "8px 14px 0", alignItems: "center" }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 3 }}>From</div>
+              <input type="date" value={filterFrom}
+                onChange={(e) => { setFilterFrom(e.target.value); setFilterPreset("Custom"); }}
+                style={{ width: "100%", border: "1px solid #d1d5db", borderRadius: 6, padding: "6px 8px", fontSize: 13, boxSizing: "border-box" }} />
+            </div>
+            <span style={{ fontSize: 13, color: "#9ca3af", marginTop: 14 }}>–</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 3 }}>To</div>
+              <input type="date" value={filterTo}
+                onChange={(e) => { setFilterTo(e.target.value); setFilterPreset("Custom"); }}
+                style={{ width: "100%", border: "1px solid #d1d5db", borderRadius: 6, padding: "6px 8px", fontSize: 13, boxSizing: "border-box" }} />
+            </div>
+          </div>
+          <div style={{ padding: "10px 14px 0", display: "flex", justifyContent: "flex-end" }}>
+            <button type="button" onClick={() => setShowDatePanel(false)}
+              style={{ padding: "6px 16px", background: "#3b82f6", color: "#fff", border: "none", borderRadius: 6, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>Apply</button>
+          </div>
+        </div>
+      )}
 
       <div className="exp-body">
         {/* Left panel: category list */}
@@ -3821,7 +3896,7 @@ function ExpenseSubScreen({ isLocked, onLockedAction }: { isLocked?: boolean; on
                   onClick={() => setSelectedCat(null)}>
                   <div className="exp-cat-row__info">
                     <span className="exp-cat-row__name">All Expenses</span>
-                    <span className="exp-cat-row__amount">Rs {fmt(rows.reduce((s, r) => s + r.total, 0))}</span>
+                    <span className="exp-cat-row__amount">Rs {fmt(summary.total)}</span>
                   </div>
                 </div>
                 {filteredCats.map(cat => (
