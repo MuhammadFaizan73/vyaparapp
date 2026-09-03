@@ -9,17 +9,21 @@ import { useCompany } from "../lib/CompanyContext";
 function fmt(n: number) {
   return n.toLocaleString("en-PK", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
+// Every date is a UTC instant for Pakistan midnight (this app has one country of users) —
+// formatting/computing "today" without pinning this zone uses the viewing device's own
+// timezone instead, silently shifting dates by a day. See SaleScreen.tsx for the same fix.
+const PK_TZ = "Asia/Karachi";
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-PK", { day: "2-digit", month: "short", year: "2-digit" });
+  return new Date(iso).toLocaleDateString("en-PK", { day: "2-digit", month: "short", year: "2-digit", timeZone: PK_TZ });
 }
 function today() {
-  return new Date().toISOString().slice(0, 10);
+  return new Date().toLocaleDateString("en-CA", { timeZone: PK_TZ });
 }
 function fmtChip(iso: string) {
-  return new Date(iso).toLocaleDateString("en-PK", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return new Date(iso).toLocaleDateString("en-PK", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: PK_TZ });
 }
 function getPresetRange(preset: string): { from: string; to: string } {
-  const now = new Date();
+  const now = new Date(new Date().toLocaleString("en-US", { timeZone: PK_TZ }));
   const y = now.getFullYear(), m = now.getMonth();
   const pad = (n: number) => String(n).padStart(2, "0");
   const iso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -129,9 +133,15 @@ type Props = { isLocked?: boolean; onLockedAction?: () => void };
 // scrolling through years of history. Header totals below come from a separate cheap
 // aggregate call instead, so they stay accurate even though the visible list is capped.
 export const RECENT_ROWS_LIMIT = 300;
+const ROWS_PER_PAGE = 300;
 
 export function PaymentInScreen({ isLocked = false, onLockedAction }: Props) {
   const [rows, setRows] = useState<PiRow[]>([]);
+  // Rendering every fetched row (up to 10,000) as one large mounted DOM tree is what hangs
+  // this page for a business with a large payment history — the header total already comes
+  // from getTransactionsSummary (uncapped), so only the row list needs windowing. Same fix as
+  // SaleScreen.tsx.
+  const [visibleCount, setVisibleCount] = useState(ROWS_PER_PAGE);
   const [parties, setParties] = useState<Party[]>([]);
   const [summary, setSummary] = useState({ count: 0, total: 0, balance: 0 });
   const [loading, setLoading] = useState(true);
@@ -190,11 +200,23 @@ export function PaymentInScreen({ isLocked = false, onLockedAction }: Props) {
     try {
       const companyId = firmFilterId || companyFilter || undefined;
       const bookerId = userFilterId || undefined;
+      // Pages through every matching row instead of a single take: 10000 — a business with
+      // more than that many payments (it happens — Safal Traders has 23,725) had its "oldest"
+      // reference point (used below for the running-balance column) land ~13,000 payments too
+      // late, throwing off every row's running balance even though the header total (from
+      // getTransactionsSummary, a separate uncapped aggregate) stayed correct.
+      const PAGE = 5000;
+      const fetchAll = async () => {
+        let all: Transaction[] = [];
+        for (let skip = 0; ; skip += PAGE) {
+          const page = await api.getTransactionsByType("payment_in", { from: filterFrom, to: filterTo, take: PAGE, skip, companyId, bookerId });
+          all = all.concat(page);
+          if (page.length < PAGE) break;
+        }
+        return all;
+      };
       const [txns, ps, sum] = await Promise.all([
-        // Explicit take alongside the date range — a bare take (no from/to) was the bug:
-        // it silently showed the most recent RECENT_ROWS_LIMIT payments regardless of
-        // whatever the filter chips claimed to be showing.
-        api.getTransactionsByType("payment_in", { from: filterFrom, to: filterTo, take: 10000, companyId, bookerId }),
+        fetchAll(),
         api.getParties(),
         api.getTransactionsSummary("payment_in", { from: filterFrom, to: filterTo, companyId, bookerId }),
       ]);
@@ -210,6 +232,7 @@ export function PaymentInScreen({ isLocked = false, onLockedAction }: Props) {
 
   useEffect(() => {
     setLoading(true);
+    setVisibleCount(ROWS_PER_PAGE);
     loadData().finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyFilter, filterFrom, filterTo, firmFilterId, userFilterId]);
@@ -417,7 +440,7 @@ export function PaymentInScreen({ isLocked = false, onLockedAction }: Props) {
             <span style={{ flex: 0.6 }} />
           </div>
 
-          {rows.map((row) => {
+          {rows.slice(0, visibleCount).map((row) => {
             const pal = partyColor(row.partyName);
             const isUnused = row.balance === row.total;
             const paymentType = getPaymentType(row.notes);
@@ -473,6 +496,16 @@ export function PaymentInScreen({ isLocked = false, onLockedAction }: Props) {
               </div>
             );
           })}
+          {rows.length > visibleCount && (
+            <button
+              type="button"
+              className="pi-empty__btn"
+              style={{ margin: "16px auto", display: "block" }}
+              onClick={() => setVisibleCount((c) => c + ROWS_PER_PAGE)}
+            >
+              Load {Math.min(ROWS_PER_PAGE, rows.length - visibleCount)} more (showing {visibleCount} of {rows.length})
+            </button>
+          )}
         </div>
       )}
 
@@ -1018,6 +1051,7 @@ function PiViewHistoryModal({ row, onClose }: { row: PiRow; onClose: () => void 
     return new Date(iso).toLocaleString("en-GB", {
       day: "2-digit", month: "2-digit", year: "numeric",
       hour: "2-digit", minute: "2-digit", hour12: true,
+      timeZone: PK_TZ,
     });
   }
 
@@ -1202,7 +1236,7 @@ function LinkPaymentToInvoicesModal({
                         onClick={(e) => { e.stopPropagation(); toggle(t.id); }}
                       />
                     </td>
-                    <td>{new Date(t.date).toLocaleDateString("en-PK", { day: "2-digit", month: "2-digit", year: "numeric" })}</td>
+                    <td>{new Date(t.date).toLocaleDateString("en-PK", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: PK_TZ })}</td>
                     <td>{t.type === "sale" ? "Sale Invoice" : t.type}</td>
                     <td>{t.number ?? "–"}</td>
                     <td>{fmt(t.total)}</td>
