@@ -4093,7 +4093,13 @@ function ExpenseForm({
         number: expNo,
         date: new Date(expDate).toISOString(),
         total,
-        balance: total,
+        // Expenses have no partial-payment concept in this form (no separate "amount paid"
+        // field) — they're paid in full the moment they're recorded, same as every other
+        // expense-creation path (bulk import, etc). balance: total left this showing
+        // "Unpaid" and being excluded from Cash In Hand's cashAmount-based total for sale/
+        // purchase, though expense's own cashAmount() ignores balance so this specific field
+        // didn't break the cash figure — fixed anyway since it fed the wrong Paid/Unpaid status.
+        balance: 0,
         notes: JSON.stringify({
           category,
           paymentType,

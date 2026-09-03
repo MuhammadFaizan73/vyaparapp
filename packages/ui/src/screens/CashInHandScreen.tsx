@@ -194,14 +194,28 @@ export function CashInHandScreen() {
             </span>
           )}
         </div>
-        <button
-          type="button"
-          className="cih-adjust-btn"
-          onClick={() => setShowAdjust(true)}
-          disabled={loading}
-        >
-          ⇄ Adjust Cash
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          {/* This screen only fetches on mount/company-change — a transaction added
+              elsewhere (e.g. Add Expense) while this stays open doesn't appear until
+              something re-triggers load(). Explicit refresh instead of polling. */}
+          <button
+            type="button"
+            className="cih-adjust-btn"
+            onClick={() => load()}
+            disabled={loading}
+            title="Reload the latest transactions and balance"
+          >
+            ↻ Refresh
+          </button>
+          <button
+            type="button"
+            className="cih-adjust-btn"
+            onClick={() => setShowAdjust(true)}
+            disabled={loading}
+          >
+            ⇄ Adjust Cash
+          </button>
+        </div>
       </div>
 
       {/* ── Filter bar ── */}
