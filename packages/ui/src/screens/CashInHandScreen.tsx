@@ -13,7 +13,7 @@ type CashTxn = {
   invoiceNo: string | null;
 };
 
-type CashData = { balance: number; transactions: CashTxn[] };
+type CashData = { balance: number; transactions: CashTxn[]; totalCount?: number };
 
 function fmt(iso: string) {
   const d = new Date(iso);
@@ -292,6 +292,9 @@ export function CashInHandScreen() {
         <div className="cih-footer">
           <span>
             Total Transactions: <strong>{filtered.length}</strong>
+            {data.totalCount != null && data.totalCount > data.transactions.length && (
+              <> &nbsp;(showing latest {data.transactions.length} of {data.totalCount})</>
+            )}
           </span>
           <span>
             Cash Balance: &nbsp;

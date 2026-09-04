@@ -515,7 +515,7 @@ export class VyaparApiClient {
     await this.http.delete(`/loan-accounts/${id}`);
   }
 
-  async getCashInHand(opts?: { companyId?: string }): Promise<{ balance: number; transactions: Array<{ id: string; type: string; rawType: string; name: string; date: string; amount: number; direction: "in" | "out"; invoiceNo: string | null }> }> {
+  async getCashInHand(opts?: { companyId?: string }): Promise<{ balance: number; transactions: Array<{ id: string; type: string; rawType: string; name: string; date: string; amount: number; direction: "in" | "out"; invoiceNo: string | null }>; totalCount?: number }> {
     const params = opts?.companyId ? { companyId: opts.companyId } : undefined;
     const { data } = await this.http.get("/cash-bank/cash-in-hand", { params });
     return data;
