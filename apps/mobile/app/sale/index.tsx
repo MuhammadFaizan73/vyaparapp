@@ -17,6 +17,7 @@ import { setHandoffTxn } from "../../src/txnHandoff";
 import { buildInvoiceHtml, fmt, formatDate } from "../../src/invoiceHtml";
 import { useInvoiceHtmlOptions } from "../../src/useSettings";
 import { DateRangeFilterBar, type DateRange, getRange, isWithinRange } from "../../src/components/DateRangeFilter";
+import { SalesmanFilter } from "../../src/components/SalesmanFilter";
 import type { Transaction, Party } from "@vyapar/api-client";
 
 type SaleRow = Transaction & { partyName: string };
@@ -105,6 +106,7 @@ export default function SaleListScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [activeFilter, setActiveFilter] = useState(0);
+  const [salesmanFilter, setSalesmanFilter] = useState("");
   const [range, setRange] = useState<DateRange>(() => getRange("month"));
   const [sales, setSales] = useState<SaleRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -386,6 +388,7 @@ export default function SaleListScreen() {
     if (!isWithinRange(s.date, range)) return false;
     if (activeFilter === 1 && s.balance <= 0) return false;
     if (activeFilter === 2 && s.balance > 0) return false;
+    if (salesmanFilter && s.bookerId !== salesmanFilter) return false;
     if (voiceFilter) {
       if (voiceFilter.status === "paid" && s.balance !== 0) return false;
       if (voiceFilter.status === "unpaid" && s.balance === 0) return false;
@@ -442,6 +445,8 @@ export default function SaleListScreen() {
             <Text style={[styles.chipTxt, i === activeFilter && styles.chipTxtActive]}>{f}</Text>
           </TouchableOpacity>
         ))}
+
+        <SalesmanFilter value={salesmanFilter} onChange={setSalesmanFilter} />
 
         {/* Voice filter dismissible chip */}
         {voiceFilter && (

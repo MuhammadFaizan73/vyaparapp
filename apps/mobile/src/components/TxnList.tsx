@@ -9,6 +9,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../theme";
 import { api } from "../auth";
 import { DateRangeFilterBar, type DateRange, getRange, isWithinRange } from "./DateRangeFilter";
+import { SalesmanFilter } from "./SalesmanFilter";
 import type { Transaction, Party } from "@vyapar/api-client";
 
 type TxnRow = Transaction & { partyName: string };
@@ -36,6 +37,7 @@ export function TxnList({ title, txnType, chips, dateRange, emptyMessage, fabLab
   const insets = useSafeAreaInsets();
   const [activeChip, setActiveChip] = useState(0);
   const [range, setRange] = useState<DateRange>(() => getRange("all"));
+  const [salesmanFilter, setSalesmanFilter] = useState("");
   const [rows, setRows] = useState<TxnRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -71,6 +73,7 @@ export function TxnList({ title, txnType, chips, dateRange, emptyMessage, fabLab
   const chipLabel = chips?.[activeChip]?.toLowerCase() ?? "all";
   const filtered = rows.filter((r) => {
     if (dateRange && !isWithinRange(r.date, range)) return false;
+    if (salesmanFilter && r.bookerId !== salesmanFilter) return false;
     if (chipLabel === "all") return true;
     if (chipLabel === "open") return r.balance > 0;
     if (chipLabel === "closed" || chipLabel === "converted") return r.balance === 0;
@@ -97,18 +100,17 @@ export function TxnList({ title, txnType, chips, dateRange, emptyMessage, fabLab
 
       {dateRange && <DateRangeFilterBar range={range} onChange={setRange} />}
 
-      {/* Filter chips */}
-      {chips && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}
-          style={s.chipsBar} contentContainerStyle={s.chipsContent}>
-          {chips.map((chip, i) => (
-            <TouchableOpacity key={chip} style={[s.chip, i === activeChip && s.chipActive]}
-              onPress={() => setActiveChip(i)}>
-              <Text style={[s.chipTxt, i === activeChip && s.chipTxtActive]}>{chip}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      )}
+      {/* Filter chips + Salesman filter */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false}
+        style={s.chipsBar} contentContainerStyle={s.chipsContent}>
+        {chips?.map((chip, i) => (
+          <TouchableOpacity key={chip} style={[s.chip, i === activeChip && s.chipActive]}
+            onPress={() => setActiveChip(i)}>
+            <Text style={[s.chipTxt, i === activeChip && s.chipTxtActive]}>{chip}</Text>
+          </TouchableOpacity>
+        ))}
+        <SalesmanFilter value={salesmanFilter} onChange={setSalesmanFilter} />
+      </ScrollView>
 
       {loading ? (
         <View style={s.center}>
