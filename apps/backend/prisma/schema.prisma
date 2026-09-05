@@ -477,6 +477,13 @@ model DeviceSession {
   id          String   @id @default(uuid())
   tenantId    String
   tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  // "" = the tenant owner's own login; a TeamMember.id for a staff login. Kept as a
+  // real (non-null) value rather than nullable — Postgres treats every NULL as
+  // distinct for uniqueness purposes, so a nullable memberId would let the owner
+  // silently accumulate duplicate rows for the same device instead of the upsert
+  // actually deduping them. Not a hard FK to TeamMember: a removed staff member's old
+  // session row is a harmless orphan, not worth a cascade delete for.
+  memberId    String   @default("")
   deviceId    String
   deviceName  String
   deviceType  String
@@ -484,7 +491,7 @@ model DeviceSession {
   lastSeenAt  DateTime @default(now())
   createdAt   DateTime @default(now())
 
-  @@unique([tenantId, deviceId])
+  @@unique([tenantId, memberId, deviceId])
 }
 
 // ─── Super Admin ──────────────────────────────────────────────────────────────

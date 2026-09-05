@@ -6,7 +6,11 @@ import { RegisterDeviceDto } from "./devices.dto";
 export class DevicesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async register(tenantId: string, dto: RegisterDeviceDto) {
+  // memberId is "" for the tenant owner's own login, or a TeamMember.id for a staff
+  // login (see JwtGuard/AuthedRequest.memberId) — every lookup below is scoped to it so
+  // an owner logging in and a staff member logging in never kick each other's session;
+  // each identity gets its own single-device slot.
+  async register(tenantId: string, memberId: string, dto: RegisterDeviceDto) {
     // Mobile and desktop are sold as separate single-device licenses — logging in on a
     // new phone/PC kicks any other device of that SAME type off immediately (removed
     // here; the old device's poll loop — useDeviceSession.tsx on mobile, Shell.tsx's
@@ -17,7 +21,7 @@ export class DevicesService {
     // via `isActive`, shared with whichever type happens to hold it.
     if (dto.deviceType === "mobile" || dto.deviceType === "desktop") {
       const otherSameType = await this.prisma.deviceSession.findMany({
-        where: { tenantId, deviceType: dto.deviceType, deviceId: { not: dto.deviceId } },
+        where: { tenantId, memberId, deviceType: dto.deviceType, deviceId: { not: dto.deviceId } },
       });
       for (const s of otherSameType) {
         await this.remove(tenantId, s.id);
@@ -25,10 +29,11 @@ export class DevicesService {
     }
 
     const session = await this.prisma.deviceSession.upsert({
-      where: { tenantId_deviceId: { tenantId, deviceId: dto.deviceId } },
+      where: { tenantId_memberId_deviceId: { tenantId, memberId, deviceId: dto.deviceId } },
       update: { deviceName: dto.deviceName, deviceType: dto.deviceType, lastSeenAt: new Date() },
       create: {
         tenantId,
+        memberId,
         deviceId: dto.deviceId,
         deviceName: dto.deviceName,
         deviceType: dto.deviceType,

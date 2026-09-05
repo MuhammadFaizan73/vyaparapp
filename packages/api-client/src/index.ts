@@ -90,6 +90,8 @@ export type LocationPingPoint = {
 export type DeviceSession = {
   id: string;
   tenantId: string;
+  // "" for the tenant owner's own login, a TeamMember id for a staff login.
+  memberId: string;
   deviceId: string;
   deviceName: string;
   deviceType: "mobile" | "desktop" | "web";

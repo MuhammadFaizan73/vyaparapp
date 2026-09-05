@@ -471,6 +471,9 @@ model DeviceSession {
   id          String   @id @default(uuid())
   tenantId    String
   tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  // "" = the tenant owner's own login; a TeamMember.id for a staff login. Not nullable
+  // — see schema.prisma's copy of this model for why.
+  memberId    String   @default("")
   deviceId    String
   deviceName  String
   deviceType  String
@@ -478,7 +481,7 @@ model DeviceSession {
   lastSeenAt  DateTime @default(now())
   createdAt   DateTime @default(now())
 
-  @@unique([tenantId, deviceId])
+  @@unique([tenantId, memberId, deviceId])
 }
 
 // ─── Super Admin ──────────────────────────────────────────────────────────────

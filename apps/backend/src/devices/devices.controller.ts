@@ -10,7 +10,7 @@ export class DevicesController {
 
   @Post("register")
   register(@Req() req: AuthedRequest, @Body() dto: RegisterDeviceDto) {
-    return this.devicesService.register(req.tenantId, dto);
+    return this.devicesService.register(req.tenantId, req.memberId ?? "", dto);
   }
 
   @Get()
