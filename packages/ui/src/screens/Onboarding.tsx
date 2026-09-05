@@ -7,7 +7,7 @@ type Props = {
 };
 
 export function Onboarding({ onRegistered }: Props) {
-  const [tab, setTab] = useState<"owner" | "invite">("owner");
+  const [tab, setTab] = useState<"owner" | "invite" | "staff">("owner");
   const [country, setCountry] = useState<Country>(DEFAULT_COUNTRY);
   const [phone, setPhone] = useState("");
   const [open, setOpen] = useState(false);
@@ -19,6 +19,14 @@ export function Onboarding({ onRegistered }: Props) {
   const [inviteCode, setInviteCode] = useState("");
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
+
+  // Staff/salesman login state — an existing team member signing back in with the
+  // permanent email/phone + password their employer set, as opposed to the invite-code
+  // tab above which is for accepting a brand-new invite for the first time.
+  const [staffIdentifier, setStaffIdentifier] = useState("");
+  const [staffPassword, setStaffPassword] = useState("");
+  const [staffBusy, setStaffBusy] = useState(false);
+  const [staffError, setStaffError] = useState<string | null>(null);
 
   async function submitInvite(e: React.FormEvent) {
     e.preventDefault();
@@ -35,6 +43,24 @@ export function Onboarding({ onRegistered }: Props) {
       setInviteError(String(msg));
     } finally {
       setInviteBusy(false);
+    }
+  }
+
+  async function submitStaffLogin(e: React.FormEvent) {
+    e.preventDefault();
+    setStaffError(null);
+    const identifier = staffIdentifier.trim();
+    if (!identifier || !staffPassword) { setStaffError("Enter your email or phone and password."); return; }
+    setStaffBusy(true);
+    try {
+      const res = await api.staffLogin(identifier, staffPassword);
+      await onRegistered(res.token, res.tenant);
+    } catch (err) {
+      const msg = (err as { response?: { data?: { message?: string } } }).response?.data?.message
+        ?? "Incorrect email/phone or password.";
+      setStaffError(String(msg));
+    } finally {
+      setStaffBusy(false);
     }
   }
 
@@ -94,6 +120,13 @@ export function Onboarding({ onRegistered }: Props) {
             onClick={() => setTab("invite")}
           >
             🔑 Join with Invite Code
+          </button>
+          <button
+            type="button"
+            className={`ob-tab${tab === "staff" ? " ob-tab--active" : ""}`}
+            onClick={() => setTab("staff")}
+          >
+            👤 Staff / Salesman Login
           </button>
         </div>
 
@@ -184,6 +217,41 @@ export function Onboarding({ onRegistered }: Props) {
             </button>
             <p className="fine-print">
               You'll get access to your employer's data with your assigned role permissions.
+            </p>
+          </form>
+        )}
+
+        {/* Staff/salesman login tab */}
+        {tab === "staff" && (
+          <form onSubmit={submitStaffLogin}>
+            <p className="ob-tab-sub">Sign in with the email/phone and password your employer set for you.</p>
+            <label className="field-label">Email or Phone</label>
+            <input
+              className="phone-input"
+              style={{ width: "100%", boxSizing: "border-box" }}
+              type="text"
+              placeholder="you@example.com or 03001234567"
+              value={staffIdentifier}
+              onChange={(e) => setStaffIdentifier(e.target.value)}
+              autoFocus
+              autoComplete="username"
+            />
+            <label className="field-label" style={{ marginTop: 10 }}>Password</label>
+            <input
+              className="phone-input"
+              style={{ width: "100%", boxSizing: "border-box" }}
+              type="password"
+              placeholder="Password"
+              value={staffPassword}
+              onChange={(e) => setStaffPassword(e.target.value)}
+              autoComplete="current-password"
+            />
+            {staffError && <div className="form-error">{staffError}</div>}
+            <button type="submit" className="submit-btn" disabled={staffBusy || !staffIdentifier.trim() || !staffPassword}>
+              {staffBusy ? "Signing in…" : "Sign In"}
+            </button>
+            <p className="fine-print">
+              New team member? Use the "Join with Invite Code" tab instead.
             </p>
           </form>
         )}
