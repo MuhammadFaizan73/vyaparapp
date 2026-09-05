@@ -137,6 +137,11 @@ export function HomeScreen({ onNavigate }: Props) {
   const [purchaseSummary, setPurchaseSummary] = useState({ count: 0, total: 0 });
   const [expenseSummary, setExpenseSummary] = useState({ count: 0, total: 0 });
   const [prevSaleSummary, setPrevSaleSummary] = useState({ count: 0, total: 0 });
+  // Credit Note = a sale return — nets against Sale so "Sale (period)" reflects what was
+  // actually kept, not gross invoiced amount. Fetched for both periods so the up/down %
+  // comparison stays net-vs-net instead of net-vs-gross.
+  const [creditNoteSummary, setCreditNoteSummary] = useState({ count: 0, total: 0 });
+  const [prevCreditNoteSummary, setPrevCreditNoteSummary] = useState({ count: 0, total: 0 });
   const [stockValue, setStockValue] = useState<number | null>(null);
   const [cashInHand, setCashInHand] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -182,7 +187,9 @@ export function HomeScreen({ onNavigate }: Props) {
       api.getTransactionsSummary("sale", { from: prevFrom, to: prevTo, companyId }),
       api.getReport("stock-summary", { companyId }),
       api.getCashInHand({ companyId }),
-    ]).then(([ps, ss, saleSumm, purchSumm, expSumm, prevSaleSumm, stock, cash]) => {
+      api.getTransactionsSummary("credit_note", { from: rangeFrom, to: rangeTo, companyId }),
+      api.getTransactionsSummary("credit_note", { from: prevFrom, to: prevTo, companyId }),
+    ]).then(([ps, ss, saleSumm, purchSumm, expSumm, prevSaleSumm, stock, cash, cnSumm, prevCnSumm]) => {
       setParties(ps);
       setSales(ss);
       setSaleSummary(saleSumm);
@@ -191,6 +198,8 @@ export function HomeScreen({ onNavigate }: Props) {
       setPrevSaleSummary(prevSaleSumm);
       setStockValue(stock?.total?.stockValue ?? 0);
       setCashInHand(cash?.balance ?? 0);
+      setCreditNoteSummary(cnSumm);
+      setPrevCreditNoteSummary(prevCnSumm);
     }).catch(() => {}).finally(() => setLoading(false));
   }, [fetchFrom, fetchTo, rangeFrom, rangeTo, prevFrom, prevTo, companyFilter]);
 
@@ -209,10 +218,11 @@ export function HomeScreen({ onNavigate }: Props) {
     [sales, range]
   );
 
-  const totalSale = saleSummary.total;
+  // Net of Credit Notes (sale returns) — a return means that revenue wasn't actually kept.
+  const totalSale = saleSummary.total - creditNoteSummary.total;
   const totalPurchase = purchaseSummary.total;
   const totalExpense = expenseSummary.total;
-  const prevSaleTotal = prevSaleSummary.total;
+  const prevSaleTotal = prevSaleSummary.total - prevCreditNoteSummary.total;
 
   const saleChange = useMemo(() => {
     if (prevSaleTotal === 0 && totalSale === 0) return null;
