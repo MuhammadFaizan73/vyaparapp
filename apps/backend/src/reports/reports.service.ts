@@ -995,7 +995,10 @@ export class ReportsService {
     const result = items.map((item, i) => {
       const stockQty = stockMap.get(item.name) ?? item.openingStock;
       const pp = item.purchasePrice ?? 0;
-      const stockValue = stockQty * pp;
+      // Oversold stock (more sold than ever recorded as bought) goes negative — worth
+      // showing as-is in stockQty so it surfaces as a data problem, but it can't drag the
+      // *value* below zero; there's no such thing as negative inventory on hand.
+      const stockValue = Math.max(0, stockQty) * pp;
       totalStockQty += stockQty;
       totalStockValue += stockValue;
 
@@ -1033,7 +1036,7 @@ export class ReportsService {
       .map((item) => {
         const stockQty = stockMap.get(item.name) ?? item.openingStock;
         const pp = item.purchasePrice ?? 0;
-        const stockValue = stockQty * pp;
+        const stockValue = Math.max(0, stockQty) * pp;
         return { item, stockQty, stockValue };
       })
       .filter(({ item, stockQty }) => stockQty <= item.minStock)

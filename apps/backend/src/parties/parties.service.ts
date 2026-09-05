@@ -121,8 +121,13 @@ export class PartiesService {
       // payments only show up in the separate payment_out cash ledger. So payable is netted
       // against actual cash paid per supplier instead of trusting purchase.balance.
       for (const t of byParty.get(p.id) ?? []) {
-        if (t.type === "sale" || t.type === "credit_note") {
+        if (t.type === "sale") {
           receivable += t.balance;
+        } else if (t.type === "credit_note") {
+          // A credit note reduces what the customer owes (a return/refund), same as a
+          // debit note reduces what's owed to a supplier below — it was being added here
+          // instead, doubling its effect on receivable instead of reducing it.
+          receivable -= t.total;
         } else if (t.type === "purchase") {
           purchaseTotal += t.total;
         } else if (t.type === "debit_note") {
