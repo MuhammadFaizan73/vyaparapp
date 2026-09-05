@@ -2,6 +2,7 @@ import { Body, Controller, Get, NotFoundException, Param, Post, Req, UseGuards }
 import { BulkImportService } from "./bulk-import.service";
 import { BulkSaleImportRequestDto, BulkCashFlowImportRequestDto, BulkExpenseImportRequestDto } from "./bulk-import.dto";
 import { JwtGuard, type AuthedRequest } from "../auth/jwt.guard";
+import { assertCompanyAllowed } from "../common/company-filter.util";
 
 @Controller("bulk-import")
 @UseGuards(JwtGuard)
@@ -10,6 +11,7 @@ export class BulkImportController {
 
   @Post("sale-history")
   start(@Req() req: AuthedRequest, @Body() dto: BulkSaleImportRequestDto) {
+    assertCompanyAllowed(dto.companyId, req.companyIds);
     return this.bulkImportService.start(req.tenantId, dto);
   }
 
@@ -22,6 +24,7 @@ export class BulkImportController {
 
   @Post("cash-flow")
   startCashFlow(@Req() req: AuthedRequest, @Body() dto: BulkCashFlowImportRequestDto) {
+    assertCompanyAllowed(dto.companyId, req.companyIds);
     return this.bulkImportService.startCashFlow(req.tenantId, dto);
   }
 
@@ -34,6 +37,7 @@ export class BulkImportController {
 
   @Post("expenses")
   startExpenses(@Req() req: AuthedRequest, @Body() dto: BulkExpenseImportRequestDto) {
+    assertCompanyAllowed(dto.companyId, req.companyIds);
     return this.bulkImportService.startExpenses(req.tenantId, dto);
   }
 
@@ -49,6 +53,7 @@ export class BulkImportController {
   // transactionType) isn't sale-specific, so no separate service method is needed.
   @Post("purchase-history")
   startPurchase(@Req() req: AuthedRequest, @Body() dto: BulkSaleImportRequestDto) {
+    assertCompanyAllowed(dto.companyId, req.companyIds);
     return this.bulkImportService.start(req.tenantId, dto);
   }
 

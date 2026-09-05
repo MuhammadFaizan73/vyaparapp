@@ -3,6 +3,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { StockService, type ItemStockBreakdown } from "../stores/stock.service";
 import { StoresService } from "../stores/stores.service";
 import { CreateItemDto, UpdateItemDto } from "./items.dto";
+import { companyIdWhere } from "../common/company-filter.util";
 
 function toRow(i: any, stocks: ItemStockBreakdown[]) {
   const totalStock = stocks.length > 0 ? stocks.reduce((sum, s) => sum + s.quantity, 0) : i.openingStock ?? 0;
@@ -46,7 +47,7 @@ export class ItemsService {
   async list(tenantId: string, opts: { companyId?: string } = {}) {
     await this.stores.ensureBootstrapped(tenantId);
     const items = await this.prisma.item.findMany({
-      where: { tenantId, ...(opts.companyId ? { companyId: opts.companyId } : {}) },
+      where: { tenantId, ...companyIdWhere(opts.companyId) },
       orderBy: { createdAt: "desc" },
     });
     const stocksByItem = await this.stock.getStocksForItems(tenantId, items.map((i) => i.id));

@@ -9,8 +9,11 @@ export class CompaniesController {
   constructor(private readonly companiesService: CompaniesService) {}
 
   @Get()
-  list(@Req() req: AuthedRequest, @Query("branchId") branchId?: string) {
-    return this.companiesService.list(req.tenantId, branchId);
+  async list(@Req() req: AuthedRequest, @Query("branchId") branchId?: string) {
+    const companies = await this.companiesService.list(req.tenantId, branchId);
+    if (!req.companyIds || req.companyIds.length === 0) return companies;
+    const allowed = new Set(req.companyIds);
+    return companies.filter((c) => allowed.has(c.id));
   }
 
   @Post()

@@ -18,6 +18,9 @@ export class CreateTeamMemberDto {
   @IsString() @IsIn(VALID_ROLES) role!: string;
   @IsOptional() @IsArray() permissions?: string[];
   @IsOptional() @IsArray() allowedReports?: string[];
+  // Omitted/undefined = unrestricted (sees every company). A non-empty array restricts
+  // this member to exactly those Company ids.
+  @IsOptional() @IsArray() companyIds?: string[];
 }
 
 export class UpdateRoleDto {
@@ -27,6 +30,9 @@ export class UpdateRoleDto {
 export class UpdatePermissionsDto {
   @IsArray() permissions!: string[];
   @IsOptional() @IsArray() allowedReports?: string[];
+  // Tri-state: field omitted -> leave companyIds untouched; explicit null -> clear the
+  // restriction (unrestricted); an array -> set the restriction to exactly those ids.
+  @IsOptional() @IsArray() companyIds?: string[] | null;
 }
 
 export class AcceptInviteDto {

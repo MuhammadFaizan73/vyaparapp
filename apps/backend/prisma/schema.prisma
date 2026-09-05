@@ -384,6 +384,10 @@ model TeamMember {
   // visible) — only a non-empty array narrows the Reports list down to these keys. Keeps
   // every existing team member's behavior unchanged unless an owner explicitly restricts it.
   allowedReports String       @default("[]")
+  // null = unrestricted (sees every company, including ones created later) — same
+  // convention as the JWT's `permissions: null` meaning "unrestricted". A JSON array of
+  // Company ids restricts this member to exactly those companies.
+  companyIds    String?
   status        String        @default("active")
   inviteToken   String        @unique @default(uuid())
   locationPings LocationPing[]

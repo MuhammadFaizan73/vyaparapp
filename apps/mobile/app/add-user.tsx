@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -196,6 +196,54 @@ const reportChecklistStyles = StyleSheet.create({
   checkboxOn: { backgroundColor: colors.primary, borderColor: colors.primary },
 });
 
+// Which companies this user can see. null = unrestricted (every company, including ones
+// created later) — same convention as the JWT/backend and the desktop/web equivalent.
+function CompanyChecklist({
+  companyIds, onChange,
+}: {
+  companyIds: string[] | null;
+  onChange: (companyIds: string[] | null) => void;
+}) {
+  const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
+
+  useEffect(() => {
+    api.getCompanies().then(setCompanies).catch(() => {});
+  }, []);
+
+  const allCompanies = companyIds === null;
+
+  function toggleAll() {
+    onChange(allCompanies ? [] : null);
+  }
+
+  function toggleCompany(id: string) {
+    const current = companyIds ?? [];
+    onChange(current.includes(id) ? current.filter((c) => c !== id) : [...current, id]);
+  }
+
+  return (
+    <View style={reportChecklistStyles.wrap}>
+      <TouchableOpacity style={reportChecklistStyles.groupHeader} onPress={toggleAll} activeOpacity={0.7}>
+        <Text style={reportChecklistStyles.groupTitle}>All Companies</Text>
+        <View style={[reportChecklistStyles.checkbox, allCompanies && reportChecklistStyles.checkboxOn]}>
+          {allCompanies && <Ionicons name="checkmark" size={11} color="#fff" />}
+        </View>
+      </TouchableOpacity>
+      {!allCompanies && companies.map((c) => (
+        <TouchableOpacity key={c.id} style={reportChecklistStyles.row} onPress={() => toggleCompany(c.id)} activeOpacity={0.7}>
+          <Text style={reportChecklistStyles.rowLabel}>{c.name}</Text>
+          <View style={[reportChecklistStyles.checkbox, (companyIds ?? []).includes(c.id) && reportChecklistStyles.checkboxOn]}>
+            {(companyIds ?? []).includes(c.id) && <Ionicons name="checkmark" size={11} color="#fff" />}
+          </View>
+        </TouchableOpacity>
+      ))}
+      {!allCompanies && companies.length === 0 && (
+        <Text style={reportChecklistStyles.hint}>No companies found.</Text>
+      )}
+    </View>
+  );
+}
+
 // Default permissions per role
 const ROLE_DEFAULT_PERMISSIONS: Record<string, string[]> = {
   secondary_admin: [
@@ -290,6 +338,7 @@ export default function AddUserScreen() {
     ROLE_DEFAULT_PERMISSIONS["salesman"] ?? []
   );
   const [allowedReports, setAllowedReports] = useState<string[]>([]);
+  const [companyIds, setCompanyIds] = useState<string[] | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -338,6 +387,10 @@ export default function AddUserScreen() {
       Alert.alert("Validation", "Password must be at least 6 characters.");
       return;
     }
+    if (companyIds !== null && companyIds.length === 0) {
+      Alert.alert("Validation", "Select at least one company, or turn on All Companies.");
+      return;
+    }
     setSaving(true);
     try {
       await api.createTeamMember({
@@ -348,6 +401,7 @@ export default function AddUserScreen() {
         role,
         permissions,
         allowedReports,
+        companyIds: companyIds ?? undefined,
       });
       setSuccess(true);
     } catch (err: any) {
@@ -508,6 +562,10 @@ export default function AddUserScreen() {
             {permissions.length} of {ALL_PERMISSIONS.length} permissions enabled
           </Text>
         </View>
+
+        <Text style={styles.sectionHeader}>Company Access</Text>
+        <Text style={styles.sectionSub}>Which companies can this user see?</Text>
+        <CompanyChecklist companyIds={companyIds} onChange={setCompanyIds} />
       </ScrollView>
 
       {/* Add User footer button */}

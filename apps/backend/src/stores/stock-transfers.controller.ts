@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from "@nest
 import { JwtGuard, type AuthedRequest } from "../auth/jwt.guard";
 import { StockTransfersService } from "./stock-transfers.service";
 import { CreateStockTransferDto } from "./stores.dto";
+import { restrictCompanyIds } from "../common/company-filter.util";
 
 @Controller("stock-transfers")
 @UseGuards(JwtGuard)
@@ -17,7 +18,7 @@ export class StockTransfersController {
     @Query("to") to?: string,
   ) {
     return this.stockTransfersService.list(req.tenantId, {
-      companyId,
+      companyId: restrictCompanyIds(companyId, req.companyIds),
       take: take ? Number(take) : undefined,
       from,
       to,

@@ -463,7 +463,7 @@ export class VyaparApiClient {
     return data;
   }
 
-  async createTeamMember(body: { name: string; email?: string; password: string; contact?: string; role: string; permissions?: string[]; allowedReports?: string[] }): Promise<TeamMember> {
+  async createTeamMember(body: { name: string; email?: string; password: string; contact?: string; role: string; permissions?: string[]; allowedReports?: string[]; companyIds?: string[] }): Promise<TeamMember> {
     const { data } = await this.http.post<TeamMember>("/team", body);
     return data;
   }
@@ -473,8 +473,10 @@ export class VyaparApiClient {
     return data;
   }
 
-  async updateTeamMemberPermissions(id: string, permissions: string[], allowedReports?: string[]): Promise<TeamMember> {
-    const { data } = await this.http.patch<TeamMember>(`/team/${id}/permissions`, { permissions, allowedReports });
+  // companyIds is tri-state: omit to leave the existing restriction untouched, pass null
+  // to clear it (unrestricted), pass an array to set it to exactly those company ids.
+  async updateTeamMemberPermissions(id: string, permissions: string[], allowedReports?: string[], companyIds?: string[] | null): Promise<TeamMember> {
+    const { data } = await this.http.patch<TeamMember>(`/team/${id}/permissions`, { permissions, allowedReports, companyIds });
     return data;
   }
 
@@ -482,12 +484,12 @@ export class VyaparApiClient {
     await this.http.delete(`/team/${id}`);
   }
 
-  async acceptInvite(token: string): Promise<{ token: string; member: { id: string; name: string; contact: string; role: string; permissions: string[]; allowedReports: string[] }; tenant: { id: string; phone: string; trialExpiresAt: string } }> {
+  async acceptInvite(token: string): Promise<{ token: string; member: { id: string; name: string; contact: string; role: string; permissions: string[]; allowedReports: string[]; companyIds: string[] | null }; tenant: { id: string; phone: string; trialExpiresAt: string } }> {
     const res = await this.http.post("/team-invite/accept", { token });
     return res.data;
   }
 
-  async staffLogin(identifier: string, password: string): Promise<{ token: string; member: { id: string; name: string; email: string | null; contact: string; role: string; permissions: string[]; allowedReports: string[] }; tenant: { id: string; phone: string; trialExpiresAt: string } }> {
+  async staffLogin(identifier: string, password: string): Promise<{ token: string; member: { id: string; name: string; email: string | null; contact: string; role: string; permissions: string[]; allowedReports: string[]; companyIds: string[] | null }; tenant: { id: string; phone: string; trialExpiresAt: string } }> {
     const res = await this.http.post("/team-invite/login", { identifier, password });
     return res.data;
   }

@@ -1,10 +1,7 @@
 import { Controller, Get, Post, Patch, Delete, Body, Req, Param, Query, UseGuards } from "@nestjs/common";
 import { CashBankService } from "./cash-bank.service";
-import { JwtGuard } from "../auth/jwt.guard";
-
-interface AuthedRequest extends Request {
-  tenantId: string;
-}
+import { JwtGuard, AuthedRequest } from "../auth/jwt.guard";
+import { restrictCompanyIds } from "../common/company-filter.util";
 
 @Controller("cash-bank")
 @UseGuards(JwtGuard)
@@ -13,7 +10,7 @@ export class CashBankController {
 
   @Get("cash-in-hand")
   getCashInHand(@Req() req: AuthedRequest, @Query("companyId") companyId?: string) {
-    return this.svc.getCashInHand(req.tenantId, companyId);
+    return this.svc.getCashInHand(req.tenantId, restrictCompanyIds(companyId, req.companyIds));
   }
 
   @Post("cash-in-hand/adjust")

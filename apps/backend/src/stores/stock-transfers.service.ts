@@ -3,6 +3,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { StockService } from "./stock.service";
 import { StoresService } from "./stores.service";
 import { CreateStockTransferDto } from "./stores.dto";
+import { companyIdWhere } from "../common/company-filter.util";
 
 export type StockTransferLineRow = {
   id: string;
@@ -75,7 +76,7 @@ export class StockTransfersService {
     const transfers = await this.prisma.stockTransfer.findMany({
       where: {
         tenantId,
-        ...(opts.companyId ? { companyId: opts.companyId } : {}),
+        ...companyIdWhere(opts.companyId),
         ...(Object.keys(dateFilter).length ? { date: dateFilter } : {}),
       },
       include: transferInclude,

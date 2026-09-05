@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, Req
 import { ItemsService } from "./items.service";
 import { CreateItemDto, UpdateItemDto } from "./items.dto";
 import { JwtGuard, type AuthedRequest } from "../auth/jwt.guard";
+import { restrictCompanyIds } from "../common/company-filter.util";
 
 @Controller("items")
 @UseGuards(JwtGuard)
@@ -10,7 +11,7 @@ export class ItemsController {
 
   @Get()
   list(@Req() req: AuthedRequest, @Query("companyId") companyId?: string) {
-    return this.itemsService.list(req.tenantId, { companyId });
+    return this.itemsService.list(req.tenantId, { companyId: restrictCompanyIds(companyId, req.companyIds) });
   }
 
   @Post()

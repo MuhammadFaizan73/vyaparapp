@@ -597,6 +597,9 @@ export const TeamMemberSchema = z.object({
   role: z.string(),
   permissions: z.string().default("[]"),
   allowedReports: z.string().default("[]"),
+  // null = unrestricted (sees every company). Stored/transmitted as a JSON string, same
+  // convention as permissions/allowedReports above.
+  companyIds: z.string().nullable().optional(),
   status: z.string(),
   inviteToken: z.string(),
   createdAt: z.string().datetime(),

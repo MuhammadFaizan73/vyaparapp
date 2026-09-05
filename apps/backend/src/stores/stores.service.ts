@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateStoreDto, UpdateStoreDto } from "./stores.dto";
+import { companyIdWhere } from "../common/company-filter.util";
 
 export type StoreRow = {
   id: string;
@@ -145,7 +146,7 @@ export class StoresService {
   async list(tenantId: string, companyId?: string): Promise<StoreRow[]> {
     await this.ensureBootstrapped(tenantId);
     const stores = await this.prisma.store.findMany({
-      where: { tenantId, ...(companyId ? { companyId } : {}) },
+      where: { tenantId, ...companyIdWhere(companyId) },
       orderBy: [{ isMain: "desc" }, { createdAt: "asc" }],
     });
     return stores.map(toRow);

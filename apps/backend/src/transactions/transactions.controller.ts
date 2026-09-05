@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuard
 import { TransactionsService } from "./transactions.service";
 import { CreateTransactionDto, UpdateTransactionDto } from "./transactions.dto";
 import { JwtGuard, type AuthedRequest } from "../auth/jwt.guard";
+import { restrictCompanyIds } from "../common/company-filter.util";
 
 @Controller("transactions")
 @UseGuards(JwtGuard)
@@ -21,6 +22,7 @@ export class TransactionsController {
     @Query("storeId") storeId?: string,
     @Query("bookerId") bookerId?: string,
   ) {
+    const scopedCompanyId = restrictCompanyIds(companyId, req.companyIds);
     if (partyId) return this.transactionsService.listForParty(req.tenantId, partyId);
     if (type) {
       return this.transactionsService.listByType(req.tenantId, type, {
@@ -28,12 +30,12 @@ export class TransactionsController {
         skip: skip ? Number(skip) : undefined,
         from,
         to,
-        companyId,
+        companyId: scopedCompanyId,
         storeId,
         bookerId,
       });
     }
-    return this.transactionsService.listAll(req.tenantId, companyId, storeId);
+    return this.transactionsService.listAll(req.tenantId, scopedCompanyId, storeId);
   }
 
   @Get("summary")
@@ -45,7 +47,7 @@ export class TransactionsController {
     @Query("companyId") companyId?: string,
     @Query("bookerId") bookerId?: string,
   ) {
-    return this.transactionsService.summaryByType(req.tenantId, type, { from, to, companyId, bookerId });
+    return this.transactionsService.summaryByType(req.tenantId, type, { from, to, companyId: restrictCompanyIds(companyId, req.companyIds), bookerId });
   }
 
   @Get("opening-balance")
@@ -79,7 +81,7 @@ export class TransactionsController {
     @Query("take") take?: string,
   ) {
     return this.transactionsService.listBulk(req.tenantId, {
-      from, to, companyId, partyId, type,
+      from, to, companyId: restrictCompanyIds(companyId, req.companyIds), partyId, type,
       take: take ? Number(take) : undefined,
     });
   }

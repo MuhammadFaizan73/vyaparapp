@@ -378,6 +378,10 @@ model TeamMember {
   role          String        @default("salesman")
   permissions   String        @default("[]")
   allowedReports String       @default("[]")
+  // null = unrestricted (sees every company, including ones created later) — same
+  // convention as the JWT's `permissions: null` meaning "unrestricted". A JSON array of
+  // Company ids restricts this member to exactly those companies.
+  companyIds    String?
   status        String        @default("active")
   inviteToken   String        @unique @default(uuid())
   locationPings LocationPing[]

@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { ROLE_DEFAULT_PERMISSIONS, TEAM_ROLE_LABELS, TEAM_ROLES, type TeamRole } from "@vyapar/shared-types";
 import { api } from "../lib/api";
 import { PermissionChecklist } from "./PermissionChecklist";
+import { CompanyChecklist } from "./CompanyChecklist";
 
 type Props = {
   onClose: () => void;
@@ -18,6 +19,7 @@ export function AddUserModal({ onClose, onSaved }: Props) {
   const [role, setRole] = useState<TeamRole>("salesman");
   const [permissions, setPermissions] = useState<string[]>(ROLE_DEFAULT_PERMISSIONS.salesman);
   const [allowedReports, setAllowedReports] = useState<string[]>([]);
+  const [companyIds, setCompanyIds] = useState<string[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -41,6 +43,7 @@ export function AddUserModal({ onClose, onSaved }: Props) {
       return;
     }
     if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
+    if (companyIds !== null && companyIds.length === 0) { setError("Select at least one company, or turn on All Companies."); return; }
     setError(null);
     setBusy(true);
     try {
@@ -52,6 +55,7 @@ export function AddUserModal({ onClose, onSaved }: Props) {
         role,
         permissions,
         allowedReports,
+        companyIds: companyIds ?? undefined,
       });
       setSuccess(true);
     } catch (err) {
@@ -145,6 +149,11 @@ export function AddUserModal({ onClose, onSaved }: Props) {
             allowedReports={allowedReports}
             onAllowedReportsChange={setAllowedReports}
           />
+
+          <p style={{ fontSize: 12, color: "#6b7280", margin: "12px 0 4px" }}>
+            Which companies can this user see?
+          </p>
+          <CompanyChecklist companyIds={companyIds} onChange={setCompanyIds} />
         </div>
 
         <div className="party-modal__footer">
