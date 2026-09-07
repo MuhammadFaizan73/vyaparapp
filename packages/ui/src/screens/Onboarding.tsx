@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api";
 import { COUNTRIES, DEFAULT_COUNTRY, type Country } from "../data/countries";
 
@@ -14,6 +14,18 @@ export function Onboarding({ onRegistered }: Props) {
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Phone → code verification, owner tab only. A phone number only ever gets a JWT after
+  // proving receipt of the SMS code — same gate for a brand-new signup and a returning
+  // user's login, since verify-otp reuses the exact find-or-create logic register() does.
+  const [step, setStep] = useState<"phone" | "code">("phone");
+  const [otp, setOtp] = useState("");
+  const [resendIn, setResendIn] = useState(0);
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const t = setInterval(() => setResendIn((s) => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(t);
+  }, [resendIn]);
 
   // Invite code state
   const [inviteCode, setInviteCode] = useState("");
@@ -72,6 +84,11 @@ export function Onboarding({ onRegistered }: Props) {
     [query],
   );
 
+  function otpErrorMessage(err: unknown, fallback: string): string {
+    const msg = (err as { response?: { data?: { message?: string | string[] } } }).response?.data?.message ?? fallback;
+    return Array.isArray(msg) ? msg.join(", ") : String(msg);
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -82,16 +99,46 @@ export function Onboarding({ onRegistered }: Props) {
     }
     setBusy(true);
     try {
-      const res = await api.register({ countryCode: country.dial, phone: digits });
-      await onRegistered(res.token, res.tenant);
+      await api.sendOtp({ countryCode: country.dial, phone: digits });
+      setStep("code");
+      setResendIn(30);
     } catch (err) {
-      const msg =
-        (err as { response?: { data?: { message?: string | string[] } } }).response?.data?.message ??
-        "Could not register. Is the backend running?";
-      setError(Array.isArray(msg) ? msg.join(", ") : String(msg));
+      setError(otpErrorMessage(err, "Could not send verification code. Is the backend running?"));
     } finally {
       setBusy(false);
     }
+  }
+
+  async function submitCode(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    const digits = phone.replace(/\D/g, "");
+    setBusy(true);
+    try {
+      const res = await api.verifyOtp({ countryCode: country.dial, phone: digits, otp });
+      await onRegistered(res.token, res.tenant);
+    } catch (err) {
+      setError(otpErrorMessage(err, "Incorrect or expired code."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resend() {
+    setError(null);
+    const digits = phone.replace(/\D/g, "");
+    try {
+      await api.resendOtp({ countryCode: country.dial, phone: digits });
+      setResendIn(30);
+    } catch (err) {
+      setError(otpErrorMessage(err, "Could not resend code."));
+    }
+  }
+
+  function changeNumber() {
+    setStep("phone");
+    setOtp("");
+    setError(null);
   }
 
   return (
@@ -131,7 +178,7 @@ export function Onboarding({ onRegistered }: Props) {
         </div>
 
         {/* Owner tab */}
-        {tab === "owner" && (
+        {tab === "owner" && step === "phone" && (
           <form onSubmit={submit}>
             <p className="ob-tab-sub">Enter your mobile number to start your 7-day free trial.</p>
             <label className="field-label">Mobile number</label>
@@ -184,11 +231,49 @@ export function Onboarding({ onRegistered }: Props) {
 
             {error && <div className="form-error">{error}</div>}
             <button type="submit" className="submit-btn" disabled={busy || !phone}>
-              {busy ? "Starting trial…" : "Start 7-day free trial"}
+              {busy ? "Sending code…" : "Send verification code"}
             </button>
             <p className="fine-print">
               Your data syncs across Desktop, Mobile, and Web using this number.
             </p>
+          </form>
+        )}
+
+        {tab === "owner" && step === "code" && (
+          <form onSubmit={submitCode}>
+            <p className="ob-tab-sub">
+              Enter the code sent via SMS to {country.dial}{phone}.
+            </p>
+            <label className="field-label">Verification code</label>
+            <input
+              className="phone-input"
+              style={{ width: "100%", boxSizing: "border-box", letterSpacing: 3, textAlign: "center" }}
+              type="text"
+              inputMode="numeric"
+              placeholder="123456"
+              value={otp}
+              onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+              autoFocus
+            />
+
+            {error && <div className="form-error">{error}</div>}
+            <button type="submit" className="submit-btn" disabled={busy || !otp}>
+              {busy ? "Verifying…" : "Verify & continue"}
+            </button>
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 10 }}>
+              <button type="button" className="fine-print" style={{ background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }} onClick={changeNumber}>
+                Change number
+              </button>
+              <button
+                type="button"
+                className="fine-print"
+                style={{ background: "none", border: "none", padding: 0, textDecoration: resendIn > 0 ? "none" : "underline", cursor: resendIn > 0 ? "default" : "pointer", opacity: resendIn > 0 ? 0.6 : 1 }}
+                onClick={resend}
+                disabled={resendIn > 0}
+              >
+                {resendIn > 0 ? `Resend in ${resendIn}s` : "Resend code"}
+              </button>
+            </div>
           </form>
         )}
 

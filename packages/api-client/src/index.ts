@@ -2,6 +2,8 @@ import axios, { AxiosInstance } from "axios";
 import type {
   RegisterRequest,
   RegisterResponse,
+  SendOtpRequest,
+  VerifyOtpRequest,
   LicenseStatus,
   Party,
   CreatePartyRequest,
@@ -124,6 +126,21 @@ export class VyaparApiClient {
 
   async register(body: RegisterRequest): Promise<RegisterResponse> {
     const { data } = await this.http.post<RegisterResponse>("/auth/register", body);
+    return data;
+  }
+
+  async sendOtp(body: SendOtpRequest): Promise<{ sent: boolean }> {
+    const { data } = await this.http.post<{ sent: boolean }>("/auth/send-otp", body);
+    return data;
+  }
+
+  async verifyOtp(body: VerifyOtpRequest): Promise<RegisterResponse> {
+    const { data } = await this.http.post<RegisterResponse>("/auth/verify-otp", body);
+    return data;
+  }
+
+  async resendOtp(body: SendOtpRequest): Promise<{ sent: boolean }> {
+    const { data } = await this.http.post<{ sent: boolean }>("/auth/resend-otp", body);
     return data;
   }
 
@@ -689,6 +706,8 @@ export type {
   Tenant,
   RegisterRequest,
   RegisterResponse,
+  SendOtpRequest,
+  VerifyOtpRequest,
   LicenseStatus,
   ActivateLicenseRequest,
   Transaction,

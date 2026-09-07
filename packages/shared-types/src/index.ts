@@ -21,6 +21,19 @@ export const RegisterResponseSchema = z.object({
 });
 export type RegisterResponse = z.infer<typeof RegisterResponseSchema>;
 
+export const SendOtpRequestSchema = z.object({
+  countryCode: z.string().regex(/^\+\d{1,4}$/),
+  phone: z.string().regex(/^\d{6,15}$/),
+});
+export type SendOtpRequest = z.infer<typeof SendOtpRequestSchema>;
+
+export const VerifyOtpRequestSchema = z.object({
+  countryCode: z.string().regex(/^\+\d{1,4}$/),
+  phone: z.string().regex(/^\d{6,15}$/),
+  otp: z.string().min(4).max(8),
+});
+export type VerifyOtpRequest = z.infer<typeof VerifyOtpRequestSchema>;
+
 export const LicenseStatusSchema = z.object({
   state: z.enum(["trial", "trial_expired", "licensed", "license_expired"]),
   platform: z.enum(["desktop", "mobile"]),
