@@ -332,37 +332,40 @@ export default function NewPurchaseScreen() {
             </View>
           )}
 
-          {/* Supplier Name */}
-          <View style={[s.outlinedField, supplierFocused && s.outlinedFieldFocused]}>
-            <Text style={[s.floatLabel, supplierFocused && s.floatLabelFocused]}>Party Name *</Text>
-            <TextInput
-              style={s.outlinedInput}
-              value={supplier}
-              onChangeText={(t) => { setSupplier(t); setSupplierId(null); setSelectedParty(null); setShowPartyDrop(true); }}
-              onFocus={() => { setSupplierFocused(true); setShowPartyDrop(true); }}
-              onBlur={() => { setSupplierFocused(false); setTimeout(() => setShowPartyDrop(false), 150); }}
-              placeholder=""
-              placeholderTextColor={colors.textLight}
-            />
-          </View>
-
-          {showPartyDrop && filteredParties.length > 0 && (
-            <View style={s.partyDrop}>
-              {filteredParties.slice(0, 8).map((p) => (
-                <TouchableOpacity key={p.id} style={s.partyRow}
-                  onPress={() => { setSupplier(p.name); setSupplierId(p.id); setSelectedParty(p); setShowPartyDrop(false); }}>
-                  <View style={s.partyAvatar}>
-                    <Text style={s.partyAvatarTxt}>{p.name[0]?.toUpperCase()}</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.partyName}>{p.name}</Text>
-                    {p.phone ? <Text style={s.partyPhone}>{p.phone}</Text> : null}
-                  </View>
-                  <Text style={s.partyBalanceSmall}>{p.balance ? `Rs ${Math.abs(p.balance).toLocaleString()}` : "—"}</Text>
-                </TouchableOpacity>
-              ))}
+          {/* Supplier Name — wrapper anchors the dropdown below so it floats over
+              Billed Items etc. instead of pushing them down the page. */}
+          <View style={s.supplierFieldWrap}>
+            <View style={[s.outlinedField, supplierFocused && s.outlinedFieldFocused]}>
+              <Text style={[s.floatLabel, supplierFocused && s.floatLabelFocused]}>Party Name *</Text>
+              <TextInput
+                style={s.outlinedInput}
+                value={supplier}
+                onChangeText={(t) => { setSupplier(t); setSupplierId(null); setSelectedParty(null); setShowPartyDrop(true); }}
+                onFocus={() => { setSupplierFocused(true); setShowPartyDrop(true); }}
+                onBlur={() => { setSupplierFocused(false); setTimeout(() => setShowPartyDrop(false), 150); }}
+                placeholder=""
+                placeholderTextColor={colors.textLight}
+              />
             </View>
-          )}
+
+            {showPartyDrop && filteredParties.length > 0 && (
+              <View style={s.partyDrop}>
+                {filteredParties.slice(0, 8).map((p) => (
+                  <TouchableOpacity key={p.id} style={s.partyRow}
+                    onPress={() => { setSupplier(p.name); setSupplierId(p.id); setSelectedParty(p); setShowPartyDrop(false); }}>
+                    <View style={s.partyAvatar}>
+                      <Text style={s.partyAvatarTxt}>{p.name[0]?.toUpperCase()}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.partyName}>{p.name}</Text>
+                      {p.phone ? <Text style={s.partyPhone}>{p.phone}</Text> : null}
+                    </View>
+                    <Text style={s.partyBalanceSmall}>{p.balance ? `Rs ${Math.abs(p.balance).toLocaleString()}` : "—"}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
 
           {/* Billed Items */}
           {items.length > 0 && (
@@ -626,9 +629,15 @@ const s = StyleSheet.create({
   floatLabelFocused: { color: colors.primary },
   outlinedInput: { fontSize: 16, color: colors.text, padding: 0, fontWeight: "500" },
 
+  // position:relative anchor for partyDrop below — Android paints ScrollView children in
+  // document order regardless of a child's own zIndex, so elevation goes on the wrapper
+  // itself to lift it (and its absolutely-positioned dropdown) above Billed Items etc.
+  supplierFieldWrap: { position: "relative", zIndex: 30, elevation: 6 },
   partyDrop: {
+    position: "absolute", top: "100%", left: 14, right: 14, zIndex: 30,
     backgroundColor: "#fff", borderRadius: 8, borderWidth: 1, borderColor: colors.border,
-    overflow: "hidden", marginHorizontal: 14, marginTop: -10, marginBottom: 10,
+    overflow: "hidden", marginTop: -10, marginBottom: 10,
+    elevation: 6, shadowColor: "#000", shadowOpacity: 0.12, shadowRadius: 8,
   },
   partyRow: {
     flexDirection: "row", alignItems: "center", gap: 10,

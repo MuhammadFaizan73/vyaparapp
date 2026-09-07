@@ -803,59 +803,63 @@ export default function NewSaleScreen() {
           showsVerticalScrollIndicator={false}
         >
           {/* ── Customer ── */}
-          <View style={styles.card}>
+          <View style={[styles.card, showParties && styles.cardAboveOverlay]}>
             {selectedParty != null && (
               <Text style={styles.partyBalance}>
                 Party Balance:{" "}
                 <Text style={{ color: colors.primary }}>Rs {fmt4(selectedParty.balance)}</Text>
               </Text>
             )}
-            <View style={styles.outlinedField}>
-              <Text style={styles.outlinedLabel}>Customer *</Text>
-              <TextInput
-                style={styles.outlinedInput}
-                value={customer}
-                onChangeText={(t) => { setCustomer(t); setShowParties(true); }}
-                onFocus={() => setShowParties(true)}
-                placeholder=""
-                placeholderTextColor={colors.textLight}
-              />
-            </View>
-            {showParties && (
-              <View style={styles.partyDropdown}>
-                <TouchableOpacity
-                  style={styles.pdRow}
-                  onPress={() => { setShowParties(false); router.push("/party/new" as never); }}
-                >
-                  <View style={styles.pdAddIcon}>
-                    <Ionicons name="add" size={14} color={colors.primary} />
-                  </View>
-                  <Text style={[styles.pdName, { color: colors.primary }]}>Add Party</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.pdRow}
-                  onPress={() => { setCustomer("Cash Sale"); setShowParties(false); }}
-                >
-                  <Text style={[styles.pdName, { flex: 1 }]}>Cash Sale</Text>
-                  <Text style={styles.pdBalance}>0</Text>
-                </TouchableOpacity>
-                {filteredParties.slice(0, 8).map((p) => (
-                  <TouchableOpacity
-                    key={p.id}
-                    style={styles.pdRow}
-                    onPress={() => { setCustomer(p.name); setShowParties(false); }}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.pdName}>{p.name}</Text>
-                      {p.phone ? <Text style={styles.pdPhone}>{p.phone}</Text> : null}
-                    </View>
-                    <Text style={[styles.pdBalance, { color: p.balance > 0 ? colors.red : colors.green }]}>
-                      Rs {Math.abs(p.balance).toLocaleString()}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+            {/* position:relative anchors the dropdown below, so it floats over whatever
+                comes after (Billed Items etc.) instead of pushing it down the screen. */}
+            <View style={styles.customerFieldWrap}>
+              <View style={styles.outlinedField}>
+                <Text style={styles.outlinedLabel}>Customer *</Text>
+                <TextInput
+                  style={styles.outlinedInput}
+                  value={customer}
+                  onChangeText={(t) => { setCustomer(t); setShowParties(true); }}
+                  onFocus={() => setShowParties(true)}
+                  placeholder=""
+                  placeholderTextColor={colors.textLight}
+                />
               </View>
-            )}
+              {showParties && (
+                <View style={styles.partyDropdown}>
+                  <TouchableOpacity
+                    style={styles.pdRow}
+                    onPress={() => { setShowParties(false); router.push("/party/new" as never); }}
+                  >
+                    <View style={styles.pdAddIcon}>
+                      <Ionicons name="add" size={14} color={colors.primary} />
+                    </View>
+                    <Text style={[styles.pdName, { color: colors.primary }]}>Add Party</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.pdRow}
+                    onPress={() => { setCustomer("Cash Sale"); setShowParties(false); }}
+                  >
+                    <Text style={[styles.pdName, { flex: 1 }]}>Cash Sale</Text>
+                    <Text style={styles.pdBalance}>0</Text>
+                  </TouchableOpacity>
+                  {filteredParties.slice(0, 8).map((p) => (
+                    <TouchableOpacity
+                      key={p.id}
+                      style={styles.pdRow}
+                      onPress={() => { setCustomer(p.name); setShowParties(false); }}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.pdName}>{p.name}</Text>
+                        {p.phone ? <Text style={styles.pdPhone}>{p.phone}</Text> : null}
+                      </View>
+                      <Text style={[styles.pdBalance, { color: p.balance > 0 ? colors.red : colors.green }]}>
+                        Rs {Math.abs(p.balance).toLocaleString()}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
           </View>
 
           {/* ── Billed Items ── */}
@@ -1839,11 +1843,20 @@ const styles = StyleSheet.create({
   sheetRowDate: { fontSize: 13, color: colors.textMuted },
   sheetRowRate: { fontSize: 14, fontWeight: "700", color: colors.text },
 
+  // Anchors partyDropdown below the input via position:relative — the dropdown itself
+  // is position:absolute so it overlays whatever follows in the ScrollView (Billed Items
+  // etc.) instead of pushing it down the page.
+  customerFieldWrap: { position: "relative", zIndex: 30 },
   partyDropdown: {
+    position: "absolute", top: "100%", left: 0, right: 0, zIndex: 30,
     marginTop: 6, borderWidth: 1, borderColor: colors.border, borderRadius: 8,
     backgroundColor: "#fff", maxHeight: 240, overflow: "hidden",
-    elevation: 3, shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 6,
+    elevation: 6, shadowColor: "#000", shadowOpacity: 0.12, shadowRadius: 8,
   },
+  // Android paints siblings in document order regardless of a child's own zIndex, so the
+  // Customer card itself needs lifting above the Billed Items card that follows it while
+  // its dropdown is open.
+  cardAboveOverlay: { zIndex: 30, elevation: 6 },
   pdRow: {
     flexDirection: "row", alignItems: "center", gap: 10,
     paddingHorizontal: 14, paddingVertical: 12,
