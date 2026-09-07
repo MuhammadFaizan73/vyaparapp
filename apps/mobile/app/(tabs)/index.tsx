@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import {
   View, Text, TextInput, TouchableOpacity, FlatList,
   StyleSheet, ActivityIndicator, RefreshControl, ScrollView, Modal, Pressable, Alert,
+  useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
@@ -161,17 +162,20 @@ function monthChange(txns: TxnRow[], type: string): { current: number; pct: numb
   return { current, pct: prev > 0 ? ((current - prev) / prev) * 100 : null };
 }
 
-function StatCard({ icon, iconColor, label, amount, pct }: {
+function StatCard({ icon, iconColor, label, amount, pct, width }: {
   icon: React.ComponentProps<typeof Ionicons>["name"];
   iconColor: string;
   label: string;
   amount: number;
   pct?: number | null;
+  width: number;
 }) {
   return (
-    <View style={t.statCard}>
+    <View style={[t.statCard, { width }]}>
       <View style={t.statTop}>
-        <Ionicons name={icon} size={14} color={iconColor} />
+        <View style={[t.statIconWrap, { backgroundColor: iconColor + "1c" }]}>
+          <Ionicons name={icon} size={14} color={iconColor} />
+        </View>
         <Text style={t.statLabel} numberOfLines={1}>{label}</Text>
       </View>
       <Text style={t.statAmt} numberOfLines={1}>Rs {amount.toLocaleString("en-PK")}</Text>
@@ -188,6 +192,10 @@ function StatCard({ icon, iconColor, label, amount, pct }: {
 function TrendingHome() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { width: screenWidth } = useWindowDimensions();
+  // ~2.2 cards visible at once, so the next card always peeks in rather than
+  // getting hard-clipped flush at the screen edge.
+  const statCardWidth = Math.round((screenWidth - 12 * 2 - 10) / 2.2);
 
   const [tab, setTab] = useState<TrendingTab>("parties");
   const [companyName, setCompanyName] = useState("My Company");
@@ -265,10 +273,10 @@ function TrendingHome() {
         style={t.statScroll}
         contentContainerStyle={t.statScrollContent}
       >
-        <StatCard icon="arrow-down-circle" iconColor={colors.green} label="You'll Get" amount={youllGet} />
-        <StatCard icon="document-text" iconColor={colors.primary} label={`Sale (${monthLabel})`} amount={sale.current} pct={sale.pct} />
-        <StatCard icon="arrow-up-circle" iconColor={colors.orange} label="You'll Give" amount={youllGive} />
-        <StatCard icon="cart" iconColor={colors.primary} label={`Purchase (${monthLabel})`} amount={purchase.current} pct={purchase.pct} />
+        <StatCard icon="arrow-down-circle" iconColor={colors.green} label="You'll Get" amount={youllGet} width={statCardWidth} />
+        <StatCard icon="document-text" iconColor={colors.primary} label={`Sale (${monthLabel})`} amount={sale.current} pct={sale.pct} width={statCardWidth} />
+        <StatCard icon="arrow-up-circle" iconColor={colors.orange} label="You'll Give" amount={youllGive} width={statCardWidth} />
+        <StatCard icon="cart" iconColor={colors.primary} label={`Purchase (${monthLabel})`} amount={purchase.current} pct={purchase.pct} width={statCardWidth} />
       </ScrollView>
 
       {/* Tabs + New button */}
@@ -978,17 +986,21 @@ const t = StyleSheet.create({
   companyName: { flex: 1, fontSize: 18, fontWeight: "700", color: colors.text },
 
   statScroll: {
-    backgroundColor: "#fff",
-    borderBottomWidth: 1, borderBottomColor: "#e8ecf0",
+    backgroundColor: "#f0f2f5",
   },
-  statScrollContent: { paddingHorizontal: 12, paddingVertical: 12, gap: 10 },
+  statScrollContent: { paddingHorizontal: 12, paddingVertical: 14, gap: 12 },
   statCard: {
-    width: 190, backgroundColor: "#fff", borderRadius: 12,
-    borderWidth: 1, borderColor: "#e8ecf0", padding: 14,
+    backgroundColor: "#fff", borderRadius: 14, padding: 14,
+    shadowColor: "#0f172a", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6,
+    elevation: 2,
   },
-  statTop: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 },
-  statLabel: { fontSize: 12.5, fontWeight: "600", color: colors.textMuted },
-  statAmt: { fontSize: 17, fontWeight: "700", color: colors.text },
+  statTop: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
+  statIconWrap: {
+    width: 26, height: 26, borderRadius: 13,
+    alignItems: "center", justifyContent: "center",
+  },
+  statLabel: { flex: 1, fontSize: 12.5, fontWeight: "600", color: colors.textMuted },
+  statAmt: { fontSize: 16.5, fontWeight: "700", color: colors.text },
   statPctRow: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 6 },
   statPct: { fontSize: 11.5, fontWeight: "700" },
 
