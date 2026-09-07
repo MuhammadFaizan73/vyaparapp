@@ -68,7 +68,7 @@ const TOOLS: MenuRow[] = [
   { label: "Manage Companies",   sub: "Switch or add company",          icon: "layers-outline",         tint: "#e0e7ff", fg: "#4338ca",        route: "/manage-companies",     allow: [] },
   { label: "Manage Stores",      sub: "Stores & godowns per company",   icon: "storefront-outline",     tint: "#e0f2fe", fg: colors.primary,  route: "/stores",               allow: ["stock_keeper", "secondary_admin"] },
   { label: "Stock Transfer",     sub: "Move stock between stores",      icon: "swap-horizontal-outline", tint: "#e0f2fe", fg: colors.primary, route: "/stock-transfer",       allow: ["stock_keeper", "secondary_admin"] },
-  { label: "Transaction Settings", sub: "Invoice, tax, prefixes",       icon: "document-text-outline",  tint: "#e0f2fe", fg: "#0369a1",        route: "/settings?tab=transaction", allow: ["secondary_admin", "ca_accountant", "ca_accountant_edit", "biller", "biller_salesman"] },
+  { label: "Settings", sub: "App theme, invoice, tax, prefixes",       icon: "settings-outline",  tint: "#e0f2fe", fg: "#0369a1",        route: "/settings", allow: ["secondary_admin", "ca_accountant", "ca_accountant_edit", "biller", "biller_salesman"] },
   { label: "Join with Invite Code", sub: "Enter code from your employer", icon: "key-outline",         tint: "#f0fdf4", fg: "#15803d",        route: "/accept-invite",        memberOnly: true },
   { label: "Plans & Pricing",    sub: "Upgrade your plan",              icon: "diamond-outline",        tint: "#fef3c7", fg: "#b45309",        route: "/plans-pricing",        allow: ["secondary_admin"] },
   { label: "Help & Support",     sub: "Tutorials & FAQs",               icon: "help-circle-outline",    tint: "#e0e7ff", fg: "#4338ca" },

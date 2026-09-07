@@ -55,10 +55,10 @@ export default function SettingsScreen() {
   );
 }
 
-const THEME_OPTIONS: { value: string; label: string; soon?: boolean }[] = [
+const THEME_OPTIONS: { value: string; label: string }[] = [
   { value: "standard", label: "Standard" },
-  { value: "trending", label: "Trending", soon: true },
-  { value: "modern", label: "Modern", soon: true },
+  { value: "trending", label: "Trending" },
+  { value: "modern", label: "Modern" },
 ];
 
 function GeneralTab() {
@@ -107,7 +107,7 @@ function GeneralTab() {
                 onPress={() => { update({ appTheme: opt.value }); setShowThemePicker(false); }}
               >
                 <Text style={[s.modalOptionTxt, opt.value === settings.appTheme && s.modalOptionActive]}>
-                  {opt.label}{opt.soon ? " (Coming soon)" : ""}
+                  {opt.label}
                 </Text>
                 {opt.value === settings.appTheme && (
                   <Ionicons name="checkmark" size={18} color={colors.primary} />
