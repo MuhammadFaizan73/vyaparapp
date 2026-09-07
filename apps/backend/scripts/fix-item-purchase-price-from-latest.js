@@ -25,10 +25,17 @@ async function main() {
   const items = readJson('items.json');
   const transactions = readJson('transactions.json');
   const lineitems = readJson('lineitems.json');
+  // txn_type codes aren't a fixed global enum across Vyapar backups (re-verified per company) —
+  // some businesses split "purchase" across two codes (e.g. 2 and 24). Read the same
+  // type-map.json the import itself used instead of hardcoding a single code.
+  const typeMap = readJson('type-map.json');
+  const purchaseTypeCodes = new Set(
+    Object.entries(typeMap).filter(([, v]) => v.bucket === 'purchase' && v.label === 'purchase').map(([k]) => Number(k))
+  );
 
   const itemNameById = new Map(items.map((it) => [it.item_id, (it.item_name || '').trim()]));
   const purchaseTxnDateById = new Map(
-    transactions.filter((t) => t.txn_type === 2).map((t) => [t.txn_id, t.txn_date])
+    transactions.filter((t) => purchaseTypeCodes.has(t.txn_type)).map((t) => [t.txn_id, t.txn_date])
   );
 
   // Latest (by txn_date) priceperunit per item name, from Purchase line items only.

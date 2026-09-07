@@ -315,6 +315,11 @@ export class VyaparApiClient {
     return data;
   }
 
+  async searchItems(opts: { companyId?: string; q?: string; take?: number; skip?: number }): Promise<{ items: Item[]; total: number }> {
+    const { data } = await this.http.get<{ items: Item[]; total: number }>("/items/search", { params: opts });
+    return data;
+  }
+
   async getCompanies(opts?: { branchId?: string }): Promise<Company[]> {
     const { data } = await this.http.get<Company[]>("/companies", { params: opts });
     return data;

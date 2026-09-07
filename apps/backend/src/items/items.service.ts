@@ -54,6 +54,35 @@ export class ItemsService {
     return items.map((i) => toRow(i, stocksByItem.get(i.id) ?? []));
   }
 
+  // Text matching + pagination is done in application code rather than via Prisma's
+  // `mode: "insensitive"` — that filter isn't supported against SQLite (dev), only
+  // Postgres (prod), same reason bulk-import.service.ts avoids it. The DB round-trip
+  // still only pulls plain Item columns (no stock join) for the whole tenant/company,
+  // which is cheap; the only thing that ever reaches the client is the small `take`-sized
+  // page, which is what actually fixes the timeout this endpoint exists for.
+  async search(tenantId: string, opts: { companyId?: string; q?: string; take?: number; skip?: number }) {
+    await this.stores.ensureBootstrapped(tenantId);
+    const DEFAULT_TAKE = 60;
+    const MAX_TAKE = 200;
+    const take = Math.min(opts.take && opts.take > 0 ? opts.take : DEFAULT_TAKE, MAX_TAKE);
+    const skip = opts.skip && opts.skip > 0 ? opts.skip : 0;
+
+    const words = (opts.q ?? "").trim().toLowerCase().split(/\s+/).filter(Boolean);
+
+    const rows = await this.prisma.item.findMany({
+      where: { tenantId, ...companyIdWhere(opts.companyId) },
+      orderBy: { name: "asc" },
+    });
+    const matched = words.length === 0 ? rows : rows.filter((i) => {
+      const haystack = `${i.name} ${i.sku ?? ""} ${i.category ?? ""}`.toLowerCase();
+      return words.every((w) => haystack.includes(w));
+    });
+
+    const page = matched.slice(skip, skip + take);
+    const stocksByItem = await this.stock.getStocksForItems(tenantId, page.map((i) => i.id));
+    return { items: page.map((i) => toRow(i, stocksByItem.get(i.id) ?? [])), total: matched.length };
+  }
+
   async create(tenantId: string, dto: CreateItemDto) {
     // Resolved before the write transaction — resolveStoreId can trigger
     // StoresService.ensureBootstrapped, which opens its own $transaction; nesting

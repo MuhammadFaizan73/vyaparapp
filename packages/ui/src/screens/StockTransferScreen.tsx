@@ -29,7 +29,11 @@ export function StockTransferScreen() {
   }, [companies, selectedCompanyId, viewCompanyId]);
 
   const { stores } = useStores(viewCompanyId || null);
-  const [items, setItems] = useState<Item[]>([]);
+  // Every item ever returned by a picker search, keyed by id — items already added to
+  // `lines` (or currently picked) need their record to stay resolvable even after the
+  // search text/results move on, since availableAt()/addLine() look items up by id.
+  const [itemsById, setItemsById] = useState<Map<string, Item>>(new Map());
+  const [searchResults, setSearchResults] = useState<Item[]>([]);
   const [transfers, setTransfers] = useState<StockTransfer[]>([]);
   const [loadingTransfers, setLoadingTransfers] = useState(false);
 
@@ -45,9 +49,21 @@ export function StockTransferScreen() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!viewCompanyId) return;
-    api.getItems({ companyId: viewCompanyId }).then(setItems).catch(() => setItems([]));
-  }, [viewCompanyId]);
+    if (!viewCompanyId) { setSearchResults([]); return; }
+    const t = setTimeout(() => {
+      api.searchItems({ companyId: viewCompanyId, q: pickSearch || undefined, take: 20 })
+        .then((r) => {
+          setSearchResults(r.items);
+          setItemsById((prev) => {
+            const next = new Map(prev);
+            for (const it of r.items) next.set(it.id, it);
+            return next;
+          });
+        })
+        .catch(() => setSearchResults([]));
+    }, 200);
+    return () => clearTimeout(t);
+  }, [viewCompanyId, pickSearch]);
 
   const loadTransfers = useMemo(
     () => async () => {
@@ -87,11 +103,7 @@ export function StockTransferScreen() {
     }
   }, [fromStoreId, toStoreId, stores]);
 
-  const matches = useMemo(() => {
-    const q = pickSearch.trim().toLowerCase();
-    const filtered = q ? items.filter((i) => i.name.toLowerCase().includes(q)) : items;
-    return filtered.slice(0, 20);
-  }, [items, pickSearch]);
+  const matches = searchResults;
 
   function selectPickItem(item: Item) {
     setPickItemId(item.id);
@@ -104,7 +116,7 @@ export function StockTransferScreen() {
   }
 
   function availableAt(itemId: string, storeId: string): number {
-    const item = items.find((i) => i.id === itemId);
+    const item = itemsById.get(itemId);
     if (!item) return 0;
     const entry = item.stocks.find((s) => s.storeId === storeId);
     return entry ? entry.quantity : 0;
@@ -115,7 +127,7 @@ export function StockTransferScreen() {
   }
 
   function addLine() {
-    const item = items.find((i) => i.id === pickItemId);
+    const item = itemsById.get(pickItemId);
     const qty = parseFloat(pickQty);
     if (!item || !qty || qty <= 0) return;
     setLines((prev) => {
@@ -151,7 +163,10 @@ export function StockTransferScreen() {
       });
       setLines([]);
       setDate(todayISO());
-      await Promise.all([loadTransfers(), api.getItems({ companyId: viewCompanyId }).then(setItems)]);
+      // Stock numbers cached in itemsById are now stale for the transferred items — clear
+      // it so the next picker search re-fetches fresh quantities rather than showing old ones.
+      setItemsById(new Map());
+      await loadTransfers();
     } catch (err) {
       const msg = (err as { response?: { data?: { message?: string } } }).response?.data?.message ?? "Could not save transfer.";
       setError(String(msg));

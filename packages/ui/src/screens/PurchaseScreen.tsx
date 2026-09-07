@@ -195,7 +195,6 @@ export function PurchaseScreen({ isLocked = false, onLockedAction, activeKey = "
   const [visibleCount, setVisibleCount] = useState(ROWS_PER_PAGE);
   const [summary, setSummary] = useState({ count: 0, total: 0, balance: 0 });
   const [parties,  setParties]   = useState<Party[]>([]);
-  const [items,    setItems]     = useState<Item[]>([]);
   const [loading,  setLoading]   = useState(true);
   const [showForm, setShowForm]  = useState(false);
   const [showSimpleForm, setShowSimpleForm] = useState(false);
@@ -250,13 +249,11 @@ export function PurchaseScreen({ isLocked = false, onLockedAction, activeKey = "
   }, [showFirmPanel, showUserPanel]);
 
   async function loadPurchases() {
-    // Load parties + items first — independent of transactions
+    // Load parties first — independent of transactions
     let ps: Party[] = [];
-    let its: Item[] = [];
     try {
-      [ps, its] = await Promise.all([api.getParties(), api.getItems()]);
+      ps = await api.getParties();
       setParties(ps);
-      setItems(its);
     } catch { /* offline */ }
 
     // Load transactions for the current tab's type
@@ -754,7 +751,6 @@ function PurchaseBillForm({
   editData?: PurchaseRow;
 }) {
   const [parties, setParties] = useState<Party[]>([]);
-  const [catalog, setCatalog] = useState<Item[]>([]);
   const { selectedCompanyId } = useCompany();
   const { stores } = useStores(selectedCompanyId);
   const [storeId, setStoreId] = useState<string>(editData?.storeId ?? "");
@@ -772,7 +768,6 @@ function PurchaseBillForm({
         if (party?.phone) setSupplierPhone(party.phone);
       }
     }).catch(() => {});
-    api.getItems().then(setCatalog).catch(() => {});
 
     if (editData) {
       setBillDate(editData.date.slice(0, 10));
@@ -833,13 +828,17 @@ function PurchaseBillForm({
     .filter(p => p.partyType === "supplier" || p.partyType === "both" || p.isSystem)
     .filter(p => !supplier || p.name.toLowerCase().includes(supplier.toLowerCase()));
 
-  function catalogFor(search: string) {
-    if (!search.trim()) return catalog;
-    const q = search.toLowerCase();
-    return catalog.filter(c =>
-      c.name.toLowerCase().includes(q) || (c.sku ?? "").toLowerCase().includes(q)
-    );
-  }
+  // Item picker — debounced server-side search instead of filtering a bulk-loaded catalog.
+  const [pickerResults, setPickerResults] = useState<Item[]>([]);
+  const activeItemName = activeItemRow ? (lineItems.find((i) => i.id === activeItemRow)?.name ?? "") : "";
+  useEffect(() => {
+    if (!activeItemRow) { setPickerResults([]); return; }
+    const t = setTimeout(() => {
+      api.searchItems({ companyId: selectedCompanyId ?? undefined, q: activeItemName || undefined, take: 12 })
+        .then((r) => setPickerResults(r.items)).catch(() => setPickerResults([]));
+    }, 200);
+    return () => clearTimeout(t);
+  }, [activeItemRow, activeItemName, selectedCompanyId]);
 
   // Store-scoped available quantity — falls back to the cross-store total before a
   // store is chosen (or for single-store tenants).
@@ -1169,7 +1168,7 @@ function PurchaseBillForm({
                 <span className="nsf-item-drop__hdr-col nsf-item-drop__hdr-col--stock">STOCK</span>
                 <span className="nsf-item-drop__hdr-col">LOCATION</span>
               </div>
-              {catalogFor(activeItem.name).slice(0, 12).map(c => (
+              {pickerResults.map(c => (
                 <button key={c.id} type="button" className="nsf-item-drop__row"
                   onMouseDown={e => e.preventDefault()}
                   onClick={() => {
@@ -1195,7 +1194,7 @@ function PurchaseBillForm({
                   <span className="nsf-item-drop__col nsf-item-drop__col--loc">–</span>
                 </button>
               ))}
-              {catalogFor(activeItem.name).length === 0 && (
+              {pickerResults.length === 0 && (
                 <p className="nsf-item-drop__empty">No items found</p>
               )}
             </div>
@@ -2775,7 +2774,6 @@ function DebitNoteForm({
   const [showLink,     setShowLink]     = useState(false);
 
   const [parties,  setParties]  = useState<Party[]>(allParties ?? []);
-  const [catalog,  setCatalog]  = useState<Item[]>([]);
   const [partyTxns, setPartyTxns] = useState<Transaction[]>([]);
   const [linkedTxns, setLinkedTxns] = useState<Record<string, number>>({});
 
@@ -2801,7 +2799,6 @@ function DebitNoteForm({
         if (p?.phone) setSupplierPhone(p.phone);
       }
     }).catch(() => {});
-    api.getItems().then(setCatalog).catch(() => {});
     if (purchase?.partyId) {
       api.getPartyTransactions(purchase.partyId).then(setPartyTxns).catch(() => {});
     }
@@ -2820,11 +2817,17 @@ function DebitNoteForm({
     .filter(p => p.partyType === "supplier" || p.partyType === "both" || p.isSystem)
     .filter(p => !supplier || p.name.toLowerCase().includes(supplier.toLowerCase()));
 
-  function catalogFor(search: string) {
-    if (!search.trim()) return catalog;
-    const q = search.toLowerCase();
-    return catalog.filter(c => c.name.toLowerCase().includes(q) || (c.sku ?? "").toLowerCase().includes(q));
-  }
+  // Item picker — debounced server-side search instead of filtering a bulk-loaded catalog.
+  const [pickerResults, setPickerResults] = useState<Item[]>([]);
+  const activeItemName = activeItemRow ? (lineItems.find((i) => i.id === activeItemRow)?.name ?? "") : "";
+  useEffect(() => {
+    if (!activeItemRow) { setPickerResults([]); return; }
+    const t = setTimeout(() => {
+      api.searchItems({ companyId: selectedCompanyId ?? undefined, q: activeItemName || undefined, take: 12 })
+        .then((r) => setPickerResults(r.items)).catch(() => setPickerResults([]));
+    }, 200);
+    return () => clearTimeout(t);
+  }, [activeItemRow, activeItemName, selectedCompanyId]);
 
   // Store-scoped available quantity — falls back to the cross-store total before a
   // store is chosen (or for single-store tenants).
@@ -3148,7 +3151,7 @@ function DebitNoteForm({
                 <span className="nsf-item-drop__hdr-col nsf-item-drop__hdr-col--stock">STOCK</span>
                 <span className="nsf-item-drop__hdr-col">LOCATION</span>
               </div>
-              {catalogFor(activeItem.name).slice(0, 12).map(c => (
+              {pickerResults.map(c => (
                 <button key={c.id} type="button" className="nsf-item-drop__row"
                   onMouseDown={e => e.preventDefault()}
                   onClick={() => {
@@ -3167,7 +3170,7 @@ function DebitNoteForm({
                   <span className="nsf-item-drop__col nsf-item-drop__col--loc">–</span>
                 </button>
               ))}
-              {catalogFor(activeItem.name).length === 0 && <p className="nsf-item-drop__empty">No items found</p>}
+              {pickerResults.length === 0 && <p className="nsf-item-drop__empty">No items found</p>}
             </div>
           );
         })()}

@@ -173,7 +173,6 @@ export function SaleTxnScreen({ activeKey, isLocked = false, onLockedAction }: P
 
   const [rows, setRows] = useState<TxnRow[]>([]);
   const [parties, setParties] = useState<Party[]>([]);
-  const [catalog, setCatalog] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editRow, setEditRow] = useState<TxnRow | null>(null);
@@ -200,17 +199,15 @@ export function SaleTxnScreen({ activeKey, isLocked = false, onLockedAction }: P
 
   async function load() {
     try {
-      const [txns, ps, items] = await Promise.all([
+      const [txns, ps] = await Promise.all([
         // Explicit take — the backend defaults to a 200-row cap even with a date range,
         // which silently drops the oldest rows in any period with more than 200 entries.
         api.getTransactionsByType(cfg.txnType, { from: filterFrom, to: filterTo, companyId: companyFilter ?? undefined, take: 10000 }),
         api.getParties(),
-        api.getItems(),
       ]);
       const map = Object.fromEntries(ps.map((p: Party) => [p.id, p]));
       setRows(txns.map((t) => ({ ...t, partyName: map[t.partyId]?.name ?? "Unknown" })));
       setParties(ps);
-      setCatalog(items);
     } catch { /* offline */ }
   }
 
@@ -580,7 +577,6 @@ export function SaleTxnScreen({ activeKey, isLocked = false, onLockedAction }: P
           key={editRow?.id ?? "new"}
           cfg={cfg}
           parties={parties}
-          catalog={catalog}
           initialRow={editRow ?? undefined}
           existingCount={rows.length}
           onClose={() => { setShowForm(false); setEditRow(null); }}
@@ -954,10 +950,9 @@ function CreditNoteList({ rows, menuId, menuPos, onMenu, onEdit, onDelete, onDup
 /* ═══════════════════════════════════════════════════════════
    TRANSACTION FORM (modal)
 ═══════════════════════════════════════════════════════════ */
-function TxnForm({ cfg, parties, catalog, initialRow, existingCount, onClose, onSaved }: {
+function TxnForm({ cfg, parties, initialRow, existingCount, onClose, onSaved }: {
   cfg: TxnConfig;
   parties: Party[];
-  catalog: Item[];
   initialRow?: TxnRow;
   existingCount: number;
   onClose: () => void;
@@ -1073,11 +1068,17 @@ function TxnForm({ cfg, parties, catalog, initialRow, existingCount, onClose, on
     setLineItems((prev) => prev.map((item) => item.id === id ? { ...item, [field]: value } : item));
   }
 
-  function catalogFor(search: string) {
-    if (!search.trim()) return catalog;
-    const q = search.toLowerCase();
-    return catalog.filter((c) => c.name.toLowerCase().includes(q) || (c.sku ?? "").toLowerCase().includes(q));
-  }
+  // Item picker — debounced server-side search instead of filtering a bulk-loaded catalog.
+  const [pickerResults, setPickerResults] = useState<Item[]>([]);
+  const activeItemName = activeItemRow ? (lineItems.find((i) => i.id === activeItemRow)?.name ?? "") : "";
+  useEffect(() => {
+    if (!activeItemRow) { setPickerResults([]); return; }
+    const t = setTimeout(() => {
+      api.searchItems({ companyId: selectedCompanyId ?? undefined, q: activeItemName || undefined, take: 8 })
+        .then((r) => setPickerResults(r.items)).catch(() => setPickerResults([]));
+    }, 200);
+    return () => clearTimeout(t);
+  }, [activeItemRow, activeItemName, selectedCompanyId]);
 
   // Store-scoped available quantity — only meaningful for the credit_note config,
   // where goods actually come back into a store.
@@ -1375,7 +1376,7 @@ function TxnForm({ cfg, parties, catalog, initialRow, existingCount, onClose, on
                       onBlur={() => closeItemDrop(item.id)}
                     />
                     {activeItemRow === item.id && dropPos && (() => {
-                      const matches = catalogFor(item.name);
+                      const matches = pickerResults;
                       if (!matches.length) return null;
                       return (
                         <div style={{ position: "fixed", top: dropPos.top, left: dropPos.left, width: dropPos.width, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 6, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", zIndex: 700, maxHeight: 200, overflowY: "auto" }}>

@@ -44,11 +44,8 @@ export function PartiesScreen({ isLocked = false, onLockedAction }: PartiesScree
   const [showExcelColumns, setShowExcelColumns] = useState(false);
   const [editSaleTxn, setEditSaleTxn] = useState<Transaction | null>(null);
   const [editPaymentTxn, setEditPaymentTxn] = useState<Transaction | null>(null);
-  const [catalog, setCatalog] = useState<Item[]>([]);
   const moreMenuRef = useRef<HTMLDivElement>(null);
   const { companies, companyFilter, selectedCompanyId, setSelectedDistributorId } = useCompany();
-
-  useEffect(() => { api.getItems().then(setCatalog).catch(() => {}); }, []);
 
   useEffect(() => { void load(); }, [companyFilter]);
 
@@ -566,7 +563,6 @@ export function PartiesScreen({ isLocked = false, onLockedAction }: PartiesScree
         <NewSaleForm
           key={editSaleTxn.id}
           parties={parties}
-          catalog={catalog}
           companies={companies}
           selectedCompanyId={selectedCompanyId}
           initialSale={{ ...editSaleTxn, partyName: selected.name } as SaleRow}

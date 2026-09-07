@@ -88,6 +88,11 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
   const [showTertiaryPicker, setShowTertiaryPicker] = useState(false);
   const [txnSearch, setTxnSearch] = useState("");
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [total, setTotal] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const PAGE_SIZE = 60;
   const [dotsMenuId, setDotsMenuId] = useState<string | null>(null);
   const [dotsMenuPos, setDotsMenuPos] = useState({ top: 0, left: 0 });
 
@@ -159,27 +164,48 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
     }
   }
 
+  // Debounce the search box so every keystroke doesn't fire its own request.
   useEffect(() => {
-    api.getItems().then(setItems).catch(() => {});
-  }, []);
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
 
-  const displayedItems = useMemo(() => {
-    let list = items;
-    if (companyFilter) {
-      const ids = new Set(companyFilter.split(","));
-      list = list.filter((i) => (i as any).companyId && ids.has((i as any).companyId));
+  async function loadPage(reset: boolean) {
+    if (loadingMore) return;
+    setLoadingMore(true);
+    setLoadError(false);
+    try {
+      const skip = reset ? 0 : items.length;
+      const { items: page, total: newTotal } = await api.searchItems({
+        companyId: companyFilter ?? undefined,
+        q: debouncedSearch || undefined,
+        take: PAGE_SIZE,
+        skip,
+      });
+      setItems((prev) => (reset ? page : [...prev, ...page]));
+      setTotal(newTotal);
+    } catch {
+      setLoadError(true);
+    } finally {
+      setLoadingMore(false);
     }
-    const q = search.trim().toLowerCase();
-    if (q) {
-      list = list.filter(
-        (i) =>
-          i.name.toLowerCase().includes(q) ||
-          (i.sku ?? "").toLowerCase().includes(q) ||
-          (i.category ?? "").toLowerCase().includes(q),
-      );
+  }
+
+  // Reset to page 1 whenever the search term or company filter changes.
+  useEffect(() => {
+    void loadPage(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch, companyFilter]);
+
+  function handleItemsScroll(e: React.UIEvent<HTMLDivElement>) {
+    const el = e.currentTarget;
+    if (loadingMore || items.length >= total) return;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 200) {
+      void loadPage(false);
     }
-    return list;
-  }, [items, companyFilter, search]);
+  }
+
+  const displayedItems = items;
 
   useEffect(() => {
     if (!dotsMenuId) return;
@@ -264,6 +290,7 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
         storeId: formStoreId || undefined,
       });
       setItems((prev) => [created, ...prev]);
+      setTotal((prev) => prev + 1);
       setSelectedItem(created);
       handleCloseForm();
     } catch { /* network error */ }
@@ -273,6 +300,7 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
     try {
       await api.deleteItem(id);
       setItems((prev) => prev.filter((i) => i.id !== id));
+      setTotal((prev) => Math.max(0, prev - 1));
       setSelectedItem((prev) => prev?.id === id ? null : prev);
     } catch { /* network error */ }
   }
@@ -376,11 +404,27 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
     } catch { /* network error */ }
   }
 
-  function handleExportItems() {
+  // Export needs every matching item, not just the currently-loaded page — fetch a fresh
+  // full snapshot (same bulk endpoint SyncScreen's backup uses) rather than relying on the
+  // paginated `items` state, and re-apply the same name/sku/category filter the list used
+  // to do client-side.
+  async function exportableItems(): Promise<Item[]> {
+    const all = await api.getItems({ companyId: companyFilter ?? undefined });
+    const q = search.trim().toLowerCase();
+    if (!q) return all;
+    return all.filter(
+      (i) =>
+        i.name.toLowerCase().includes(q) ||
+        (i.sku ?? "").toLowerCase().includes(q) ||
+        (i.category ?? "").toLowerCase().includes(q),
+    );
+  }
+
+  async function handleExportItems() {
     // Same column set (and order) as the Import Items template, built from each item's own
     // field of the same key — keeps export/import/template all in lockstep automatically.
     const headers = ITEM_IMPORT_FIELDS.map((f) => f.label);
-    const rows = displayedItems.map((it) => ITEM_IMPORT_FIELDS.map((f) => (it as any)[f.key] ?? ""));
+    const rows = (await exportableItems()).map((it) => ITEM_IMPORT_FIELDS.map((f) => (it as any)[f.key] ?? ""));
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
     ws["!cols"] = headers.map((h) => ({ wch: Math.max(h.length + 4, 16) }));
     const wb = XLSX.utils.book_new();
@@ -388,8 +432,8 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
     XLSX.writeFile(wb, "items_export.xlsx");
   }
 
-  function handleExportItemsPdf() {
-    const rows = displayedItems.map((it) =>
+  async function handleExportItemsPdf() {
+    const rows = (await exportableItems()).map((it) =>
       Object.fromEntries(ITEM_IMPORT_FIELDS.map((f) => [f.label, (it as any)[f.key] ?? ""])),
     );
     exportRowsToPdf(rows, "Items", "items_export");
@@ -925,10 +969,18 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
         </div>
 
         {/* Item rows */}
-        <div className="items-rows">
-          {displayedItems.length === 0 && (
+        <div className="items-rows" onScroll={handleItemsScroll}>
+          {loadError && (
+            <div style={{ padding: "16px", textAlign: "center", color: "#dc2626", fontSize: 13 }}>
+              Items could not be loaded.{" "}
+              <button type="button" onClick={() => void loadPage(true)} style={{ color: "#2563eb", textDecoration: "underline" }}>
+                Retry
+              </button>
+            </div>
+          )}
+          {!loadError && displayedItems.length === 0 && !loadingMore && (
             <div style={{ padding: "32px 16px", textAlign: "center", color: "#94a3b8", fontSize: 13 }}>
-              {items.length === 0
+              {total === 0 && !search
                 ? "No items yet. Click + Add Item to get started."
                 : search
                 ? "No items match your search."
@@ -971,6 +1023,9 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
               </div>
             </button>
           ))}
+          {loadingMore && (
+            <div style={{ padding: "12px", textAlign: "center", color: "#94a3b8", fontSize: 12 }}>Loading…</div>
+          )}
         </div>
       </div>
 

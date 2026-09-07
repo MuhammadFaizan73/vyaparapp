@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput } from "react-native";
+import { View, Text, ScrollView, FlatList, TouchableOpacity, StyleSheet, TextInput } from "react-native";
 import * as SecureStore from "expo-secure-store";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
@@ -135,57 +135,71 @@ export default function ItemsScreen() {
         )}
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.body}>
-        {/* Stock value card */}
-        <View style={styles.stockCard}>
-          <View style={styles.stockLeft}>
-            <Text style={styles.stockLabel}>Stock Value</Text>
-            <Text style={styles.stockAmount}>{fmtRs(stockValue)}</Text>
-            <Text style={styles.stockSub}>{items.length} items  ·  {lowItems.length} low stock</Text>
-          </View>
-          <View style={[styles.stockIcon, { backgroundColor: colors.primaryLight + "22" }]}>
-            <MaterialCommunityIcons name={"package-variant-closed" as MCIName} size={28} color={colors.primary} />
-          </View>
-        </View>
+      {/* FlatList virtualizes the row rendering (only visible rows + a small buffer are
+          ever mounted) — the data itself is already fully loaded from itemsStore (needed
+          for the Stock Value/Low Stock aggregates below, which require scanning every
+          item), but a catalog of a few thousand items rendered as plain Views all at once
+          was a real, separate perf problem this fixes; scrolling now progressively renders
+          more rows instead of mounting all of them upfront. */}
+      <FlatList
+        data={filtered}
+        keyExtractor={(it) => it.id}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.body}
+        initialNumToRender={20}
+        maxToRenderPerBatch={20}
+        windowSize={7}
+        ListHeaderComponent={
+          <>
+            {/* Stock value card */}
+            <View style={styles.stockCard}>
+              <View style={styles.stockLeft}>
+                <Text style={styles.stockLabel}>Stock Value</Text>
+                <Text style={styles.stockAmount}>{fmtRs(stockValue)}</Text>
+                <Text style={styles.stockSub}>{items.length} items  ·  {lowItems.length} low stock</Text>
+              </View>
+              <View style={[styles.stockIcon, { backgroundColor: colors.primaryLight + "22" }]}>
+                <MaterialCommunityIcons name={"package-variant-closed" as MCIName} size={28} color={colors.primary} />
+              </View>
+            </View>
 
-        {/* Pill tabs */}
-        <View style={styles.tabRow}>
-          <PillTab label="All" count={items.length} active={tab === "all"} onPress={() => setTab("all")} />
-          <PillTab label="Low Stock" count={lowItems.length} active={tab === "low"} onPress={() => setTab("low")} />
-          <PillTab label="Categories" active={tab === "cat"} onPress={() => setTab("cat")} />
-        </View>
+            {/* Pill tabs */}
+            <View style={styles.tabRow}>
+              <PillTab label="All" count={items.length} active={tab === "all"} onPress={() => setTab("all")} />
+              <PillTab label="Low Stock" count={lowItems.length} active={tab === "low"} onPress={() => setTab("low")} />
+              <PillTab label="Categories" active={tab === "cat"} onPress={() => setTab("cat")} />
+            </View>
 
-        {/* Store filter — only shown once there's more than one store to pick from. A
-            plain height-constrained View wraps the ScrollView because a bare `height`
-            on a ScrollView's own style prop isn't reliably honored as a hard cap on Android. */}
-        {stores.length > 1 && (
-          <View style={styles.storeFilterRowWrap}>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.storeFilterRowContent}
-            >
-              <TouchableOpacity style={[styles.storeChip, !storeFilter && styles.storeChipActive]} onPress={() => setStoreFilter(null)}>
-                <Text style={[styles.storeChipTxt, !storeFilter && styles.storeChipTxtActive]}>All Stores</Text>
-              </TouchableOpacity>
-              {stores.map((s) => (
-                <TouchableOpacity key={s.id} style={[styles.storeChip, storeFilter === s.id && styles.storeChipActive]} onPress={() => setStoreFilter(s.id)}>
-                  <Text style={[styles.storeChipTxt, storeFilter === s.id && styles.storeChipTxtActive]}>{s.name}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        )}
-
-        {/* Items list */}
-        {filtered.map((it) => {
+            {/* Store filter — only shown once there's more than one store to pick from. A
+                plain height-constrained View wraps the ScrollView because a bare `height`
+                on a ScrollView's own style prop isn't reliably honored as a hard cap on Android. */}
+            {stores.length > 1 && (
+              <View style={styles.storeFilterRowWrap}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.storeFilterRowContent}
+                >
+                  <TouchableOpacity style={[styles.storeChip, !storeFilter && styles.storeChipActive]} onPress={() => setStoreFilter(null)}>
+                    <Text style={[styles.storeChipTxt, !storeFilter && styles.storeChipTxtActive]}>All Stores</Text>
+                  </TouchableOpacity>
+                  {stores.map((s) => (
+                    <TouchableOpacity key={s.id} style={[styles.storeChip, storeFilter === s.id && styles.storeChipActive]} onPress={() => setStoreFilter(s.id)}>
+                      <Text style={[styles.storeChipTxt, storeFilter === s.id && styles.storeChipTxtActive]}>{s.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+          </>
+        }
+        renderItem={({ item: it }) => {
           const p = hue(it.name);
           const qty = qtyFor(it);
           const min = it.minStock ?? 0;
           const isLow = min > 0 && qty < min;
           return (
             <TouchableOpacity
-              key={it.id}
               style={styles.itemCard}
               activeOpacity={0.75}
               onPress={() => router.push(`/items/${it.id}` as never)}
@@ -214,17 +228,16 @@ export default function ItemsScreen() {
               </View>
             </TouchableOpacity>
           );
-        })}
-
-        {filtered.length === 0 && (
+        }}
+        ListEmptyComponent={
           <View style={styles.empty}>
             <MaterialCommunityIcons name={"package-variant-closed" as MCIName} size={52} color={colors.textLight} />
             <Text style={styles.emptyTxt}>
               {tab === "low" ? "No low stock items" : "No items found"}
             </Text>
           </View>
-        )}
-      </ScrollView>
+        }
+      />
 
       {/* FAB */}
       <View style={[styles.fabWrap, { bottom: 24 + (insets.bottom || 8) }]}>

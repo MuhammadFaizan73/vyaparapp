@@ -267,7 +267,6 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
   const [datePanelPos, setDatePanelPos] = useState({ top: 0, left: 0 });
   const datePanelRef = useRef<HTMLDivElement>(null);
   const [parties, setParties] = useState<Party[]>([]);
-  const [items, setItems] = useState<Item[]>([]);
   const { companies, selectedCompanyId, companyFilter } = useCompany();
 
   /* ── salesman (booker) filter — same pattern as Payment-In's user filter ── */
@@ -401,7 +400,7 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
   async function loadSales() {
     try {
       const opts = { from: filterFrom, to: filterTo, companyId: companyFilter ?? undefined, bookerId: salesmanFilterId || undefined };
-      const [txns, ps, its, summary] = await Promise.all([
+      const [txns, ps, summary] = await Promise.all([
         // Explicit take — the backend defaults to a 200-row cap (its guard against an
         // unbounded all-time fetch) even when a date range is passed, which silently
         // dropped the oldest invoices in any month with more than 200 sales.
@@ -412,14 +411,12 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
         // getTransactionsSummary, a database aggregate with no row cap.
         api.getTransactionsByType("sale", { ...opts, take: 10000 }),
         api.getParties(),
-        api.getItems(),
         api.getTransactionsSummary("sale", opts),
       ]);
       const map: Record<string, string> = {};
       ps.forEach((p: Party) => { map[p.id] = p.name; });
       setSales(txns.map((t) => ({ ...t, partyName: map[t.partyId] ?? "Unknown" })));
       setParties(ps);
-      setItems(its);
       setServerSummary(summary);
     } catch { /* offline */ }
   }
@@ -955,7 +952,6 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
         <NewSaleForm
           key={editSale?.id ?? "new"}
           parties={parties}
-          catalog={items}
           companies={companies}
           selectedCompanyId={selectedCompanyId}
           initialSale={editSale ?? undefined}
@@ -1241,10 +1237,9 @@ function parseSaleNotes(notes: string | null | undefined): { items: any[]; payme
 }
 
 export function NewSaleForm({
-  parties, catalog, companies, selectedCompanyId, initialSale, initialParty, onClose, onSaved,
+  parties, companies, selectedCompanyId, initialSale, initialParty, onClose, onSaved,
 }: {
   parties: Party[];
-  catalog: Item[];
   companies: Company[];
   selectedCompanyId: string | null;
   initialSale?: SaleRow;
@@ -1394,15 +1389,21 @@ export function NewSaleForm({
     return c.totalStock ?? c.openingStock ?? 0;
   }
 
-  function catalogFor(search: string) {
-    let filtered = catalog;
-    if (selectedCompanyFilters.length > 0) {
-      filtered = filtered.filter((c) => selectedCompanyFilters.some((id) => (c as any).companyId === id));
-    }
-    if (!search.trim()) return filtered;
-    const q = search.toLowerCase();
-    return filtered.filter((c) => c.name.toLowerCase().includes(q) || (c.sku ?? "").toLowerCase().includes(q));
-  }
+  // Item picker — debounced server-side search instead of filtering a bulk-loaded catalog
+  // (a tenant with a few thousand items made that upfront fetch big enough to time out).
+  const [pickerResults, setPickerResults] = useState<Item[]>([]);
+  const activeItemName = activeItemRow ? (lineItems.find((i) => i.id === activeItemRow)?.name ?? "") : "";
+  useEffect(() => {
+    if (!activeItemRow) { setPickerResults([]); return; }
+    const t = setTimeout(() => {
+      api.searchItems({
+        companyId: selectedCompanyFilters.length > 0 ? selectedCompanyFilters.join(",") : undefined,
+        q: activeItemName || undefined,
+        take: 12,
+      }).then((r) => setPickerResults(r.items)).catch(() => setPickerResults([]));
+    }, 200);
+    return () => clearTimeout(t);
+  }, [activeItemRow, activeItemName, selectedCompanyFilters]);
 
   function openItemDrop(itemId: string, inputEl: HTMLElement) {
     const rowEl = inputEl.closest("tr");
@@ -1555,7 +1556,7 @@ export function NewSaleForm({
   }
 
   useEffect(() => {
-    function handleTablePaste(e: ClipboardEvent) {
+    async function handleTablePaste(e: ClipboardEvent) {
       if (!tableWrapRef.current) return;
       const text = e.clipboardData?.getData("text/plain") ?? "";
       if (!text.includes("\t") && !text.includes("\n")) return;
@@ -1567,6 +1568,10 @@ export function NewSaleForm({
       function isNum(s: string): boolean {
         return /^[^\d]*[\d]/.test(s);
       }
+
+      // Fetched fresh here (not kept in a permanently-loaded catalog) — this is an
+      // occasional, deliberate bulk action, not a per-render need.
+      const catalog = await api.getItems().catch(() => [] as Item[]);
 
       const rows = text.trim().split(/\r?\n/).map(r => r.split("\t").map(c => c.trim()));
       const parsed: LineItem[] = rows
@@ -1610,7 +1615,7 @@ export function NewSaleForm({
 
     document.addEventListener("paste", handleTablePaste);
     return () => document.removeEventListener("paste", handleTablePaste);
-  }, [catalog]);
+  }, []);
 
   function handleDiscountPct(val: string) {
     setDiscountPct(val);
@@ -1975,7 +1980,7 @@ export function NewSaleForm({
                     <span className="nsf-item-drop__hdr-col nsf-item-drop__hdr-col--stock">STOCK</span>
                     <span className="nsf-item-drop__hdr-col">LOCATION</span>
                   </div>
-                  {catalogFor(activeItem.name).slice(0, 12).map((c) => (
+                  {pickerResults.map((c) => (
                     <button
                       key={c.id}
                       type="button"
@@ -2010,7 +2015,7 @@ export function NewSaleForm({
                       <span className="nsf-item-drop__col nsf-item-drop__col--loc">–</span>
                     </button>
                   ))}
-                  {catalogFor(activeItem.name).length === 0 && (
+                  {pickerResults.length === 0 && (
                     <p className="nsf-item-drop__empty">No items found</p>
                   )}
                 </div>
@@ -2557,7 +2562,7 @@ export function NewSaleForm({
                 <span className="nsf-item-drop__hdr-col nsf-item-drop__hdr-col--stock">STOCK</span>
                 <span className="nsf-item-drop__hdr-col">LOCATION</span>
               </div>
-              {catalogFor(activeItem.name).slice(0, 12).map((c) => (
+              {pickerResults.map((c) => (
                 <button
                   key={c.id}
                   type="button"
@@ -2592,7 +2597,7 @@ export function NewSaleForm({
                   <span className="nsf-item-drop__col nsf-item-drop__col--loc">–</span>
                 </button>
               ))}
-              {catalogFor(activeItem.name).length === 0 && (
+              {pickerResults.length === 0 && (
                 <p className="nsf-item-drop__empty">No items found</p>
               )}
             </div>

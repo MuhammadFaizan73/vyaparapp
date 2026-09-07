@@ -9,7 +9,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../src/theme";
 import { api } from "../../src/auth";
 import { useTransactionSettings } from "../../src/useTransactionSettings";
-import type { Party, Item } from "@vyapar/api-client";
+import { getItems, loadItems, subscribeItems, type Item } from "../../src/itemsStore";
+import type { Party } from "@vyapar/api-client";
 
 type LineItem = { id: string; name: string; qty: number; unit: string; mrp: number; rate: number };
 
@@ -35,7 +36,7 @@ export default function NewDeliveryNoteScreen() {
   const { settings } = useTransactionSettings();
 
   const [parties, setParties] = useState<Party[]>([]);
-  const [catalog, setCatalog] = useState<Item[]>([]);
+  const [catalog, setCatalog] = useState<Item[]>(getItems());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -69,16 +70,22 @@ export default function NewDeliveryNoteScreen() {
   const [aiShowCatalog, setAiShowCatalog] = useState(false);
   const [editItemId, setEditItemId] = useState<string | null>(null);
 
+  // Catalog comes from the shared offline-capable cache (used by every item picker on
+  // mobile) rather than its own bulk fetch — this screen previously fetched independently
+  // and, unlike the other pickers, had no offline fallback at all if that fetch failed.
+  useEffect(() => {
+    loadItems();
+    return subscribeItems(() => setCatalog(getItems()));
+  }, []);
+
   useEffect(() => {
     async function init() {
       try {
-        const [ps, items, allTxns] = await Promise.all([
+        const [ps, allTxns] = await Promise.all([
           api.getParties(),
-          api.getItems(),
           api.getTransactionsByType("delivery_challan"),
         ]);
         setParties(ps);
-        setCatalog(items);
         setNoteNo(String(allTxns.length + (isEdit ? 0 : 1)));
         if (isEdit && id) {
           const txn = allTxns.find((t: any) => t.id === id);
