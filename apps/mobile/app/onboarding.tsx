@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView,
@@ -23,28 +23,6 @@ export default function OnboardingScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Phone → code verification. A phone number only ever gets a JWT after proving receipt
-  // of the SMS code — same gate for a brand-new signup and a returning user's login, since
-  // verify-otp reuses the exact find-or-create logic register() does.
-  const [step, setStep] = useState<"phone" | "code">("phone");
-  const [otp, setOtp] = useState("");
-  const [resendIn, setResendIn] = useState(0);
-  useEffect(() => {
-    if (resendIn <= 0) return;
-    const t = setInterval(() => setResendIn((s) => Math.max(0, s - 1)), 1000);
-    return () => clearInterval(t);
-  }, [resendIn]);
-
-  function otpErrorMessage(e: any, fallback: string): string {
-    const isTimeout = e?.code === "ECONNABORTED" || e?.message?.includes("timeout");
-    const isNetwork = e?.message === "Network Error";
-    const url = e?.config?.baseURL || e?.config?.url || "";
-    if (isTimeout) return `Connection timed out. Backend unreachable.\n${url}`;
-    if (isNetwork) return `Network error — backend server is down or wrong IP.\n${url}`;
-    const msg = e?.response?.data?.message || e?.message || fallback;
-    return `${msg}\n${url}`;
-  }
-
   async function handleContinue() {
     const cleaned = phone.replace(/\D/g, "");
     if (cleaned.length < 10) {
@@ -54,50 +32,24 @@ export default function OnboardingScreen() {
     setError("");
     setLoading(true);
     try {
-      await api.sendOtp({ countryCode: country.dial, phone: cleaned });
-      setStep("code");
-      setResendIn(30);
-    } catch (e: any) {
-      setError(otpErrorMessage(e, "Could not send verification code."));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleVerifyCode() {
-    if (otp.length < 4) {
-      setError("Enter the code sent to your phone");
-      return;
-    }
-    setError("");
-    setLoading(true);
-    try {
-      const cleaned = phone.replace(/\D/g, "");
-      const res = await api.verifyOtp({ countryCode: country.dial, phone: cleaned, otp });
+      const res = await api.register({ countryCode: country.dial, phone: cleaned });
       await saveToken(res.token);
       router.replace("/(tabs)" as never);
     } catch (e: any) {
-      setError(otpErrorMessage(e, "Incorrect or expired code."));
+      const isTimeout = e?.code === "ECONNABORTED" || e?.message?.includes("timeout");
+      const isNetwork = e?.message === "Network Error";
+      const url = e?.config?.baseURL || e?.config?.url || "";
+      if (isTimeout) {
+        setError(`Connection timed out. Backend unreachable.\n${url}`);
+      } else if (isNetwork) {
+        setError(`Network error — backend server is down or wrong IP.\n${url}`);
+      } else {
+        const msg = e?.response?.data?.message || e?.message || "Unknown error";
+        setError(`${msg}\n${url}`);
+      }
     } finally {
       setLoading(false);
     }
-  }
-
-  async function handleResend() {
-    setError("");
-    try {
-      const cleaned = phone.replace(/\D/g, "");
-      await api.resendOtp({ countryCode: country.dial, phone: cleaned });
-      setResendIn(30);
-    } catch (e: any) {
-      setError(otpErrorMessage(e, "Could not resend code."));
-    }
-  }
-
-  function changeNumber() {
-    setStep("phone");
-    setOtp("");
-    setError("");
   }
 
   return (
@@ -119,114 +71,69 @@ export default function OnboardingScreen() {
         </View>
 
         {/* Card */}
-        {step === "phone" && (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Get Started</Text>
-            <Text style={styles.cardSub}>Enter your business phone number to continue.</Text>
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Get Started</Text>
+          <Text style={styles.cardSub}>Enter your business phone number to continue.</Text>
 
-            {/* Country selector */}
-            <Text style={styles.label}>Country</Text>
-            <TouchableOpacity
-              style={styles.countryBtn}
-              onPress={() => setShowCountries(!showCountries)}
-            >
-              <Text style={styles.countryBtnText}>{country.name} ({country.dial})</Text>
-              <Text style={styles.chevron}>∨</Text>
-            </TouchableOpacity>
-            {showCountries && (
-              <View style={styles.countryDropdown}>
-                {COUNTRIES.map((c) => (
-                  <TouchableOpacity
-                    key={c.code}
-                    style={styles.countryItem}
-                    onPress={() => { setCountry(c); setShowCountries(false); }}
-                  >
-                    <Text style={[styles.countryItemText, c.code === country.code && styles.countryItemActive]}>
-                      {c.name} ({c.dial})
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-
-            {/* Phone input */}
-            <Text style={[styles.label, { marginTop: 16 }]}>Phone Number</Text>
-            <View style={styles.phoneRow}>
-              <View style={styles.dialPrefix}>
-                <Text style={styles.dialPrefixText}>{country.dial}</Text>
-              </View>
-              <TextInput
-                style={styles.phoneInput}
-                placeholder="3001234567"
-                placeholderTextColor={colors.textLight}
-                keyboardType="phone-pad"
-                value={phone}
-                onChangeText={setPhone}
-                maxLength={12}
-              />
+          {/* Country selector */}
+          <Text style={styles.label}>Country</Text>
+          <TouchableOpacity
+            style={styles.countryBtn}
+            onPress={() => setShowCountries(!showCountries)}
+          >
+            <Text style={styles.countryBtnText}>{country.name} ({country.dial})</Text>
+            <Text style={styles.chevron}>∨</Text>
+          </TouchableOpacity>
+          {showCountries && (
+            <View style={styles.countryDropdown}>
+              {COUNTRIES.map((c) => (
+                <TouchableOpacity
+                  key={c.code}
+                  style={styles.countryItem}
+                  onPress={() => { setCountry(c); setShowCountries(false); }}
+                >
+                  <Text style={[styles.countryItemText, c.code === country.code && styles.countryItemActive]}>
+                    {c.name} ({c.dial})
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
+          )}
 
-            {error ? <Text style={styles.error}>{error}</Text> : null}
-
-            <TouchableOpacity
-              style={[styles.btn, loading && { opacity: 0.7 }]}
-              onPress={handleContinue}
-              disabled={loading}
-            >
-              {loading
-                ? <ActivityIndicator color="#fff" />
-                : <Text style={styles.btnText}>Send verification code →</Text>
-              }
-            </TouchableOpacity>
-
-            <Text style={styles.disclaimer}>
-              By continuing you agree to our Terms of Service. Your data is securely synced across all your devices.
-            </Text>
-          </View>
-        )}
-
-        {step === "code" && (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Verify your number</Text>
-            <Text style={styles.cardSub}>Enter the code sent via SMS to {country.dial}{phone}.</Text>
-
-            <Text style={[styles.label, { marginTop: 16 }]}>Verification code</Text>
+          {/* Phone input */}
+          <Text style={[styles.label, { marginTop: 16 }]}>Phone Number</Text>
+          <View style={styles.phoneRow}>
+            <View style={styles.dialPrefix}>
+              <Text style={styles.dialPrefixText}>{country.dial}</Text>
+            </View>
             <TextInput
-              style={[styles.phoneInput, { textAlign: "center", letterSpacing: 4 }]}
-              placeholder="123456"
+              style={styles.phoneInput}
+              placeholder="3001234567"
               placeholderTextColor={colors.textLight}
-              keyboardType="number-pad"
-              value={otp}
-              onChangeText={(t) => setOtp(t.replace(/\D/g, ""))}
-              maxLength={8}
-              autoFocus
+              keyboardType="phone-pad"
+              value={phone}
+              onChangeText={setPhone}
+              maxLength={12}
             />
-
-            {error ? <Text style={styles.error}>{error}</Text> : null}
-
-            <TouchableOpacity
-              style={[styles.btn, loading && { opacity: 0.7 }]}
-              onPress={handleVerifyCode}
-              disabled={loading}
-            >
-              {loading
-                ? <ActivityIndicator color="#fff" />
-                : <Text style={styles.btnText}>Verify & continue</Text>
-              }
-            </TouchableOpacity>
-
-            <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 14 }}>
-              <TouchableOpacity onPress={changeNumber}>
-                <Text style={[styles.disclaimer, { textDecorationLine: "underline" }]}>Change number</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleResend} disabled={resendIn > 0}>
-                <Text style={[styles.disclaimer, resendIn === 0 && { textDecorationLine: "underline" }]}>
-                  {resendIn > 0 ? `Resend in ${resendIn}s` : "Resend code"}
-                </Text>
-              </TouchableOpacity>
-            </View>
           </View>
-        )}
+
+          {error ? <Text style={styles.error}>{error}</Text> : null}
+
+          <TouchableOpacity
+            style={[styles.btn, loading && { opacity: 0.7 }]}
+            onPress={handleContinue}
+            disabled={loading}
+          >
+            {loading
+              ? <ActivityIndicator color="#fff" />
+              : <Text style={styles.btnText}>Continue →</Text>
+            }
+          </TouchableOpacity>
+
+          <Text style={styles.disclaimer}>
+            By continuing you agree to our Terms of Service. Your data is securely synced across all your devices.
+          </Text>
+        </View>
 
         {/* Divider */}
         <View style={styles.dividerRow}>
