@@ -144,6 +144,47 @@ function trendingAddLabel(tab: TrendingTab): string {
   return tab === "parties" ? "+ New Party" : tab === "items" ? "+ New Item" : "+ New Sale";
 }
 
+// Current-calendar-month total for a txn type plus % change vs the prior month
+// (null when there's no prior-month total to compare against).
+function monthChange(txns: TxnRow[], type: string): { current: number; pct: number | null } {
+  const now = new Date();
+  const curM = now.getMonth(), curY = now.getFullYear();
+  const prevRef = new Date(curY, curM - 1, 1);
+  const prevM = prevRef.getMonth(), prevY = prevRef.getFullYear();
+  let current = 0, prev = 0;
+  for (const txn of txns) {
+    if (txn.type !== type) continue;
+    const d = new Date(txn.date);
+    if (d.getFullYear() === curY && d.getMonth() === curM) current += txn.total;
+    else if (d.getFullYear() === prevY && d.getMonth() === prevM) prev += txn.total;
+  }
+  return { current, pct: prev > 0 ? ((current - prev) / prev) * 100 : null };
+}
+
+function StatCard({ icon, iconColor, label, amount, pct }: {
+  icon: React.ComponentProps<typeof Ionicons>["name"];
+  iconColor: string;
+  label: string;
+  amount: number;
+  pct?: number | null;
+}) {
+  return (
+    <View style={t.statCard}>
+      <View style={t.statTop}>
+        <Ionicons name={icon} size={14} color={iconColor} />
+        <Text style={t.statLabel} numberOfLines={1}>{label}</Text>
+      </View>
+      <Text style={t.statAmt} numberOfLines={1}>Rs {amount.toLocaleString("en-PK")}</Text>
+      {pct != null ? (
+        <View style={t.statPctRow}>
+          <Ionicons name={pct < 0 ? "arrow-down" : "arrow-up"} size={11} color={pct < 0 ? colors.red : colors.green} />
+          <Text style={[t.statPct, { color: pct < 0 ? colors.red : colors.green }]}>{Math.abs(pct).toFixed(2)}%</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 function TrendingHome() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -194,6 +235,13 @@ function TrendingHome() {
     else router.push("/sale/new" as never);
   }
 
+  // Same receivable/payable split as StandardHome's To Receive/To Pay cards.
+  const youllGet = parties.filter((p) => (p.balance ?? 0) > 0).reduce((sum, p) => sum + (p.balance ?? 0), 0);
+  const youllGive = parties.filter((p) => (p.balance ?? 0) < 0).reduce((sum, p) => sum + Math.abs(p.balance ?? 0), 0);
+  const sale = monthChange(txns, "sale");
+  const purchase = monthChange(txns, "purchase");
+  const monthLabel = new Date().toLocaleString("en", { month: "short" });
+
   return (
     <View style={[s.screen, { paddingTop: insets.top }]}>
       {/* App bar */}
@@ -209,6 +257,19 @@ function TrendingHome() {
           <Ionicons name="arrow-redo-outline" size={21} color={colors.red} />
         </TouchableOpacity>
       </View>
+
+      {/* Swipeable stat cards: You'll Get, Sale (month), You'll Give, Purchase (month) */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={t.statScroll}
+        contentContainerStyle={t.statScrollContent}
+      >
+        <StatCard icon="arrow-down-circle" iconColor={colors.green} label="You'll Get" amount={youllGet} />
+        <StatCard icon="document-text" iconColor={colors.primary} label={`Sale (${monthLabel})`} amount={sale.current} pct={sale.pct} />
+        <StatCard icon="arrow-up-circle" iconColor={colors.orange} label="You'll Give" amount={youllGive} />
+        <StatCard icon="cart" iconColor={colors.primary} label={`Purchase (${monthLabel})`} amount={purchase.current} pct={purchase.pct} />
+      </ScrollView>
 
       {/* Tabs + New button */}
       <View style={t.tabRow}>
@@ -915,6 +976,21 @@ const t = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: "#e8ecf0",
   },
   companyName: { flex: 1, fontSize: 18, fontWeight: "700", color: colors.text },
+
+  statScroll: {
+    backgroundColor: "#fff",
+    borderBottomWidth: 1, borderBottomColor: "#e8ecf0",
+  },
+  statScrollContent: { paddingHorizontal: 12, paddingVertical: 12, gap: 10 },
+  statCard: {
+    width: 190, backgroundColor: "#fff", borderRadius: 12,
+    borderWidth: 1, borderColor: "#e8ecf0", padding: 14,
+  },
+  statTop: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 },
+  statLabel: { fontSize: 12.5, fontWeight: "600", color: colors.textMuted },
+  statAmt: { fontSize: 17, fontWeight: "700", color: colors.text },
+  statPctRow: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 6 },
+  statPct: { fontSize: 11.5, fontWeight: "700" },
 
   tabRow: {
     flexDirection: "row", gap: 10,
