@@ -5,6 +5,7 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../src/theme";
 import { clearToken, getRole, getPermissions } from "../../src/auth";
+import { useSettings } from "../../src/useSettings";
 
 type IoniconsName = React.ComponentProps<typeof Ionicons>["name"];
 type ExpandedSection = "sale" | "purchase" | "utilities" | null;
@@ -101,6 +102,7 @@ function isVisible(item: MenuRow, role: string, permissions: string[] | null): b
 export default function MenuScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { settings } = useSettings();
   const [role, setRole] = useState("owner");
   const [permissions, setPermissions] = useState<string[] | null>(null);
   const [expanded, setExpanded] = useState<ExpandedSection>("sale");
@@ -210,7 +212,13 @@ export default function MenuScreen() {
         <Text style={styles.appBarTitle}>Menu</Text>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.body}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.body,
+          settings.appTheme !== "modern" && styles.bodyCompactNav,
+        ]}
+      >
         {/* Profile card */}
         <View style={styles.profileCard}>
           <View style={styles.profileAvatar}>
@@ -292,6 +300,7 @@ const styles = StyleSheet.create({
   },
   appBarTitle: { fontSize: 17, fontWeight: "600", color: colors.text },
   body: { paddingBottom: 110 },
+  bodyCompactNav: { paddingBottom: 40 },
 
   profileCard: {
     backgroundColor: "#fff", marginHorizontal: 16, marginTop: 16,

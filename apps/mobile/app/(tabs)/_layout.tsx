@@ -129,10 +129,14 @@ function AddTransactionSheet({ visible, onClose }: { visible: boolean; onClose: 
    via the Home screen's hamburger/grid instead of bottom-bar buttons. ── */
 function CustomTabBar({ theme, onAddPress }: { theme: string; onAddPress: () => void }) {
   const insets = useSafeAreaInsets();
+  // Capped rather than the raw safe-area value — some Android gesture-nav devices report
+  // a much larger inset than this bar's own compact content needs, which read as a big
+  // dead gap under the buttons.
+  const bottomPad = Math.min(insets.bottom, 12) || 8;
 
   if (theme === "trending") {
     return (
-      <View style={[styles.customBar, styles.trendingBar, { paddingBottom: insets.bottom || 8 }]}>
+      <View style={[styles.customBar, styles.trendingBar, { paddingBottom: bottomPad }]}>
         <TouchableOpacity style={[styles.trendingPill, { backgroundColor: colors.primary }]} onPress={() => router.push("/purchase/new" as never)}>
           <Text style={styles.trendingPillTxt}>Add Purchase</Text>
         </TouchableOpacity>
@@ -155,7 +159,7 @@ function CustomTabBar({ theme, onAddPress }: { theme: string; onAddPress: () => 
     { label: "Pay-Out",  icon: "arrow-up-circle-outline", route: "/payment-out" },
   ];
   return (
-    <View style={[styles.customBar, { paddingBottom: insets.bottom || 8 }]}>
+    <View style={[styles.customBar, { paddingBottom: bottomPad }]}>
       {left.map((it) => (
         <TouchableOpacity key={it.label} style={styles.customBarItem} onPress={() => router.push(it.route as never)}>
           <Ionicons name={it.icon} size={22} color={colors.textMuted} />
