@@ -11,6 +11,10 @@ export type MobileSettings = {
   enablePasscode: boolean;
   currency: string;
   amountDecimals: number;
+  // "standard" | "trending" | "modern" — only "standard" has an actual implementation so
+  // far (the rebuilt Home screen/bottom nav); the other two just persist the preference
+  // until their own designs are built.
+  appTheme: string;
   // Transaction
   invoiceBillNumber: boolean;
   cashSaleByDefault: boolean;
@@ -69,6 +73,7 @@ export const DEFAULT_SETTINGS: MobileSettings = {
   enablePasscode: false,
   currency: "Rs",
   amountDecimals: 2,
+  appTheme: "standard",
   invoiceBillNumber: true,
   cashSaleByDefault: false,
   billingNameOfParties: false,

@@ -1,8 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import {
   View, Text, TextInput, TouchableOpacity, FlatList,
-  StyleSheet, ActivityIndicator, RefreshControl, Modal,
-  ScrollView, Pressable, Alert,
+  StyleSheet, ActivityIndicator, RefreshControl, ScrollView, Modal, Pressable, Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
@@ -14,11 +13,301 @@ import { api, getPermissions, getRole, getStaffName, getStaffContact, getMemberI
 import { canEditSale } from "../../src/permissions";
 import { setHandoffTxn } from "../../src/txnHandoff";
 import { buildInvoiceHtml } from "../../src/invoiceHtml";
-import { useInvoiceHtmlOptions } from "../../src/useSettings";
-import type { Transaction, Party } from "@vyapar/api-client";
+import { useInvoiceHtmlOptions, useSettings } from "../../src/useSettings";
+import { getItems as getCachedItems, loadItems, subscribeItems, type Item } from "../../src/itemsStore";
+import type { Party, Transaction } from "@vyapar/api-client";
 
-type Tab = "txn" | "party";
+export default function HomeScreen() {
+  const { settings, loaded } = useSettings();
+  if (!loaded) {
+    return (
+      <View style={s.center}>
+        <ActivityIndicator color={colors.primary} size="large" />
+      </View>
+    );
+  }
+  if (settings.appTheme === "trending") return <TrendingHome />;
+  if (settings.appTheme === "modern") return <ModernHome />;
+  return <StandardHome />;
+}
+
+/* ══════════════════════════════ Standard ══════════════════════════════ */
+
+type GridItem = { label: string; icon: React.ComponentProps<typeof Ionicons>["name"]; route: string };
+
+const GRID_ITEMS: GridItem[] = [
+  { label: "Sale list",     icon: "document-text-outline", route: "/sale" },
+  { label: "Purchase List", icon: "cart-outline",           route: "/purchase" },
+  { label: "Stock Items",   icon: "list-outline",           route: "/items" },
+  { label: "Parties",       icon: "people-outline",         route: "/party" },
+];
+
+function StandardHome() {
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
+
+  const [parties, setParties] = useState<Party[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      setParties(await api.getParties());
+    } catch { /* offline */ }
+  }, []);
+
+  useFocusEffect(useCallback(() => {
+    setLoading(true);
+    load().finally(() => setLoading(false));
+  }, [load]));
+
+  async function onRefresh() {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  }
+
+  // Same reduce logic as packages/ui/src/screens/HomeScreen.tsx's Total Receivable/Payable
+  // cards — positive party balance = they owe us, negative = we owe them.
+  const receivable = parties.filter((p) => (p.balance ?? 0) > 0).reduce((sum, p) => sum + (p.balance ?? 0), 0);
+  const payable = parties.filter((p) => (p.balance ?? 0) < 0).reduce((sum, p) => sum + Math.abs(p.balance ?? 0), 0);
+
+  return (
+    <View style={[s.screen, { paddingTop: insets.top }]}>
+      {/* App bar */}
+      <View style={s.appBar}>
+        <TouchableOpacity style={s.iconBtn} onPress={() => router.push("/menu" as never)} hitSlop={8}>
+          <Ionicons name="menu" size={24} color="#fff" />
+        </TouchableOpacity>
+        <View style={s.searchBar}>
+          <Ionicons name="search-outline" size={16} color="rgba(255,255,255,0.85)" />
+          <Text style={s.searchPlaceholder}>Search Transactions</Text>
+        </View>
+        <TouchableOpacity style={s.iconBtn} hitSlop={8}>
+          <Ionicons name="notifications-outline" size={22} color="#fff" />
+        </TouchableOpacity>
+        <TouchableOpacity style={s.iconBtn} hitSlop={8}>
+          <Ionicons name="arrow-redo-outline" size={21} color="#fff" />
+        </TouchableOpacity>
+      </View>
+
+      {loading ? (
+        <View style={s.center}>
+          <ActivityIndicator color={colors.primary} size="large" />
+        </View>
+      ) : (
+        <ScrollView
+          contentContainerStyle={s.body}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+        >
+          {/* To Receive / To Pay */}
+          <View style={s.balanceRow}>
+            <View style={[s.balanceCard, { backgroundColor: colors.greenBg }]}>
+              <Text style={s.balanceLabel}>To Receive</Text>
+              <Text style={[s.balanceAmt, { color: colors.green }]}>Rs {receivable.toLocaleString("en-PK")}</Text>
+            </View>
+            <View style={[s.balanceCard, { backgroundColor: "#fdeaea" }]}>
+              <Text style={s.balanceLabel}>To Pay</Text>
+              <Text style={[s.balanceAmt, { color: colors.red }]}>Rs {payable.toLocaleString("en-PK")}</Text>
+            </View>
+          </View>
+
+          {/* 2x2 shortcut grid */}
+          <View style={s.grid}>
+            {GRID_ITEMS.map((item) => (
+              <TouchableOpacity key={item.label} style={s.gridItem} onPress={() => router.push(item.route as never)} activeOpacity={0.8}>
+                <View style={s.gridIconWrap}>
+                  <Ionicons name={item.icon} size={26} color={colors.primary} />
+                </View>
+                <Text style={s.gridLabel}>{item.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </ScrollView>
+      )}
+    </View>
+  );
+}
+
+/* ══════════════════════════════ Trending ══════════════════════════════ */
+
+type TrendingTab = "parties" | "transactions" | "items";
 type TxnRow = Transaction & { partyName: string };
+
+const TRENDING_TABS: { key: TrendingTab; label: string }[] = [
+  { key: "parties", label: "Parties" },
+  { key: "transactions", label: "Transactions" },
+  { key: "items", label: "Items" },
+];
+
+function trendingAddLabel(tab: TrendingTab): string {
+  return tab === "parties" ? "+ New Party" : tab === "items" ? "+ New Item" : "+ New Sale";
+}
+
+function TrendingHome() {
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
+
+  const [tab, setTab] = useState<TrendingTab>("parties");
+  const [companyName, setCompanyName] = useState("My Company");
+  const [parties, setParties] = useState<Party[]>([]);
+  const [txns, setTxns] = useState<TxnRow[]>([]);
+  const [items, setItems] = useState<Item[]>(getCachedItems());
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const [allParties, allTxns, tenant] = await Promise.all([
+        api.getParties(),
+        api.getAllTransactions(),
+        api.getTenant(),
+      ]);
+      const map: Record<string, string> = {};
+      allParties.forEach((p) => { map[p.id] = p.name; });
+      setParties(allParties);
+      setTxns(allTxns.map((t) => ({ ...t, partyName: map[t.partyId] ?? "–" })));
+      setCompanyName(tenant.companyName || tenant.phone || "My Company");
+      await loadItems();
+      setItems(getCachedItems());
+    } catch { /* offline */ }
+  }, []);
+
+  useFocusEffect(useCallback(() => {
+    setLoading(true);
+    load().finally(() => setLoading(false));
+  }, [load]));
+
+  // itemsStore is a shared cache — pick up edits made from the Items tab without
+  // re-fetching from the network.
+  useFocusEffect(useCallback(() => subscribeItems(() => setItems(getCachedItems())), []));
+
+  async function onRefresh() {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  }
+
+  function handleAddPress() {
+    if (tab === "parties") router.push("/party/new" as never);
+    else if (tab === "items") router.push("/items/new" as never);
+    else router.push("/sale/new" as never);
+  }
+
+  return (
+    <View style={[s.screen, { paddingTop: insets.top }]}>
+      {/* App bar */}
+      <View style={t.appBar}>
+        <TouchableOpacity style={s.iconBtn} onPress={() => router.push("/menu" as never)} hitSlop={8}>
+          <Ionicons name="menu" size={24} color={colors.text} />
+        </TouchableOpacity>
+        <Text style={t.companyName} numberOfLines={1}>{companyName}</Text>
+        <TouchableOpacity style={s.iconBtn} hitSlop={8}>
+          <Ionicons name="notifications-outline" size={22} color={colors.text} />
+        </TouchableOpacity>
+        <TouchableOpacity style={s.iconBtn} hitSlop={8}>
+          <Ionicons name="arrow-redo-outline" size={21} color={colors.red} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Tabs + New button */}
+      <View style={t.tabRow}>
+        {TRENDING_TABS.map((tb) => (
+          <TouchableOpacity
+            key={tb.key}
+            style={[t.tabPill, tab === tb.key && t.tabPillActive]}
+            onPress={() => setTab(tb.key)}
+          >
+            <Text style={[t.tabTxt, tab === tb.key && t.tabTxtActive]}>{tb.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      <View style={t.newBtnRow}>
+        <TouchableOpacity style={t.newBtn} onPress={handleAddPress}>
+          <Text style={t.newBtnTxt}>{trendingAddLabel(tab)}</Text>
+        </TouchableOpacity>
+      </View>
+
+      {loading ? (
+        <View style={s.center}>
+          <ActivityIndicator color={colors.primary} size="large" />
+        </View>
+      ) : tab === "parties" ? (
+        <FlatList
+          data={parties}
+          keyExtractor={(p) => p.id}
+          contentContainerStyle={t.list}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+          renderItem={({ item }) => (
+            <TouchableOpacity style={t.row} onPress={() => router.push(`/party/${item.id}` as never)}>
+              <View style={t.rowAvatar}><Text style={t.rowAvatarTxt}>{item.name[0]?.toUpperCase()}</Text></View>
+              <View style={{ flex: 1 }}>
+                <Text style={t.rowTitle} numberOfLines={1}>{item.name}</Text>
+                {item.phone ? <Text style={t.rowSub}>{item.phone}</Text> : null}
+              </View>
+              <Text style={[t.rowAmt, { color: (item.balance ?? 0) > 0 ? colors.red : colors.green }]}>
+                Rs {Math.abs(item.balance ?? 0).toLocaleString("en-PK")}
+              </Text>
+            </TouchableOpacity>
+          )}
+          ListEmptyComponent={<EmptyState icon="people-outline" title="Add Parties" sub="Add customers (parties) of your business" />}
+        />
+      ) : tab === "transactions" ? (
+        <FlatList
+          data={txns}
+          keyExtractor={(r) => r.id}
+          contentContainerStyle={t.list}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+          renderItem={({ item }) => (
+            <TouchableOpacity style={t.row} onPress={() => router.push(`/txn/${item.id}` as never)}>
+              <View style={{ flex: 1 }}>
+                <Text style={t.rowTitle} numberOfLines={1}>{item.partyName}</Text>
+                <Text style={t.rowSub}>{item.type.replace(/_/g, " ")}</Text>
+              </View>
+              <Text style={[t.rowAmt, { color: item.balance > 0 ? colors.red : colors.textMuted }]}>
+                Rs {item.total.toLocaleString("en-PK")}
+              </Text>
+            </TouchableOpacity>
+          )}
+          ListEmptyComponent={<EmptyState icon="receipt-outline" title="Add Transactions" sub="Record sales, purchases and payments" />}
+        />
+      ) : (
+        <FlatList
+          data={items}
+          keyExtractor={(i) => i.id}
+          contentContainerStyle={t.list}
+          renderItem={({ item }) => (
+            <TouchableOpacity style={t.row} onPress={() => router.push(`/items/${item.id}` as never)}>
+              <View style={{ flex: 1 }}>
+                <Text style={t.rowTitle} numberOfLines={1}>{item.name}</Text>
+                {item.sku ? <Text style={t.rowSub}>{item.sku}</Text> : null}
+              </View>
+              <Text style={t.rowAmt}>{item.totalStock ?? item.openingStock ?? 0} {item.unit ?? ""}</Text>
+            </TouchableOpacity>
+          )}
+          ListEmptyComponent={<EmptyState icon="cube-outline" title="Add Items" sub="Add products/services you sell or stock" />}
+        />
+      )}
+    </View>
+  );
+}
+
+function EmptyState({ icon, title, sub }: { icon: React.ComponentProps<typeof Ionicons>["name"]; title: string; sub: string }) {
+  return (
+    <View style={t.emptyWrap}>
+      <Ionicons name={icon} size={52} color={colors.border} />
+      <Text style={t.emptyTitle}>{title}</Text>
+      <Text style={t.emptySub}>{sub}</Text>
+    </View>
+  );
+}
+
+/* ══════════════════════════════ Modern ══════════════════════════════
+   The app's original Home screen design (Transaction/Party toggle, Quick Links,
+   search, transaction/party list, floating "Add New Sale" FAB), kept as a selectable
+   theme rather than replaced. ── */
+
+type ModernTab = "txn" | "party";
 type BadgeCfg = { label: string; bg: string; fg: string };
 
 function getBadge(type: string, balance: number): BadgeCfg {
@@ -45,15 +334,16 @@ function fmtAmt(n: number) {
   return n.toLocaleString("en-PK", { minimumFractionDigits: 4, maximumFractionDigits: 4 });
 }
 
-// Only Sale has a mobile creation/edit screen today — other types can still be viewed and
-// exported, but editing stays a desktop-only action until those screens exist on mobile too.
-const EDITABLE_TYPES = new Set(["sale"]);
+// sale/payment_in have mobile creation/edit screens today — other types can still be
+// viewed and exported, but editing stays a desktop-only action until those screens exist
+// on mobile too. Matches app/txn/[id].tsx's own EDITABLE_TYPES.
+const MODERN_EDITABLE_TYPES = new Set(["sale", "payment_in"]);
 
-// Hoisted to module scope (not defined inside HomeScreen) — a component redefined on every
+// Hoisted to module scope (not defined inside ModernHome) — a component redefined on every
 // render of its parent gets a new function identity each time, so React treats it as a
 // different component type and remounts every visible FlatList row on each keystroke in the
 // search box instead of diffing them normally.
-function TxnCard({ item, permissions, memberId, canDelete, onChanged }: {
+function ModernTxnCard({ item, permissions, memberId, canDelete, onChanged }: {
   item: TxnRow; permissions: string[] | null; memberId: string | null; canDelete: boolean; onChanged: () => void;
 }) {
   const router = useRouter();
@@ -122,60 +412,60 @@ function TxnCard({ item, permissions, memberId, canDelete, onChanged }: {
   }
 
   return (
-    <TouchableOpacity style={s.card} onPress={openDetail} activeOpacity={0.8}>
-      <View style={s.cardTop}>
+    <TouchableOpacity style={m.card} onPress={openDetail} activeOpacity={0.8}>
+      <View style={m.cardTop}>
         <View style={{ flex: 1 }}>
-          <Text style={s.cardParty} numberOfLines={1}>{item.partyName}</Text>
-          <View style={[s.badge, { backgroundColor: badge.bg }]}>
-            <Text style={[s.badgeTxt, { color: badge.fg }]}>{badge.label}</Text>
+          <Text style={m.cardParty} numberOfLines={1}>{item.partyName}</Text>
+          <View style={[m.badge, { backgroundColor: badge.bg }]}>
+            <Text style={[m.badgeTxt, { color: badge.fg }]}>{badge.label}</Text>
           </View>
         </View>
         <View style={{ alignItems: "flex-end" }}>
-          {item.number ? <Text style={s.cardNum}>#{item.number}</Text> : null}
-          <Text style={s.cardDate}>{fmtDate(item.date)}</Text>
+          {item.number ? <Text style={m.cardNum}>#{item.number}</Text> : null}
+          <Text style={m.cardDate}>{fmtDate(item.date)}</Text>
         </View>
       </View>
-      <View style={s.cardMid}>
+      <View style={m.cardMid}>
         <View>
-          <Text style={s.amtLbl}>Total</Text>
-          <Text style={s.amtVal}>Rs {fmtAmt(item.total)}</Text>
+          <Text style={m.amtLbl}>Total</Text>
+          <Text style={m.amtVal}>Rs {fmtAmt(item.total)}</Text>
         </View>
         <View>
-          <Text style={s.amtLbl}>Balance</Text>
-          <Text style={[s.amtVal, item.balance > 0 && { color: "#dc2626" }]}>
+          <Text style={m.amtLbl}>Balance</Text>
+          <Text style={[m.amtVal, item.balance > 0 && { color: "#dc2626" }]}>
             Rs {fmtAmt(item.balance)}
           </Text>
         </View>
-        <View style={s.cardActions}>
-          <TouchableOpacity style={s.actionBtn} hitSlop={8} onPress={handleDownload} disabled={busy !== null}>
+        <View style={m.cardActions}>
+          <TouchableOpacity style={m.actionBtn} hitSlop={8} onPress={handleDownload} disabled={busy !== null}>
             {busy === "download" ? <ActivityIndicator size="small" color={colors.textMuted} /> : <Ionicons name="print-outline" size={18} color={colors.textMuted} />}
           </TouchableOpacity>
-          <TouchableOpacity style={s.actionBtn} hitSlop={8} onPress={handleShare} disabled={busy !== null}>
+          <TouchableOpacity style={m.actionBtn} hitSlop={8} onPress={handleShare} disabled={busy !== null}>
             {busy === "share" ? <ActivityIndicator size="small" color={colors.textMuted} /> : <Ionicons name="share-outline" size={18} color={colors.textMuted} />}
           </TouchableOpacity>
-          <TouchableOpacity style={s.actionBtn} hitSlop={8} onPress={() => setMenuOpen(true)} disabled={busy !== null}>
+          <TouchableOpacity style={m.actionBtn} hitSlop={8} onPress={() => setMenuOpen(true)} disabled={busy !== null}>
             <Ionicons name="ellipsis-vertical" size={18} color={colors.textMuted} />
           </TouchableOpacity>
         </View>
       </View>
 
       <Modal visible={menuOpen} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setMenuOpen(false)}>
-        <Pressable style={s.menuOverlay} onPress={() => setMenuOpen(false)}>
-          <View style={s.menuSheet}>
-            <TouchableOpacity style={s.menuRow} onPress={() => { setMenuOpen(false); openDetail(); }}>
+        <Pressable style={m.menuOverlay} onPress={() => setMenuOpen(false)}>
+          <View style={m.menuSheet}>
+            <TouchableOpacity style={m.menuRow} onPress={() => { setMenuOpen(false); openDetail(); }}>
               <Ionicons name="eye-outline" size={19} color={colors.text} />
-              <Text style={s.menuLabel}>View</Text>
+              <Text style={m.menuLabel}>View</Text>
             </TouchableOpacity>
-            {canEdit && EDITABLE_TYPES.has(item.type) && (
-              <TouchableOpacity style={s.menuRow} onPress={handleEdit}>
+            {canEdit && MODERN_EDITABLE_TYPES.has(item.type) && (
+              <TouchableOpacity style={m.menuRow} onPress={handleEdit}>
                 <Ionicons name="create-outline" size={19} color={colors.text} />
-                <Text style={s.menuLabel}>Edit</Text>
+                <Text style={m.menuLabel}>Edit</Text>
               </TouchableOpacity>
             )}
             {canDelete && (
-              <TouchableOpacity style={s.menuRow} onPress={handleDelete}>
+              <TouchableOpacity style={m.menuRow} onPress={handleDelete}>
                 <Ionicons name="trash-outline" size={19} color="#dc2626" />
-                <Text style={[s.menuLabel, { color: "#dc2626" }]}>Delete</Text>
+                <Text style={[m.menuLabel, { color: "#dc2626" }]}>Delete</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -185,38 +475,37 @@ function TxnCard({ item, permissions, memberId, canDelete, onChanged }: {
   );
 }
 
-function PartyCard({ item, onPress }: { item: Party; onPress: () => void }) {
+function ModernPartyCard({ item, onPress }: { item: Party; onPress: () => void }) {
   const bal = item.balance ?? 0;
   return (
-    <TouchableOpacity style={s.card} onPress={onPress} activeOpacity={0.8}>
-      <View style={s.partyRow}>
-        <View style={s.partyAvatar}>
-          <Text style={s.partyAvatarTxt}>{item.name[0]?.toUpperCase()}</Text>
+    <TouchableOpacity style={m.card} onPress={onPress} activeOpacity={0.8}>
+      <View style={m.partyRow}>
+        <View style={m.partyAvatar}>
+          <Text style={m.partyAvatarTxt}>{item.name[0]?.toUpperCase()}</Text>
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={s.partyName}>{item.name}</Text>
-          {item.phone ? <Text style={s.partyPhone}>{item.phone}</Text> : null}
+          <Text style={m.partyName}>{item.name}</Text>
+          {item.phone ? <Text style={m.partyPhone}>{item.phone}</Text> : null}
         </View>
         <View style={{ alignItems: "flex-end" }}>
-          <Text style={[s.partyBal, { color: bal > 0 ? "#dc2626" : bal < 0 ? "#16a34a" : colors.textMuted }]}>
+          <Text style={[m.partyBal, { color: bal > 0 ? "#dc2626" : bal < 0 ? "#16a34a" : colors.textMuted }]}>
             Rs {Math.abs(bal).toLocaleString("en-PK")}
           </Text>
-          <Text style={s.partyBalLbl}>{bal > 0 ? "You'll receive" : bal < 0 ? "You'll pay" : "Settled"}</Text>
+          <Text style={m.partyBalLbl}>{bal > 0 ? "You'll receive" : bal < 0 ? "You'll pay" : "Settled"}</Text>
         </View>
       </View>
     </TouchableOpacity>
   );
 }
 
-/* ── Add Transaction bottom-sheet data ── */
-type TxnTypeItem = {
+type ModernTxnTypeItem = {
   label: string;
   icon: React.ComponentProps<typeof Ionicons>["name"];
   route?: string;
   iconBg: string;
 };
 
-const TXN_SECTIONS: Array<{ title: string; items: TxnTypeItem[] }> = [
+const MODERN_TXN_SECTIONS: Array<{ title: string; items: ModernTxnTypeItem[] }> = [
   {
     title: "Sale Transactions",
     items: [
@@ -232,29 +521,31 @@ const TXN_SECTIONS: Array<{ title: string; items: TxnTypeItem[] }> = [
   {
     title: "Purchase Transactions",
     items: [
-      { label: "Purchase",          icon: "cart-outline",               route: undefined, iconBg: "#dcfce7" },
-      { label: "Payment-Out",       icon: "arrow-up-circle-outline",    route: undefined, iconBg: "#fee2e2" },
-      { label: "Purchase Return",   icon: "return-up-back-outline",     route: undefined, iconBg: "#dcfce7" },
-      { label: "Purchase Order",    icon: "clipboard-outline",          route: undefined, iconBg: "#dcfce7" },
+      // Purchase/Payment-Out were previously stubbed ("Soon") even though these screens
+      // already existed — wired here the same way Standard/Trending's shared Add sheet was.
+      { label: "Purchase",          icon: "cart-outline",               route: "/purchase/new",    iconBg: "#dcfce7" },
+      { label: "Payment-Out",       icon: "arrow-up-circle-outline",    route: "/payment-out/new", iconBg: "#fee2e2" },
+      { label: "Purchase Return",   icon: "return-up-back-outline",     route: undefined,          iconBg: "#dcfce7" },
+      { label: "Purchase Order",    icon: "clipboard-outline",          route: undefined,          iconBg: "#dcfce7" },
     ],
   },
   {
     title: "Other Transactions",
     items: [
-      { label: "Expenses",     icon: "wallet-outline",    route: undefined, iconBg: "#ede9fe" },
-      { label: "P2P Transfer", icon: "swap-horizontal-outline", route: undefined, iconBg: "#fef3c7" },
+      { label: "Expenses",     icon: "wallet-outline",           route: "/expense/new", iconBg: "#ede9fe" },
+      { label: "P2P Transfer", icon: "swap-horizontal-outline",  route: undefined,      iconBg: "#fef3c7" },
     ],
   },
 ];
 
-type MoreOption = {
+type ModernMoreOption = {
   label: string;
   icon: React.ComponentProps<typeof Ionicons>["name"];
   route?: string;
   premium?: boolean;
 };
 
-const MORE_OPTIONS: MoreOption[] = [
+const MODERN_MORE_OPTIONS: ModernMoreOption[] = [
   { label: "Bank Accounts",   icon: "business-outline",        route: "/cash-bank" },
   { label: "Day Book",        icon: "book-outline",            route: "/reports/day-book" },
   { label: "All Txns Report", icon: "document-text-outline",   route: "/reports" },
@@ -264,11 +555,11 @@ const MORE_OPTIONS: MoreOption[] = [
   { label: "Print Settings",  icon: "print-outline" },
 ];
 
-export default function HomeScreen() {
+function ModernHome() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  const [tab, setTab] = useState<Tab>("txn");
+  const [tab, setTab] = useState<ModernTab>("txn");
   const [txns, setTxns] = useState<TxnRow[]>([]);
   const [parties, setParties] = useState<Party[]>([]);
   const [loading, setLoading] = useState(true);
@@ -325,7 +616,7 @@ export default function HomeScreen() {
     setRefreshing(false);
   }
 
-  function handleTxnTypePress(item: TxnTypeItem) {
+  function handleTxnTypePress(item: ModernTxnTypeItem) {
     setShowAddTxn(false);
     if (item.route) {
       router.push(item.route as never);
@@ -340,90 +631,85 @@ export default function HomeScreen() {
     !q || p.name.toLowerCase().includes(q) || (p.phone ?? "").includes(q)
   );
 
-
   return (
     <View style={[s.screen, { paddingTop: insets.top }]}>
       {/* App bar */}
-      <View style={s.appBar}>
-        <View style={s.appBarLeft}>
-          <View style={s.avatar}>
-            <Text style={s.avatarTxt}>{(staffLabel ?? companyName)[0]?.toUpperCase()}</Text>
+      <View style={m.appBar}>
+        <View style={m.appBarLeft}>
+          <View style={m.avatar}>
+            <Text style={m.avatarTxt}>{(staffLabel ?? companyName)[0]?.toUpperCase()}</Text>
           </View>
-          <Text style={s.companyName} numberOfLines={1}>{staffLabel ?? companyName}</Text>
+          <Text style={m.companyName} numberOfLines={1}>{staffLabel ?? companyName}</Text>
         </View>
-        <View style={s.appBarRight}>
-          <TouchableOpacity style={s.filterBtn}>
+        <View style={m.appBarRight}>
+          <TouchableOpacity style={m.filterBtn}>
             <Ionicons name="funnel" size={14} color="#fff" />
           </TouchableOpacity>
-          <TouchableOpacity style={s.iconBtn}>
+          <TouchableOpacity style={m.iconBtn} onPress={() => router.push("/menu" as never)}>
             <Ionicons name="notifications-outline" size={22} color={colors.text} />
           </TouchableOpacity>
-          <TouchableOpacity style={s.iconBtn}>
+          <TouchableOpacity style={m.iconBtn} onPress={() => router.push("/settings" as never)}>
             <Ionicons name="settings-outline" size={22} color={colors.text} />
           </TouchableOpacity>
         </View>
       </View>
 
       {/* Tab toggle */}
-      <View style={s.tabRow}>
+      <View style={m.tabRow}>
         <TouchableOpacity
-          style={[s.tabBtn, tab === "txn" && s.tabBtnActive]}
+          style={[m.tabBtn, tab === "txn" && m.tabBtnActive]}
           onPress={() => setTab("txn")}
         >
-          <Text style={[s.tabTxt, tab === "txn" && s.tabTxtActive]}>Transaction Details</Text>
+          <Text style={[m.tabTxt, tab === "txn" && m.tabTxtActive]}>Transaction Details</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[s.tabBtn, tab === "party" && s.tabBtnActive]}
+          style={[m.tabBtn, tab === "party" && m.tabBtnActive]}
           onPress={() => setTab("party")}
         >
-          <Text style={[s.tabTxt, tab === "party" && s.tabTxtActive]}>Party Details</Text>
+          <Text style={[m.tabTxt, tab === "party" && m.tabTxtActive]}>Party Details</Text>
         </TouchableOpacity>
       </View>
 
       {/* Quick Links */}
-      <View style={s.quickLinks}>
-        <Text style={s.quickLinksTitle}>Quick Links</Text>
-        <View style={s.quickLinksRow}>
-          {/* Add Txn — red */}
-          <TouchableOpacity style={s.quickItem} onPress={() => setShowAddTxn(true)}>
-            <View style={[s.quickIconBox, { backgroundColor: "#ff3d5a" }]}>
+      <View style={m.quickLinks}>
+        <Text style={m.quickLinksTitle}>Quick Links</Text>
+        <View style={m.quickLinksRow}>
+          <TouchableOpacity style={m.quickItem} onPress={() => setShowAddTxn(true)}>
+            <View style={[m.quickIconBox, { backgroundColor: "#ff3d5a" }]}>
               <Ionicons name="receipt-outline" size={24} color="#fff" />
-              <View style={s.quickAddBadge}><Ionicons name="add" size={10} color="#fff" /></View>
+              <View style={m.quickAddBadge}><Ionicons name="add" size={10} color="#fff" /></View>
             </View>
-            <Text style={s.quickLabel}>Add Txn</Text>
+            <Text style={m.quickLabel}>Add Txn</Text>
           </TouchableOpacity>
-          {/* Parties — teal */}
-          <TouchableOpacity style={s.quickItem} onPress={() => router.push("/party" as never)}>
-            <View style={[s.quickIconBox, { backgroundColor: "#0f5a72" }]}>
+          <TouchableOpacity style={m.quickItem} onPress={() => router.push("/party" as never)}>
+            <View style={[m.quickIconBox, { backgroundColor: "#0f5a72" }]}>
               <Ionicons name="people-outline" size={24} color="#fff" />
             </View>
-            <Text style={s.quickLabel}>Parties</Text>
+            <Text style={m.quickLabel}>Parties</Text>
           </TouchableOpacity>
-          {/* Sale Report — blue */}
-          <TouchableOpacity style={s.quickItem} onPress={() => router.push("/reports/sale" as never)}>
-            <View style={[s.quickIconBox, { backgroundColor: "#4a9fd4" }]}>
+          <TouchableOpacity style={m.quickItem} onPress={() => router.push("/reports/sale" as never)}>
+            <View style={[m.quickIconBox, { backgroundColor: "#4a9fd4" }]}>
               <Ionicons name="document-text-outline" size={22} color="#fff" />
               <Ionicons name="stats-chart" size={12} color="#fff" style={{ position: "absolute", bottom: 8, right: 8 }} />
             </View>
-            <Text style={s.quickLabel}>Sale Report</Text>
+            <Text style={m.quickLabel}>Sale Report</Text>
           </TouchableOpacity>
-          {/* Show All — blue with arrow circle */}
-          <TouchableOpacity style={s.quickItem} onPress={() => setShowMoreOptions(true)}>
-            <View style={[s.quickIconBox, { backgroundColor: "#4a9fd4" }]}>
-              <View style={s.quickArrowCircle}>
+          <TouchableOpacity style={m.quickItem} onPress={() => setShowMoreOptions(true)}>
+            <View style={[m.quickIconBox, { backgroundColor: "#4a9fd4" }]}>
+              <View style={m.quickArrowCircle}>
                 <Ionicons name="chevron-forward" size={20} color="#4a9fd4" />
               </View>
             </View>
-            <Text style={s.quickLabel}>Show All</Text>
+            <Text style={m.quickLabel}>Show All</Text>
           </TouchableOpacity>
         </View>
       </View>
 
       {/* Search */}
-      <View style={s.searchBar}>
+      <View style={m.searchBar}>
         <Ionicons name="search-outline" size={18} color={colors.textMuted} />
         <TextInput
-          style={s.searchInput}
+          style={m.searchInput}
           value={search}
           onChangeText={setSearch}
           placeholder="Search for a transaction"
@@ -443,18 +729,18 @@ export default function HomeScreen() {
         <FlatList
           data={filteredTxns}
           keyExtractor={(r) => r.id}
-          contentContainerStyle={[s.list, filteredTxns.length === 0 && s.listEmpty]}
+          contentContainerStyle={[m.list, filteredTxns.length === 0 && m.listEmpty]}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
           renderItem={({ item }) => (
-            <TxnCard item={item} permissions={permissions} memberId={memberId} canDelete={canDeleteSale} onChanged={load} />
+            <ModernTxnCard item={item} permissions={permissions} memberId={memberId} canDelete={canDeleteSale} onChanged={load} />
           )}
           ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
           ListEmptyComponent={
-            <View style={s.emptyWrap}>
+            <View style={m.emptyWrap}>
               <Ionicons name="receipt-outline" size={52} color={colors.border} />
-              <Text style={s.emptyTxt}>No transactions yet.</Text>
-              <TouchableOpacity style={s.emptyBtn} onPress={() => router.push("/sale/new" as never)}>
-                <Text style={s.emptyBtnTxt}>Add First Sale</Text>
+              <Text style={m.emptyTxt}>No transactions yet.</Text>
+              <TouchableOpacity style={m.emptyBtn} onPress={() => router.push("/sale/new" as never)}>
+                <Text style={m.emptyBtnTxt}>Add First Sale</Text>
               </TouchableOpacity>
             </View>
           }
@@ -463,14 +749,14 @@ export default function HomeScreen() {
         <FlatList
           data={filteredParties}
           keyExtractor={(r) => r.id}
-          contentContainerStyle={[s.list, filteredParties.length === 0 && s.listEmpty]}
+          contentContainerStyle={[m.list, filteredParties.length === 0 && m.listEmpty]}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
-          renderItem={({ item }) => <PartyCard item={item} onPress={() => router.push(`/party/${item.id}` as never)} />}
+          renderItem={({ item }) => <ModernPartyCard item={item} onPress={() => router.push(`/party/${item.id}` as never)} />}
           ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
           ListEmptyComponent={
-            <View style={s.emptyWrap}>
+            <View style={m.emptyWrap}>
               <Ionicons name="people-outline" size={52} color={colors.border} />
-              <Text style={s.emptyTxt}>No parties yet.</Text>
+              <Text style={m.emptyTxt}>No parties yet.</Text>
             </View>
           }
         />
@@ -478,11 +764,11 @@ export default function HomeScreen() {
 
       {/* FAB */}
       <TouchableOpacity
-        style={[s.fab, { bottom: insets.bottom + 20 }]}
+        style={[m.fab, { bottom: insets.bottom + 20 }]}
         onPress={() => setShowAddTxn(true)}
       >
         <Ionicons name="add" size={20} color="#fff" />
-        <Text style={s.fabTxt}>Add New Sale</Text>
+        <Text style={m.fabTxt}>Add New Sale</Text>
       </TouchableOpacity>
 
       {/* ── More Options bottom sheet ── */}
@@ -492,35 +778,35 @@ export default function HomeScreen() {
         animationType="slide"
         onRequestClose={() => setShowMoreOptions(false)}
       >
-        <View style={s.modalContainer}>
+        <View style={m.modalContainer}>
           <Pressable style={StyleSheet.absoluteFillObject} onPress={() => setShowMoreOptions(false)} />
-          <View style={[s.sheet, { paddingBottom: insets.bottom + 16 }]}>
-            <View style={s.sheetHandle} />
-            <View style={s.sheetHeader}>
-              <Text style={s.sheetTitle}>More Options</Text>
+          <View style={[m.sheet, { paddingBottom: insets.bottom + 16 }]}>
+            <View style={m.sheetHandle} />
+            <View style={m.sheetHeader}>
+              <Text style={m.sheetTitle}>More Options</Text>
               <TouchableOpacity onPress={() => setShowMoreOptions(false)} hitSlop={10}>
                 <Ionicons name="close" size={22} color={colors.textMuted} />
               </TouchableOpacity>
             </View>
-            <View style={s.moreGrid}>
-              {MORE_OPTIONS.map((item) => (
+            <View style={m.moreGrid}>
+              {MODERN_MORE_OPTIONS.map((item) => (
                 <TouchableOpacity
                   key={item.label}
-                  style={s.moreItem}
+                  style={m.moreItem}
                   onPress={() => { setShowMoreOptions(false); if (item.route) router.push(item.route as never); }}
                   activeOpacity={0.7}
                 >
-                  <View style={s.moreIconWrap}>
-                    <View style={s.moreIcon}>
+                  <View style={m.moreIconWrap}>
+                    <View style={m.moreIcon}>
                       <Ionicons name={item.icon} size={28} color="#4a9fd4" />
                     </View>
                     {item.premium && (
-                      <View style={s.crownBadge}>
-                        <Ionicons name="crown" size={10} color="#fff" />
+                      <View style={m.crownBadge}>
+                        <Ionicons name="diamond" size={10} color="#fff" />
                       </View>
                     )}
                   </View>
-                  <Text style={s.moreLabel}>{item.label}</Text>
+                  <Text style={m.moreLabel}>{item.label}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -535,39 +821,38 @@ export default function HomeScreen() {
         animationType="slide"
         onRequestClose={() => setShowAddTxn(false)}
       >
-        <View style={s.modalContainer}>
+        <View style={m.modalContainer}>
           <Pressable style={StyleSheet.absoluteFillObject} onPress={() => setShowAddTxn(false)} />
-          <View style={[s.sheet, { paddingBottom: insets.bottom + 16 }]}>
-            {/* Handle + header */}
-            <View style={s.sheetHandle} />
-            <View style={s.sheetHeader}>
-              <Text style={s.sheetTitle}>Sale Transactions</Text>
+          <View style={[m.sheet, { paddingBottom: insets.bottom + 16 }]}>
+            <View style={m.sheetHandle} />
+            <View style={m.sheetHeader}>
+              <Text style={m.sheetTitle}>Sale Transactions</Text>
               <TouchableOpacity onPress={() => setShowAddTxn(false)} hitSlop={10}>
                 <Ionicons name="close" size={22} color={colors.textMuted} />
               </TouchableOpacity>
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false}>
-              {TXN_SECTIONS.map((section) => (
-                <View key={section.title} style={s.sheetSection}>
-                  <Text style={s.sheetSectionTitle}>{section.title}</Text>
-                  <View style={s.sheetGrid}>
+              {MODERN_TXN_SECTIONS.map((section) => (
+                <View key={section.title} style={m.sheetSection}>
+                  <Text style={m.sheetSectionTitle}>{section.title}</Text>
+                  <View style={m.sheetGrid}>
                     {section.items.map((item) => (
                       <TouchableOpacity
                         key={item.label}
-                        style={s.sheetItem}
+                        style={m.sheetItem}
                         onPress={() => handleTxnTypePress(item)}
                         activeOpacity={0.7}
                       >
-                        <View style={[s.sheetIcon, { backgroundColor: item.iconBg }]}>
+                        <View style={[m.sheetIcon, { backgroundColor: item.iconBg }]}>
                           <Ionicons name={item.icon} size={26} color={item.route ? colors.primary : colors.textMuted} />
                         </View>
-                        <Text style={[s.sheetItemLabel, !item.route && { color: colors.textLight }]}>
+                        <Text style={[m.sheetItemLabel, !item.route && { color: colors.textLight }]}>
                           {item.label}
                         </Text>
                         {!item.route && (
-                          <View style={s.soonBadge}>
-                            <Text style={s.soonTxt}>Soon</Text>
+                          <View style={m.soonBadge}>
+                            <Text style={m.soonTxt}>Soon</Text>
                           </View>
                         )}
                       </TouchableOpacity>
@@ -586,6 +871,95 @@ export default function HomeScreen() {
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#f0f2f5" },
 
+  appBar: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    backgroundColor: colors.primary, paddingHorizontal: 12, paddingVertical: 10,
+  },
+  iconBtn: { padding: 4 },
+  searchBar: {
+    flex: 1, flexDirection: "row", alignItems: "center", gap: 8,
+    backgroundColor: "rgba(255,255,255,0.18)", borderRadius: 8,
+    paddingHorizontal: 12, paddingVertical: 9,
+  },
+  searchPlaceholder: { fontSize: 13.5, color: "rgba(255,255,255,0.85)" },
+
+  center: { flex: 1, alignItems: "center", justifyContent: "center" },
+  body: { padding: 16, paddingBottom: 32 },
+
+  balanceRow: { flexDirection: "row", gap: 12 },
+  balanceCard: { flex: 1, borderRadius: 12, padding: 16 },
+  balanceLabel: { fontSize: 13, fontWeight: "600", color: colors.text, marginBottom: 6 },
+  balanceAmt: { fontSize: 19, fontWeight: "700" },
+
+  grid: {
+    flexDirection: "row", flexWrap: "wrap", gap: 12,
+    marginTop: 16,
+  },
+  gridItem: {
+    width: "47%", backgroundColor: "#fff", borderRadius: 12,
+    paddingVertical: 22, alignItems: "center", gap: 10,
+    borderWidth: 1, borderColor: "#e8ecf0",
+  },
+  gridIconWrap: {
+    width: 48, height: 48, borderRadius: 24,
+    backgroundColor: colors.primaryLight + "22",
+    alignItems: "center", justifyContent: "center",
+  },
+  gridLabel: { fontSize: 13.5, fontWeight: "600", color: colors.text },
+});
+
+const t = StyleSheet.create({
+  appBar: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    backgroundColor: "#fff", paddingHorizontal: 12, paddingVertical: 12,
+    borderBottomWidth: 1, borderBottomColor: "#e8ecf0",
+  },
+  companyName: { flex: 1, fontSize: 18, fontWeight: "700", color: colors.text },
+
+  tabRow: {
+    flexDirection: "row", gap: 10,
+    backgroundColor: "#fff", paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10,
+  },
+  tabPill: {
+    paddingHorizontal: 16, paddingVertical: 9, borderRadius: 100,
+    borderWidth: 1.5, borderColor: "#e5e7eb",
+  },
+  tabPillActive: { borderColor: colors.red, backgroundColor: colors.red + "10" },
+  tabTxt: { fontSize: 13.5, fontWeight: "600", color: colors.textMuted },
+  tabTxtActive: { color: colors.red },
+
+  newBtnRow: {
+    backgroundColor: "#fff", paddingHorizontal: 16, paddingBottom: 12,
+    alignItems: "flex-end",
+    borderBottomWidth: 1, borderBottomColor: "#e8ecf0",
+  },
+  newBtn: {
+    backgroundColor: colors.primaryLight + "22", borderRadius: 100,
+    paddingHorizontal: 16, paddingVertical: 9,
+  },
+  newBtnTxt: { fontSize: 13.5, fontWeight: "700", color: colors.primary },
+
+  list: { padding: 12, flexGrow: 1 },
+  row: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    backgroundColor: "#fff", borderRadius: 10, borderWidth: 1, borderColor: "#e8ecf0",
+    padding: 14, marginBottom: 8,
+  },
+  rowAvatar: {
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: "#dbeafe", alignItems: "center", justifyContent: "center",
+  },
+  rowAvatarTxt: { fontSize: 15, fontWeight: "700", color: colors.primary },
+  rowTitle: { fontSize: 14, fontWeight: "600", color: colors.text },
+  rowSub: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
+  rowAmt: { fontSize: 13.5, fontWeight: "700", color: colors.text },
+
+  emptyWrap: { flex: 1, alignItems: "center", justifyContent: "center", gap: 10, marginTop: 80, paddingHorizontal: 40 },
+  emptyTitle: { fontSize: 16, fontWeight: "700", color: colors.text },
+  emptySub: { fontSize: 13, color: colors.textMuted, textAlign: "center", lineHeight: 18 },
+});
+
+const m = StyleSheet.create({
   menuOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.35)", justifyContent: "flex-end" },
   menuSheet: { backgroundColor: "#fff", borderTopLeftRadius: 18, borderTopRightRadius: 18, paddingVertical: 8, paddingBottom: 24 },
   menuRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: "#f0f2f5" },
@@ -659,7 +1033,6 @@ const s = StyleSheet.create({
   },
   searchInput: { flex: 1, fontSize: 14, color: colors.text, padding: 0 },
 
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
   list: { paddingHorizontal: 12, paddingBottom: 120 },
   listEmpty: { flex: 1 },
 

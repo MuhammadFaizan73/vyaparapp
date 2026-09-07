@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Switch } from "react-native";
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Switch, Modal, Pressable } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -55,9 +55,18 @@ export default function SettingsScreen() {
   );
 }
 
+const THEME_OPTIONS: { value: string; label: string; soon?: boolean }[] = [
+  { value: "standard", label: "Standard" },
+  { value: "trending", label: "Trending", soon: true },
+  { value: "modern", label: "Modern", soon: true },
+];
+
 function GeneralTab() {
   const { settings, toggle, update } = useSettings();
   const insets = useSafeAreaInsets();
+  const [showThemePicker, setShowThemePicker] = useState(false);
+  const activeThemeLabel = THEME_OPTIONS.find((t) => t.value === settings.appTheme)?.label ?? "Standard";
+
   return (
     <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}>
       <View style={s.row}>
@@ -74,6 +83,40 @@ function GeneralTab() {
           {settings.currency}
         </Text>
       </View>
+
+      <TouchableOpacity style={s.row} onPress={() => setShowThemePicker(true)}>
+        <View style={s.rowLeft}>
+          <Text style={s.rowLabel}>Change Vyapar Theme</Text>
+          <View style={s.infoIcon}><Text style={s.infoTxt}>i</Text></View>
+        </View>
+        <View style={s.dropdownBox}>
+          <Text style={s.dropdownVal}>{activeThemeLabel}</Text>
+          <Ionicons name="chevron-down" size={14} color={colors.textLight} />
+        </View>
+      </TouchableOpacity>
+
+      <Modal visible={showThemePicker} transparent animationType="fade" onRequestClose={() => setShowThemePicker(false)}>
+        <Pressable style={s.modalOverlay} onPress={() => setShowThemePicker(false)}>
+          <Pressable style={s.modalBox}>
+            <Text style={s.modalTitle}>Change Vyapar Theme</Text>
+            <View style={s.modalDivider} />
+            {THEME_OPTIONS.map((opt) => (
+              <TouchableOpacity
+                key={opt.value}
+                style={s.modalOption}
+                onPress={() => { update({ appTheme: opt.value }); setShowThemePicker(false); }}
+              >
+                <Text style={[s.modalOptionTxt, opt.value === settings.appTheme && s.modalOptionActive]}>
+                  {opt.label}{opt.soon ? " (Coming soon)" : ""}
+                </Text>
+                {opt.value === settings.appTheme && (
+                  <Ionicons name="checkmark" size={18} color={colors.primary} />
+                )}
+              </TouchableOpacity>
+            ))}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </ScrollView>
   );
 }
@@ -189,6 +232,38 @@ const s = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: "#f1f5f9",
   },
   rowLabel: { fontSize: 15, fontWeight: "500", color: "#111827" },
+  rowLeft: { flex: 1, flexDirection: "row", alignItems: "center", gap: 7, flexWrap: "wrap" },
+  infoIcon: {
+    width: 17, height: 17, borderRadius: 9, backgroundColor: "#e5e7eb",
+    alignItems: "center", justifyContent: "center",
+  },
+  infoTxt: { fontSize: 9, fontWeight: "700", color: "#6b7280" },
+  dropdownBox: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    borderWidth: 1, borderColor: "#d1d5db", borderRadius: 6,
+    paddingHorizontal: 10, paddingVertical: 6, backgroundColor: "#f9fafb",
+  },
+  dropdownVal: { fontSize: 13, color: colors.text },
+  modalOverlay: {
+    flex: 1, backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center", alignItems: "center", padding: 32,
+  },
+  modalBox: {
+    backgroundColor: "#fff", borderRadius: 14, width: "100%",
+    maxHeight: 380, overflow: "hidden",
+  },
+  modalTitle: {
+    fontSize: 15, fontWeight: "700", color: colors.text,
+    paddingHorizontal: 20, paddingTop: 18, paddingBottom: 12,
+  },
+  modalDivider: { height: 1, backgroundColor: "#f0f0f0" },
+  modalOption: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 20, paddingVertical: 14,
+    borderBottomWidth: 1, borderBottomColor: "#f5f5f5",
+  },
+  modalOptionTxt: { fontSize: 14, color: colors.text },
+  modalOptionActive: { color: colors.primary, fontWeight: "600" },
 
   labeledField: { paddingHorizontal: 16, paddingVertical: 10 },
   fieldLabel: { fontSize: 11, color: "#6b7280", marginBottom: 4 },

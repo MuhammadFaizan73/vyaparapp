@@ -32,13 +32,14 @@ function getBadge(type: string, balance: number): BadgeCfg {
   }
 }
 
-// Sale and Payment-In have mobile creation/edit screens — other types (purchase,
-// expense, etc.) can still be viewed and exported here, but editing them stays a
-// desktop-only action until those screens exist on mobile too.
-const EDITABLE_TYPES = new Set(["sale", "payment_in"]);
+// Sale, Payment-In and Purchase Order have mobile creation/edit screens — other types
+// (purchase, expense, etc.) can still be viewed and exported here, but editing them
+// stays a desktop-only action until those screens exist on mobile too.
+const EDITABLE_TYPES = new Set(["sale", "payment_in", "purchase_order"]);
 const EDIT_ROUTES: Record<string, string> = {
   sale: "/sale/new",
   payment_in: "/payment-in/new",
+  purchase_order: "/purchase-order/new",
 };
 
 export default function TransactionDetailScreen() {
