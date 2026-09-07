@@ -71,6 +71,18 @@ async function main() {
   const receivableByOldId = new Map(openingReceivable.map((r) => [r.name_id, r.bal]));
   const payableByOldId = new Map(openingPayable.map((r) => [r.name_id, r.bal]));
 
+  // Optional — dump/item_categories.json (see fix-item-category-from-mapping.js for the
+  // exact query). kb_items.category_id is always the default/uncategorized value; the real
+  // per-item category lives in the separate kb_item_categories_mapping many-to-many table,
+  // pre-resolved to one name per item (first/lowest category_id) at dump time.
+  const categoriesPath = path.join(JSON_DIR, 'item_categories.json');
+  const categoryByItemName = new Map();
+  if (fs.existsSync(categoriesPath)) {
+    for (const r of JSON.parse(fs.readFileSync(categoriesPath, 'utf8'))) {
+      categoryByItemName.set((r.item_name || '').trim().toLowerCase(), r.item_category_name);
+    }
+  }
+
   // ---- 0. Company: reuse the tenant's existing company, just fill in the real business name
   // — read from the backup's own kb_firms dump, never hardcoded (this script runs against
   // multiple different businesses' backups).
@@ -144,6 +156,7 @@ async function main() {
       companyId,
       name,
       sku: it.item_code || null,
+      category: categoryByItemName.get(key) || null,
       unit,
       secondaryUnit: unitById.get(it.secondary_unit_id) || null,
       salePrice: it.item_sale_unit_price ?? null,

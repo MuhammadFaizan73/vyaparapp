@@ -24,6 +24,17 @@ async function main() {
   const units = readJson('units.json');
   const unitById = new Map(units.map((u) => [u.unit_id, u.unit_short_name || u.unit_name]));
 
+  // Optional — see fix-item-category-from-mapping.js for why this needs its own dump
+  // (kb_items.category_id is always the default/uncategorized value; the real category
+  // lives in the separate kb_item_categories_mapping many-to-many table).
+  const categoriesPath = path.join(JSON_DIR, 'item_categories.json');
+  const categoryByItemName = new Map();
+  if (fs.existsSync(categoriesPath)) {
+    for (const r of JSON.parse(fs.readFileSync(categoriesPath, 'utf8'))) {
+      categoryByItemName.set((r.item_name || '').trim().toLowerCase(), r.item_category_name);
+    }
+  }
+
   let companyId = COMPANY_ID;
   if (!companyId) {
     const company = await prisma.company.findFirst({ where: { tenantId: TENANT_ID }, orderBy: { createdAt: 'asc' } });
@@ -46,6 +57,7 @@ async function main() {
       companyId,
       name,
       sku: it.item_code || null,
+      category: categoryByItemName.get(key) || null,
       unit: unitById.get(it.base_unit_id) || null,
       secondaryUnit: unitById.get(it.secondary_unit_id) || null,
       salePrice: it.item_sale_unit_price ?? null,
