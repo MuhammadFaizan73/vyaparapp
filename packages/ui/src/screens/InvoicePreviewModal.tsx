@@ -434,35 +434,91 @@ function TaxSummaryBottom({ tc, color, fg, lineItems, sale }: {
   );
 }
 
-function InvoicePaperHeader({ tc, color, fg, companyName, companyPhone }: {
+function InvoicePaperHeader({
+  tc, color, fg, companyName, companyPhone, companyAddress, companyEmail, showTin, tinValue, showLogo, logoUrl,
+  showName = true, showPhone = true, showAddress = true, showEmail = true, nameFontSize,
+}: {
   tc: ThemeConfig; color: string; fg: string; companyName: string; companyPhone: string;
+  companyAddress?: string; companyEmail?: string; showTin?: boolean; tinValue?: string;
+  showLogo?: boolean; logoUrl?: string;
+  showName?: boolean; showPhone?: boolean; showAddress?: boolean; showEmail?: boolean;
+  nameFontSize?: number;
 }) {
+  const logo = showLogo !== false ? (
+    logoUrl
+      ? <img className="sinv__logo sinv__logo-img" src={logoUrl} alt="" />
+      : (
+        <div
+          className={`sinv__logo${tc.headerBand ? "" : " sinv__logo--plain"}`}
+          style={tc.headerBand ? { color: fg, borderColor: `${fg}50` } : undefined}
+        >LOGO</div>
+      )
+  ) : null;
+  const details = (
+    <div className="sinv__company" style={tc.headerBand ? { color: fg } : undefined}>
+      {showName && <div className="sinv__company-name" style={nameFontSize ? { fontSize: nameFontSize } : undefined}>{companyName}</div>}
+      {showPhone && companyPhone && <div className="sinv__company-phone">Ph. no.: {companyPhone}</div>}
+      {showAddress && companyAddress && <div className="sinv__company-phone">{companyAddress}</div>}
+      {showEmail && companyEmail && <div className="sinv__company-phone">{companyEmail}</div>}
+      {showTin && tinValue && <div className="sinv__company-phone">TIN: {tinValue}</div>}
+    </div>
+  );
   return tc.headerBand ? (
     <div className="sinv__band" style={{ background: color }}>
-      <div className="sinv__logo" style={{ color: fg, borderColor: `${fg}50` }}>LOGO</div>
-      <div className="sinv__company" style={{ color: fg }}>
-        <div className="sinv__company-name">{companyName}</div>
-        {companyPhone && <div className="sinv__company-phone">Phone no. : {companyPhone}</div>}
-      </div>
+      {logo}
+      {details}
     </div>
   ) : (
     <div className="sinv__plain-header">
-      <div className="sinv__logo sinv__logo--plain">LOGO</div>
-      <div className="sinv__company">
-        <div className="sinv__company-name">{companyName}</div>
-        {companyPhone && <div className="sinv__company-phone">Phone no. : {companyPhone}</div>}
-      </div>
+      {logo}
+      {details}
     </div>
   );
 }
 
-export function InvoicePaper({ tc, color, sale, party, invoiceNumber, received, companyName: companyNameProp }: {
+const NAME_FONT_PX: Record<string, number> = { Small: 13, Medium: 16, Large: 20 };
+const TEXT_SCALE: Record<string, number> = { Small: 0.85, Medium: 1, Large: 1.15 };
+
+export function InvoicePaper({
+  tc, color, sale, party, invoiceNumber, received, companyName: companyNameProp,
+  companyPhone: companyPhoneProp, companyAddress: companyAddressProp, companyEmail: companyEmailProp,
+  showLogo: showLogoProp, logoUrl: logoUrlProp, showTin: showTinProp, tinValue: tinValueProp,
+  showName: showNameProp, showPhone: showPhoneProp, showAddress: showAddressProp, showEmail: showEmailProp,
+  companyNameSize: companyNameSizeProp, invoiceTextSize: invoiceTextSizeProp,
+}: {
   tc: ThemeConfig; color: string; sale: SaleRow; party?: Party;
   invoiceNumber: number; received: number; companyName?: string;
+  // Every field below defaults to the tenant's saved Print Settings (loadSettings())
+  // when omitted, same as companyName — only SettingsScreen's live preview overrides
+  // them explicitly (so toggling a checkbox there updates the preview before it's saved).
+  companyPhone?: string; companyAddress?: string; companyEmail?: string;
+  showLogo?: boolean; logoUrl?: string; showTin?: boolean; tinValue?: string;
+  showName?: boolean; showPhone?: boolean; showAddress?: boolean; showEmail?: boolean;
+  companyNameSize?: string; invoiceTextSize?: string;
 }) {
   const fg = isLight(color) ? "#111827" : "#ffffff";
-  const companyName = companyNameProp || loadSettings().companyName || "My Company";
-  const companyPhone = party?.phone ?? "";
+  const settings = loadSettings();
+  const companyName = companyNameProp || settings.companyName || "My Company";
+  // Was `party?.phone` — showed the CUSTOMER's own phone back to them on their invoice
+  // instead of the business's. Bug: this is the seller's contact line, not the buyer's.
+  const companyPhone = companyPhoneProp ?? settings.companyPhone ?? "";
+  const companyAddress = companyAddressProp ?? settings.companyAddress ?? "";
+  const companyEmail = companyEmailProp ?? settings.companyEmail ?? "";
+  const showLogo = showLogoProp ?? settings.companyLogo;
+  const logoUrl = logoUrlProp ?? settings.companyLogoUrl;
+  const showTin = showTinProp ?? settings.showTinOnSale;
+  const tinValue = tinValueProp ?? settings.tinValue;
+  const showName = showNameProp ?? settings.showCompanyName;
+  const showPhone = showPhoneProp ?? settings.showCompanyPhone;
+  const showAddress = showAddressProp ?? settings.showCompanyAddress;
+  const showEmail = showEmailProp ?? settings.showCompanyEmail;
+  // "Company Name Text Size" / "Invoice Text Size" were stored settings with no consumer
+  // anywhere in the app — picking a size never changed anything. nameFontSize resizes just
+  // the company name; textScale is a uniform transform on the whole paper (every .sinv__*
+  // rule below is a fixed px value, not em, so scaling font-size alone wouldn't cascade).
+  const nameFontSize = NAME_FONT_PX[companyNameSizeProp ?? settings.companyNameSize] ?? 16;
+  const textScale = TEXT_SCALE[invoiceTextSizeProp ?? settings.invoiceTextSize] ?? 1;
+  const scaleStyle = { transform: `scale(${textScale})`, transformOrigin: "top left" as const };
   const partyName    = sale.partyName;
   const partyAddress = party?.billingAddress ?? "";
   const partyPhone   = party?.phone ?? "";
@@ -476,8 +532,8 @@ export function InvoicePaper({ tc, color, sale, party, invoiceNumber, received, 
     const secHdr = tc.colorSectionHead ? { background: color, color: fg } : { background: "#f3f4f6", color: "#374151" };
     const totalQty = lineItems.reduce((s, i) => s + i.qty, 0);
     return (
-      <div className="sinv">
-        <InvoicePaperHeader tc={tc} color={color} fg={fg} companyName={companyName} companyPhone={companyPhone} />
+      <div className="sinv" style={scaleStyle}>
+        <InvoicePaperHeader tc={tc} color={color} fg={fg} companyName={companyName} companyPhone={companyPhone} companyAddress={companyAddress} companyEmail={companyEmail} showTin={showTin} tinValue={tinValue} showLogo={showLogo} logoUrl={logoUrl} showName={showName} showPhone={showPhone} showAddress={showAddress} showEmail={showEmail} nameFontSize={nameFontSize} />
         <div className="sinv__title" style={{ color: tc.colorTitle ? color : "#111827" }}>{docTitle}</div>
 
         {/* Meta */}
@@ -567,8 +623,8 @@ export function InvoicePaper({ tc, color, sale, party, invoiceNumber, received, 
     const totalAmt = lineItems.reduce((s, i) => s + i.rate * i.qty, 0) || sale.total;
     const advance = sale.total - sale.balance;
     return (
-      <div className="sinv">
-        <InvoicePaperHeader tc={tc} color={color} fg={fg} companyName={companyName} companyPhone={companyPhone} />
+      <div className="sinv" style={scaleStyle}>
+        <InvoicePaperHeader tc={tc} color={color} fg={fg} companyName={companyName} companyPhone={companyPhone} companyAddress={companyAddress} companyEmail={companyEmail} showTin={showTin} tinValue={tinValue} showLogo={showLogo} logoUrl={logoUrl} showName={showName} showPhone={showPhone} showAddress={showAddress} showEmail={showEmail} nameFontSize={nameFontSize} />
         <div className="sinv__title" style={{ color: tc.colorTitle ? color : "#111827" }}>{docTitle}</div>
 
         {/* Meta */}
@@ -670,8 +726,8 @@ export function InvoicePaper({ tc, color, sale, party, invoiceNumber, received, 
     const noLabel   = sale.type === "proforma_invoice" ? "Proforma Invoice No." : "Estimate No.";
     const wordsLabel = sale.type === "proforma_invoice" ? "Proforma Invoice Amount In Words" : "Estimate Amount In Words";
     return (
-      <div className="sinv">
-        <InvoicePaperHeader tc={tc} color={color} fg={fg} companyName={companyName} companyPhone={companyPhone} />
+      <div className="sinv" style={scaleStyle}>
+        <InvoicePaperHeader tc={tc} color={color} fg={fg} companyName={companyName} companyPhone={companyPhone} companyAddress={companyAddress} companyEmail={companyEmail} showTin={showTin} tinValue={tinValue} showLogo={showLogo} logoUrl={logoUrl} showName={showName} showPhone={showPhone} showAddress={showAddress} showEmail={showEmail} nameFontSize={nameFontSize} />
         <div className="sinv__title" style={{ color: tc.colorTitle ? color : "#111827" }}>{docTitle}</div>
 
         {/* Meta */}
@@ -758,9 +814,9 @@ export function InvoicePaper({ tc, color, sale, party, invoiceNumber, received, 
   }
 
   if (tc.thermal) return (
-    <div className="tinv">
+    <div className="tinv" style={scaleStyle}>
       <div className="tinv__header" style={tc.headerBand ? { background: color, color: fg } : {}}>
-        <div className="tinv__company" style={tc.colorTitle && !tc.headerBand ? { color } : {}}>{companyName}</div>
+        <div className="tinv__company" style={{ ...(tc.colorTitle && !tc.headerBand ? { color } : {}), fontSize: nameFontSize }}>{companyName}</div>
         {companyPhone && <div className="tinv__phone">{companyPhone}</div>}
       </div>
       <div className="tinv__title" style={tc.colorTitle ? { color } : {}}>{docTitle.toUpperCase()}</div>
@@ -808,7 +864,7 @@ export function InvoicePaper({ tc, color, sale, party, invoiceNumber, received, 
   if (tc.bannerRounded) {
     const b = amountBreakdown(lineItems, sale);
     return (
-      <div className="sinv">
+      <div className="sinv" style={scaleStyle}>
         <div className="sinv__banner" style={{ background: color, color: fg }}>
           <div className="sinv__banner-logo">LOGO</div>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
@@ -910,7 +966,7 @@ export function InvoicePaper({ tc, color, sale, party, invoiceNumber, received, 
   return (
     <div className={`sinv${tc.bordered ? " sinv--bordered" : ""}`}>
       {/* Header */}
-      <InvoicePaperHeader tc={tc} color={color} fg={fg} companyName={companyName} companyPhone={companyPhone} />
+      <InvoicePaperHeader tc={tc} color={color} fg={fg} companyName={companyName} companyPhone={companyPhone} companyAddress={companyAddress} companyEmail={companyEmail} showTin={showTin} tinValue={tinValue} showLogo={showLogo} logoUrl={logoUrl} showName={showName} showPhone={showPhone} showAddress={showAddress} showEmail={showEmail} nameFontSize={nameFontSize} />
 
       {/* Title */}
       <div className="sinv__title" style={{ color: tc.colorTitle ? color : "#111827" }}>{docTitle}</div>

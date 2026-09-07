@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../lib/api";
 import type { TaxRate } from "@vyapar/api-client";
 import { InvoicePaper, THEME_MAP, COLOR_SWATCHES, THERMAL_THEMES } from "./InvoicePreviewModal";
@@ -95,7 +95,13 @@ export type Settings = {
   companyEmail: string;
   companyPhone: string;
   showTinOnSale: boolean;
+  tinValue: string;
   companyLogo: boolean;
+  companyLogoUrl: string;
+  showCompanyName: boolean;
+  showCompanyAddress: boolean;
+  showCompanyEmail: boolean;
+  showCompanyPhone: boolean;
   printOriginalDuplicate: boolean;
   paperSize: string;
   orientation: string;
@@ -160,7 +166,9 @@ const DEFAULT_SETTINGS: Settings = {
   printThemeName: "Tally Theme", printColor: "#3b82f6", thermalThemeName: "Thermal Theme 1",
   makeRegularDefault: true, repeatHeader: true,
   companyName: "Godigi", companyAddress: "", companyEmail: "", companyPhone: "",
-  showTinOnSale: false, companyLogo: true, printOriginalDuplicate: false,
+  showTinOnSale: false, tinValue: "", companyLogo: true, companyLogoUrl: "",
+  showCompanyName: true, showCompanyAddress: true, showCompanyEmail: true, showCompanyPhone: true,
+  printOriginalDuplicate: false,
   paperSize: "A4", orientation: "Portrait",
   companyNameSize: "Large", invoiceTextSize: "Medium",
   sendMsgToParty: true, webInvoiceLinkInMsg: true,
@@ -222,6 +230,40 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "item",        label: "ITEM" },
   { key: "reminders",   label: "SERVICE REMINDERS" },
 ];
+
+function InfoDot({ text }: { text: string }) {
+  return <span className="st-info-dot" title={text}>i</span>;
+}
+
+// A single "Print Company Info / Header" row: checkbox + label + info tooltip, with an
+// optional inline text field bound to a separate Settings key — matches the real Vyapar
+// app's layout exactly (every header field is independently toggleable, not just typed).
+//
+// Module-level, not defined inside SettingsScreen: a component declared inside another
+// component's body gets a NEW function identity every render, so React treats each
+// re-render's <FieldRow> as a brand-new component type and remounts its <input> — which
+// drops focus after every single keystroke. s/set are passed in explicitly instead of
+// closed over for exactly that reason.
+function FieldRow({ s, set, k, label, info, fieldKey, placeholder }: {
+  s: Settings; set: <K extends keyof Settings>(key: K, val: Settings[K]) => void;
+  k: keyof Settings; label: string; info: string; fieldKey?: keyof Settings; placeholder?: string;
+}) {
+  return (
+    <label className="st-header-row">
+      <input type="checkbox" checked={!!s[k]} onChange={e => set(k, e.target.checked as Settings[typeof k])} />
+      <span className="st-header-row__label">{label}</span>
+      {fieldKey && (
+        <input
+          className="st-input st-header-row__input"
+          placeholder={placeholder}
+          value={s[fieldKey] as string}
+          onChange={e => set(fieldKey, e.target.value as Settings[typeof fieldKey])}
+        />
+      )}
+      <InfoDot text={info} />
+    </label>
+  );
+}
 
 // ─── Main screen ─────────────────────────────────────────────────────────────
 
@@ -478,6 +520,21 @@ export function SettingsScreen({ onOpenStores }: SettingsScreenProps = {}) {
     const activeThemeKey: keyof Settings = isRegular ? "printThemeName" : "thermalThemeName";
     const activeTheme = s[activeThemeKey] as string;
     const tc = THEME_MAP[activeTheme] ?? THEME_MAP["Tally Theme"];
+    const carouselRef = useRef<HTMLDivElement>(null);
+    const logoInputRef = useRef<HTMLInputElement>(null);
+
+    function scrollCarousel(dir: -1 | 1) {
+      carouselRef.current?.scrollBy({ left: dir * 240, behavior: "smooth" });
+    }
+
+    function handleLogoFile(e: React.ChangeEvent<HTMLInputElement>) {
+      const file = e.target.files?.[0];
+      e.target.value = "";
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => set("companyLogoUrl", String(reader.result || ""));
+      reader.readAsDataURL(file);
+    }
 
     return (
       <div className="st-print-layout">
@@ -494,7 +551,7 @@ export function SettingsScreen({ onOpenStores }: SettingsScreenProps = {}) {
             >THERMAL PRINTER</button>
           </div>
           {isRegular && (
-            <div className="st-subtabs" style={{ marginTop: 12 }}>
+            <div className="st-subtabs st-subtabs--sub">
               <button
                 className={`st-subtab${layoutTab === "layout" ? " st-subtab--active" : ""}`}
                 onClick={() => setLayoutTab("layout")}
@@ -507,20 +564,27 @@ export function SettingsScreen({ onOpenStores }: SettingsScreenProps = {}) {
           )}
 
           {(!isRegular || layoutTab === "layout") && (
-            <div className="st-themes">
-              {themeList.map(name => (
-                <button
-                  key={name}
-                  className={`st-theme${activeTheme === name ? " st-theme--active" : ""}`}
-                  onClick={() => set(activeThemeKey, name)}
-                >
-                  <div className="st-theme-preview">
-                    <div className="st-theme-line" /><div className="st-theme-line st-theme-line--short" />
-                    <div className="st-theme-line" /><div className="st-theme-line st-theme-line--short" />
-                  </div>
-                  <span>{name}</span>
-                </button>
-              ))}
+            <div className="st-theme-carousel">
+              <button type="button" className="st-carousel-arrow" onClick={() => scrollCarousel(-1)} aria-label="Scroll left">‹</button>
+              <div className="st-themes" ref={carouselRef}>
+                {themeList.map(name => (
+                  <button
+                    key={name}
+                    className={`st-theme${activeTheme === name ? " st-theme--active" : ""}`}
+                    onClick={() => set(activeThemeKey, name)}
+                  >
+                    <div className="st-theme-preview">
+                      <div className="st-theme-line st-theme-line--title" />
+                      <div className="st-theme-line" /><div className="st-theme-line st-theme-line--short" />
+                      <div className="st-theme-row">
+                        <div className="st-theme-block" /><div className="st-theme-block" /><div className="st-theme-block" />
+                      </div>
+                    </div>
+                    <span>{name}</span>
+                  </button>
+                ))}
+              </div>
+              <button type="button" className="st-carousel-arrow" onClick={() => scrollCarousel(1)} aria-label="Scroll right">›</button>
             </div>
           )}
 
@@ -540,28 +604,25 @@ export function SettingsScreen({ onOpenStores }: SettingsScreenProps = {}) {
           )}
 
           <SectionTitle title="Print Company Info / Header" />
-          <Chk k="makeRegularDefault" label="Make Regular Printer Default" />
-          <Chk k="repeatHeader" label="Print repeat header in all pages" />
-
-          <div className="st-labeled-field">
-            <span className="st-field-label">Company Name</span>
-            <input className="st-input" value={s.companyName} onChange={e => set("companyName", e.target.value)} />
+          <div className="st-header-list">
+            <FieldRow s={s} set={set} k="makeRegularDefault" label="Make Regular Printer Default" info="Use this printer by default when printing an invoice, instead of asking each time." />
+            <FieldRow s={s} set={set} k="repeatHeader" label="Print repeat header in all pages" info="Repeat the company header on every page of a multi-page invoice." />
+            <FieldRow s={s} set={set} k="showCompanyName" label="Company Name" info="Show your business name on the invoice header." fieldKey="companyName" />
+            <label className="st-header-row">
+              <input type="checkbox" checked={s.companyLogo} onChange={e => set("companyLogo", e.target.checked)} />
+              <span className="st-header-row__label">Company Logo</span>
+              <button type="button" className="st-change-link" onClick={() => logoInputRef.current?.click()}>
+                {s.companyLogoUrl ? "Change" : "Upload"}
+              </button>
+              <input ref={logoInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleLogoFile} />
+              <InfoDot text="Shown at the top of the invoice instead of the LOGO placeholder." />
+            </label>
+            <FieldRow s={s} set={set} k="showCompanyAddress" label="Address" info="Show your business address on the invoice header." fieldKey="companyAddress" placeholder="Enter address" />
+            <FieldRow s={s} set={set} k="showCompanyEmail" label="Email" info="Show your business email on the invoice header." fieldKey="companyEmail" placeholder="Enter email" />
+            <FieldRow s={s} set={set} k="showCompanyPhone" label="Phone Number" info="Show your business phone number on the invoice header." fieldKey="companyPhone" />
+            <FieldRow s={s} set={set} k="showTinOnSale" label="TIN on Sale" info="Print your Taxpayer Identification Number on Sale invoices." fieldKey="tinValue" placeholder="Enter TIN" />
+            <FieldRow s={s} set={set} k="printOriginalDuplicate" label="Print Original/Duplicate" info={'Stamp "Original for Recipient" / "Duplicate for Supplier" on the printout.'} />
           </div>
-          <Chk k="companyLogo" label="Company Logo" />
-          <div className="st-labeled-field">
-            <span className="st-field-label">Address</span>
-            <input className="st-input" placeholder="Enter address" value={s.companyAddress} onChange={e => set("companyAddress", e.target.value)} />
-          </div>
-          <div className="st-labeled-field">
-            <span className="st-field-label">Email</span>
-            <input className="st-input" placeholder="Enter email" value={s.companyEmail} onChange={e => set("companyEmail", e.target.value)} />
-          </div>
-          <div className="st-labeled-field">
-            <span className="st-field-label">Phone Number</span>
-            <input className="st-input" value={s.companyPhone} onChange={e => set("companyPhone", e.target.value)} />
-          </div>
-          <Chk k="showTinOnSale" label="TIN on Sale" />
-          <Chk k="printOriginalDuplicate" label="Print Original/Duplicate" />
 
           <div className="st-field-row-pair" style={{ marginTop: 12 }}>
             <div className="st-field-row">
@@ -594,7 +655,10 @@ export function SettingsScreen({ onOpenStores }: SettingsScreenProps = {}) {
         </div>
 
         {/* Invoice preview — the real renderer, so what's picked here is exactly what
-            InvoicePreviewModal opens with on the next Sale invoice preview/print. */}
+            InvoicePreviewModal opens with on the next Sale invoice preview/print. Every
+            header field is passed explicitly (rather than left to InvoicePaper's own
+            loadSettings() fallback) so toggling a checkbox here updates the preview
+            immediately, without waiting on the localStorage round-trip. */}
         <div className="st-invoice-preview">
           <div className="st-invoice-preview__scale">
             <InvoicePaper
@@ -604,6 +668,20 @@ export function SettingsScreen({ onOpenStores }: SettingsScreenProps = {}) {
               party={PRINT_PREVIEW_PARTY}
               invoiceNumber={101}
               received={12}
+              companyName={s.companyName}
+              companyPhone={s.companyPhone}
+              companyAddress={s.companyAddress}
+              companyEmail={s.companyEmail}
+              showName={s.showCompanyName}
+              showPhone={s.showCompanyPhone}
+              showAddress={s.showCompanyAddress}
+              showEmail={s.showCompanyEmail}
+              showLogo={s.companyLogo}
+              logoUrl={s.companyLogoUrl}
+              showTin={s.showTinOnSale}
+              tinValue={s.tinValue}
+              companyNameSize={s.companyNameSize}
+              invoiceTextSize={s.invoiceTextSize}
             />
           </div>
         </div>
@@ -1282,8 +1360,12 @@ const STYLES = `
 .st-prefix-select { border: 1px solid #d1d5db; border-radius: 6px; padding: 5px 8px; font-size: 12.5px; color: #374151; background: #fff; }
 
 /* Print layout */
-.st-print-layout { display: grid; grid-template-columns: 1fr 420px; gap: 28px; align-items: start; }
-.st-print-left { display: flex; flex-direction: column; gap: 0; }
+.st-print-layout { display: grid; grid-template-columns: 1fr 520px; gap: 28px; align-items: start; }
+/* min-width: 0 overrides the flex/grid default of never shrinking below content's natural
+   width — without it, the 15-wide theme carousel forces this whole column wider than the
+   grid's 1fr track, pushing the preview panel (and every checklist row's right-aligned
+   input/info-dot, via their own margin-left: auto) off past the visible window edge. */
+.st-print-left { display: flex; flex-direction: column; gap: 0; min-width: 0; }
 .st-subtabs { display: flex; gap: 0; border-bottom: 2px solid #e5e7eb; }
 .st-subtab {
   padding: 8px 16px;
@@ -1297,33 +1379,106 @@ const STYLES = `
   margin-bottom: -2px;
 }
 .st-subtab--active { color: #dc2626; border-bottom-color: #dc2626; }
-.st-themes { display: flex; gap: 10px; margin: 12px 0; overflow-x: auto; padding-bottom: 6px; }
+.st-subtabs--sub { margin-top: 14px; border-bottom: 1px solid #e5e7eb; }
+
+/* Theme carousel — arrow buttons either side of a horizontally-scrolling strip of cards */
+.st-theme-carousel { display: flex; align-items: center; gap: 6px; margin: 14px 0; min-width: 0; }
+.st-carousel-arrow {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #64748b;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.st-carousel-arrow:hover { background: #f1f5f9; color: #1e293b; }
+.st-themes { display: flex; gap: 12px; overflow-x: auto; scroll-behavior: smooth; padding: 2px; flex: 1; min-width: 0; scrollbar-width: none; }
+.st-themes::-webkit-scrollbar { display: none; }
 .st-theme {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  background: #f8fafc;
-  border: 2px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 6px 8px;
+  gap: 8px;
+  background: #fff;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 10px 8px 8px;
   cursor: pointer;
-  font-size: 10.5px;
-  color: #64748b;
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
   flex-shrink: 0;
-  width: 78px;
+  width: 88px;
 }
-.st-theme span { white-space: normal; text-align: center; line-height: 1.2; }
-.st-theme--active { border-color: #3b82f6; background: #eff6ff; color: #1d4ed8; }
-.st-theme-preview { display: flex; flex-direction: column; gap: 2px; width: 48px; height: 22px; justify-content: center; }
-.st-theme-line { height: 3px; background: #d1d5db; border-radius: 2px; }
-.st-theme-line--short { width: 60%; }
-.st-theme--active .st-theme-line { background: #3b82f6; }
+.st-theme:hover { border-color: #bfdbfe; }
+.st-theme span { white-space: normal; text-align: center; line-height: 1.25; }
+.st-theme--active { border-color: #3b82f6; background: #eff6ff; color: #1d4ed8; box-shadow: 0 0 0 3px rgba(59,130,246,0.12); }
+.st-theme-preview {
+  display: flex; flex-direction: column; gap: 4px; width: 100%; height: 44px;
+  justify-content: center; background: #f8fafc; border-radius: 6px; padding: 6px 8px;
+}
+.st-theme-line { height: 3px; background: #cbd5e1; border-radius: 2px; }
+.st-theme-line--title { width: 70%; height: 4px; background: #94a3b8; }
+.st-theme-line--short { width: 55%; }
+.st-theme-row { display: flex; gap: 3px; margin-top: 2px; }
+.st-theme-block { flex: 1; height: 6px; background: #e2e8f0; border-radius: 1px; }
+.st-theme--active .st-theme-line,
+.st-theme--active .st-theme-line--title { background: #93c5fd; }
+.st-theme--active .st-theme-block { background: #bfdbfe; }
+.st-theme--active .st-theme-preview { background: #dbeafe; }
 
 /* Color grid */
 .st-color-grid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 8px; margin: 12px 0; max-width: 340px; }
 .st-swatch { width: 24px; height: 24px; border-radius: 50%; cursor: pointer; padding: 0; }
 .st-swatch--active { outline: 2px solid #1e293b; outline-offset: 2px; }
+
+/* Company info / header checklist — checkbox + label + optional inline field, one row */
+.st-header-list { margin-bottom: 4px; }
+.st-header-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  cursor: pointer;
+  font-size: 13px;
+  color: #374151;
+  min-width: 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+.st-header-row input[type="checkbox"] { accent-color: #3b82f6; width: 14px; height: 14px; flex-shrink: 0; }
+.st-header-row__label { flex-shrink: 0; min-width: 168px; }
+.st-header-row__input { flex: 1; max-width: 220px; margin-left: auto; cursor: text; }
+.st-info-dot {
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 1.2px solid #cbd5e1;
+  color: #94a3b8;
+  font-size: 10px;
+  font-style: italic;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: help;
+}
+.st-change-link {
+  background: none;
+  border: none;
+  color: #3b82f6;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  margin-left: auto;
+  margin-right: 8px;
+}
+.st-change-link:hover { text-decoration: underline; }
 
 /* Field pairs — two selects side by side, halves the row count vs. stacking them */
 .st-field-row-pair { display: flex; gap: 20px; }
@@ -1338,7 +1493,7 @@ const STYLES = `
   position: sticky;
   top: 0;
 }
-.st-invoice-preview__scale { width: 700px; zoom: 0.4; }
+.st-invoice-preview__scale { width: 700px; zoom: 0.65; }
 
 /* Message layout */
 .st-msg-layout { display: grid; grid-template-columns: 1fr 380px; gap: 28px; align-items: start; }

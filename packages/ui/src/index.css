@@ -8208,6 +8208,7 @@ body,
   font-size: 10px; font-weight: 600; flex-shrink: 0;
 }
 .sinv__logo--plain { background: #f3f4f6; color: #9ca3af; border-color: #e5e7eb; }
+.sinv__logo-img { object-fit: contain; background: #fff; border-color: #e5e7eb; }
 .sinv__company { display: flex; flex-direction: column; gap: 2px; flex: 1; padding: 0 14px; text-align: right; }
 .sinv__company-name { font-size: 16px; font-weight: 700; }
 .sinv__company-phone { font-size: 10px; opacity: 0.85; }
