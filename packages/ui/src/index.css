@@ -7993,7 +7993,7 @@ body,
    list) in the printed page, ahead of the actual invoice in DOM order. Same fix
    applied to .bipv-* below and .dc-* further down. */
 @media print {
-  .sidebar, .topbar, .expired-banner, .readonly-banner, .sale-main {
+  .sidebar, .topbar, .expired-banner, .readonly-banner, .sale-main, .eip-screen {
     display: none !important;
   }
   .ipv-overlay { position: static; inset: auto; }
@@ -8029,7 +8029,7 @@ body,
 .bipv-pages { display: flex; flex-direction: column; align-items: center; gap: 24px; padding: 24px; }
 
 @media print {
-  .sidebar, .topbar, .expired-banner, .readonly-banner, .sale-main {
+  .sidebar, .topbar, .expired-banner, .readonly-banner, .sale-main, .eip-screen {
     display: none !important;
   }
   .bipv-overlay { position: static; inset: auto; background: none; overflow: visible; }
@@ -8579,7 +8579,7 @@ body,
    overlay's own chrome (header/footer) plus the app shell behind it, same convention
    as .ipv-*/.bipv-* above. */
 @media print {
-  .sidebar, .topbar, .expired-banner, .readonly-banner, .sale-main {
+  .sidebar, .topbar, .expired-banner, .readonly-banner, .sale-main, .eip-screen {
     display: none !important;
   }
   .dc-overlay { position: static; inset: auto; background: none; }
