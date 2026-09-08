@@ -1,15 +1,13 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback } from "react";
 import {
   View, Text, ScrollView, FlatList, TouchableOpacity, StyleSheet,
-  ActivityIndicator, RefreshControl, Modal, Alert, Animated, TextInput,
+  ActivityIndicator, RefreshControl, Modal, Alert, TextInput,
 } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
-let Voice: any = null;
-try { Voice = require("@react-native-voice/voice").default; } catch { /* not available in Expo Go */ }
 import { colors } from "../../src/theme";
 import { api, getPermissions, getMemberId } from "../../src/auth";
 import { canEditSale } from "../../src/permissions";
@@ -21,14 +19,6 @@ import { SalesmanFilter } from "../../src/components/SalesmanFilter";
 import type { Transaction, Party } from "@vyapar/api-client";
 
 type SaleRow = Transaction & { partyName: string };
-
-interface VoiceFilter {
-  partySearch?: string;
-  dateFrom?: Date;
-  dateTo?: Date;
-  status?: "paid" | "unpaid";
-  label: string;
-}
 
 const FILTERS = ["All", "Unpaid", "Paid"];
 const PAGE_SIZE = 50;
@@ -46,60 +36,6 @@ let colorIdx = 0;
 function partyHue(name: string) {
   if (!PARTY_COLORS[name]) { PARTY_COLORS[name] = TINTS[colorIdx % TINTS.length]; colorIdx++; }
   return PARTY_COLORS[name];
-}
-
-// Parse spoken text into structured filters.
-// Supports: party names, date ranges (today/this week/last week/this month/last month),
-// and payment status (paid/unpaid).
-function parseVoiceCommand(text: string): VoiceFilter | null {
-  if (!text.trim()) return null;
-  const lower = text.toLowerCase().trim();
-  const now = new Date();
-  const filter: VoiceFilter = { label: text.trim() };
-
-  // Status
-  if (/\b(unpaid|pending|due|outstanding|baki|baqi)\b/.test(lower)) {
-    filter.status = "unpaid";
-  } else if (/\b(paid|cleared|settled|received|ada)\b/.test(lower)) {
-    filter.status = "paid";
-  }
-
-  // Date ranges
-  if (/\btoday\b|\baj\b/.test(lower)) {
-    const s = new Date(now); s.setHours(0, 0, 0, 0);
-    const e = new Date(now); e.setHours(23, 59, 59, 999);
-    filter.dateFrom = s; filter.dateTo = e;
-  } else if (/\bthis week\b/.test(lower)) {
-    const s = new Date(now); s.setDate(now.getDate() - now.getDay()); s.setHours(0, 0, 0, 0);
-    filter.dateFrom = s; filter.dateTo = new Date();
-  } else if (/\blast week\b/.test(lower)) {
-    const e = new Date(now); e.setDate(now.getDate() - now.getDay() - 1); e.setHours(23, 59, 59, 999);
-    const s = new Date(e); s.setDate(e.getDate() - 6); s.setHours(0, 0, 0, 0);
-    filter.dateFrom = s; filter.dateTo = e;
-  } else if (/\bthis month\b/.test(lower)) {
-    filter.dateFrom = new Date(now.getFullYear(), now.getMonth(), 1);
-    filter.dateTo = new Date();
-  } else if (/\blast month\b/.test(lower)) {
-    filter.dateFrom = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    filter.dateTo = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
-  }
-
-  // Extract party name: strip all known keyword tokens and keep what remains
-  const nameText = lower
-    .replace(/\b(show|find|search|display|all|invoices?|bills?|sales?|for|from|of|customer|party|the|a|an|me|my|and|in|with|that|are|is)\b/g, "")
-    .replace(/\b(paid|unpaid|pending|due|cleared|settled|received|outstanding|baki|baqi|ada)\b/g, "")
-    .replace(/\b(today|aj|this|last|week|month|year)\b/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  if (nameText.length > 1) filter.partySearch = nameText;
-
-  // Fallback: whole text is probably a name
-  if (!filter.status && !filter.dateFrom && !filter.partySearch) {
-    filter.partySearch = text.trim();
-  }
-
-  return filter;
 }
 
 export default function SaleListScreen() {
@@ -133,103 +69,9 @@ export default function SaleListScreen() {
   // More menu state
   const [menuTarget, setMenuTarget] = useState<{ sale: SaleRow; idx: number } | null>(null);
 
-  // Voice state
-  const [isListening, setIsListening] = useState(false);
-  const [voicePartial, setVoicePartial] = useState("");
-  const [voiceFilter, setVoiceFilter] = useState<VoiceFilter | null>(null);
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const pulseLoop = useRef<Animated.CompositeAnimation | null>(null);
-
-  // Text search fallback (used when native voice module isn't available)
-  const [showTextSearch, setShowTextSearch] = useState(false);
+  // Search — simple toggleable inline bar, same pattern as purchase/index.tsx.
+  const [search, setSearch] = useState(false);
   const [searchText, setSearchText] = useState("");
-
-  // Wire up voice recognition callbacks
-  useEffect(() => {
-    try {
-      Voice.onSpeechEnd = () => {
-        pulseLoop.current?.stop();
-        pulseAnim.setValue(1);
-        setIsListening(false);
-      };
-
-      Voice.onSpeechPartialResults = (e) => {
-        if (e.value?.[0]) setVoicePartial(e.value[0]);
-      };
-
-      Voice.onSpeechResults = (e) => {
-        const text = e.value?.[0] ?? "";
-        if (text) {
-          const f = parseVoiceCommand(text);
-          if (f) setVoiceFilter(f);
-        }
-        setVoicePartial("");
-        pulseLoop.current?.stop();
-        pulseAnim.setValue(1);
-        setIsListening(false);
-      };
-
-      Voice.onSpeechError = () => {
-        pulseLoop.current?.stop();
-        pulseAnim.setValue(1);
-        setIsListening(false);
-        setVoicePartial("");
-      };
-    } catch {
-      // Native module unavailable — callbacks won't fire, fallback handles it
-    }
-
-    return () => {
-      try {
-        Voice.destroy().then(() => Voice.removeAllListeners()).catch(() => {});
-      } catch {
-        // Native module unavailable — skip cleanup
-      }
-    };
-  }, [pulseAnim]);
-
-  async function startListening() {
-    try {
-      const available = await Voice.isAvailable();
-      if (!available) {
-        setSearchText("");
-        setShowTextSearch(true);
-        return;
-      }
-      setVoicePartial("");
-      await Voice.start("en-US");
-      setIsListening(true);
-      pulseLoop.current = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, { toValue: 1.35, duration: 650, useNativeDriver: true }),
-          Animated.timing(pulseAnim, { toValue: 1, duration: 650, useNativeDriver: true }),
-        ])
-      );
-      pulseLoop.current.start();
-    } catch {
-      // Native voice module not available — fall back to text search
-      setSearchText("");
-      setShowTextSearch(true);
-    }
-  }
-
-  function submitTextSearch() {
-    const text = searchText.trim();
-    if (text) {
-      const f = parseVoiceCommand(text);
-      if (f) setVoiceFilter(f);
-    }
-    setShowTextSearch(false);
-    setSearchText("");
-  }
-
-  async function stopListening() {
-    try { await Voice.stop(); } catch { /* ignore */ }
-    pulseLoop.current?.stop();
-    pulseAnim.setValue(1);
-    setIsListening(false);
-    setVoicePartial("");
-  }
 
   // Fresh load of the first page — resets pagination and refetches parties. Used on initial
   // mount, screen focus, and pull-to-refresh.
@@ -266,8 +108,16 @@ export default function SaleListScreen() {
     if (loadingMore || !hasMore) return;
     setLoadingMore(true);
     try {
+      // Same hard JS-level backstop as fetchSales — without it, a hung request left the
+      // footer spinner stuck indefinitely with no way to recover short of leaving the screen.
+      const timeout = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error("Sale list load-more timed out")), 15000);
+      });
       const nextPage = page + 1;
-      const txns = await api.getTransactionsByType("sale", { take: PAGE_SIZE, skip: nextPage * PAGE_SIZE });
+      const txns = await Promise.race([
+        api.getTransactionsByType("sale", { take: PAGE_SIZE, skip: nextPage * PAGE_SIZE }),
+        timeout,
+      ]);
       setSales((prev) => [...prev, ...txns.map((t) => ({ ...t, partyName: partyMap[t.partyId] ?? "Unknown" }))]);
       setPage(nextPage);
       setHasMore(txns.length === PAGE_SIZE);
@@ -313,13 +163,8 @@ export default function SaleListScreen() {
   }
 
   function toggleSearch() {
-    if (showTextSearch) {
-      setShowTextSearch(false);
-      setSearchText("");
-    } else {
-      setSearchText("");
-      setShowTextSearch(true);
-    }
+    setSearch((v) => !v);
+    setSearchText("");
   }
 
   async function handleExportAllPdf() {
@@ -381,7 +226,7 @@ export default function SaleListScreen() {
     );
   }
 
-  // Apply status chip filter + date range + voice filter — note this only searches/filters
+  // Apply status chip filter + date range + party-name search — note this only searches/filters
   // over the pages of `sales` already loaded, not the tenant's entire history, since that's
   // fetched a page at a time now (see fetchSales/loadMoreSales above).
   const filtered = sales.filter((s) => {
@@ -389,14 +234,7 @@ export default function SaleListScreen() {
     if (activeFilter === 1 && s.balance <= 0) return false;
     if (activeFilter === 2 && s.balance > 0) return false;
     if (salesmanFilter && s.bookerId !== salesmanFilter) return false;
-    if (voiceFilter) {
-      if (voiceFilter.status === "paid" && s.balance !== 0) return false;
-      if (voiceFilter.status === "unpaid" && s.balance === 0) return false;
-      if (voiceFilter.partySearch &&
-        !s.partyName.toLowerCase().includes(voiceFilter.partySearch.toLowerCase())) return false;
-      if (voiceFilter.dateFrom && new Date(s.date) < voiceFilter.dateFrom) return false;
-      if (voiceFilter.dateTo && new Date(s.date) > voiceFilter.dateTo) return false;
-    }
+    if (searchText.trim() && !s.partyName.toLowerCase().includes(searchText.toLowerCase())) return false;
     return true;
   });
 
@@ -413,19 +251,7 @@ export default function SaleListScreen() {
         <Text style={styles.appBarTitle}>Sale list</Text>
         <View style={styles.appBarRight}>
           <TouchableOpacity hitSlop={8} onPress={toggleSearch}>
-            <Ionicons name="search-outline" size={20} color={showTextSearch ? colors.primary : colors.textMuted} />
-          </TouchableOpacity>
-          {/* Voice AI mic button */}
-          <TouchableOpacity
-            hitSlop={8}
-            onPress={isListening ? stopListening : startListening}
-            style={[styles.micBtn, isListening && styles.micBtnActive]}
-          >
-            <Ionicons
-              name={isListening ? "mic" : "mic-outline"}
-              size={20}
-              color={isListening ? "#fff" : colors.textMuted}
-            />
+            <Ionicons name="search-outline" size={20} color={search ? colors.primary : colors.textMuted} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.pdfBtn} hitSlop={8} onPress={handleExportAllPdf}>
             <Text style={styles.pdfBtnTxt}>Pdf</Text>
@@ -434,6 +260,20 @@ export default function SaleListScreen() {
       </View>
 
       <DateRangeFilterBar range={range} onChange={setRange} datesOnly />
+
+      {/* Search bar */}
+      {search && (
+        <View style={styles.searchBar}>
+          <Ionicons name="search" size={16} color={colors.textMuted} />
+          <TextInput style={styles.searchInput} value={searchText} onChangeText={setSearchText}
+            placeholder="Search by party name…" placeholderTextColor={colors.textLight} autoFocus />
+          {searchText.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchText("")} hitSlop={8}>
+              <Ionicons name="close-circle" size={16} color={colors.textMuted} />
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
 
       {/* Filter chips */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false}
@@ -447,17 +287,6 @@ export default function SaleListScreen() {
         ))}
 
         <SalesmanFilter value={salesmanFilter} onChange={setSalesmanFilter} />
-
-        {/* Voice filter dismissible chip */}
-        {voiceFilter && (
-          <View style={styles.voiceChip}>
-            <Ionicons name="mic" size={12} color={colors.primary} />
-            <Text style={styles.voiceChipTxt} numberOfLines={1}>{voiceFilter.label}</Text>
-            <TouchableOpacity hitSlop={8} onPress={() => setVoiceFilter(null)}>
-              <Ionicons name="close-circle" size={15} color={colors.primary} />
-            </TouchableOpacity>
-          </View>
-        )}
       </ScrollView>
 
       {loading ? (
@@ -492,18 +321,13 @@ export default function SaleListScreen() {
             <View style={styles.empty}>
               <Ionicons name="receipt-outline" size={48} color={colors.textLight} />
               <Text style={styles.emptyTxt}>
-                {voiceFilter ? `No results for "${voiceFilter.label}"` : "No sales yet"}
+                {searchText.trim() ? `No results for "${searchText.trim()}"` : "No sales yet"}
               </Text>
               <Text style={styles.emptySub}>
-                {voiceFilter
-                  ? "Try a different voice command or clear the filter"
+                {searchText.trim()
+                  ? "Try a different name or clear the search"
                   : "Tap + Add Sale to create your first invoice"}
               </Text>
-              {voiceFilter && (
-                <TouchableOpacity style={styles.clearVoiceBtn} onPress={() => setVoiceFilter(null)}>
-                  <Text style={styles.clearVoiceBtnTxt}>Clear voice filter</Text>
-                </TouchableOpacity>
-              )}
             </View>
           }
           ListFooterComponent={
@@ -568,90 +392,6 @@ export default function SaleListScreen() {
           </TouchableOpacity>
         </View>
       )}
-
-      {/* ── Text search fallback (Expo Go / no native voice module) ── */}
-      <Modal
-        visible={showTextSearch}
-        transparent
-        animationType="slide"
-        statusBarTranslucent
-        onRequestClose={() => setShowTextSearch(false)}
-      >
-        <TouchableOpacity style={styles.voiceOverlay} activeOpacity={1} onPress={() => setShowTextSearch(false)}>
-          <View style={styles.voiceSheet}>
-            <View style={styles.textSearchHeader}>
-              <Ionicons name="mic-outline" size={22} color={colors.primary} />
-              <Text style={styles.textSearchTitle}>Voice Search</Text>
-            </View>
-
-            <TextInput
-              style={styles.textSearchInput}
-              placeholder='e.g. "Ali Ahmed" or "unpaid this month"'
-              placeholderTextColor={colors.textLight}
-              value={searchText}
-              onChangeText={setSearchText}
-              autoFocus
-              returnKeyType="search"
-              onSubmitEditing={submitTextSearch}
-            />
-
-            <View style={styles.voiceExamples}>
-              {["Show Ali Ahmed", "Unpaid this month", "Last week paid", "Today"].map((ex) => (
-                <TouchableOpacity
-                  key={ex}
-                  style={styles.voiceExampleChip}
-                  onPress={() => { setSearchText(ex); }}
-                >
-                  <Text style={styles.voiceExampleItem}>{ex}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <TouchableOpacity style={styles.textSearchBtn} onPress={submitTextSearch}>
-              <Text style={styles.textSearchBtnTxt}>Search</Text>
-            </TouchableOpacity>
-
-            <Text style={styles.voiceTapCancel}>Tap outside to cancel</Text>
-          </View>
-        </TouchableOpacity>
-      </Modal>
-
-      {/* ── Voice Listening overlay ── */}
-      <Modal
-        visible={isListening}
-        transparent
-        animationType="fade"
-        statusBarTranslucent
-        onRequestClose={stopListening}
-      >
-        <TouchableOpacity style={styles.voiceOverlay} activeOpacity={1} onPress={stopListening}>
-          <View style={styles.voiceSheet}>
-            <Animated.View style={[styles.voicePulseRing, { transform: [{ scale: pulseAnim }] }]}>
-              <View style={styles.voiceMicCircle}>
-                <Ionicons name="mic" size={34} color="#fff" />
-              </View>
-            </Animated.View>
-
-            <Text style={styles.voiceListeningTxt}>Listening…</Text>
-
-            {voicePartial ? (
-              <Text style={styles.voicePartialTxt}>"{voicePartial}"</Text>
-            ) : (
-              <Text style={styles.voiceHintTxt}>Say a customer name, date, or status</Text>
-            )}
-
-            <View style={styles.voiceExamples}>
-              {['"Show Ali Ahmed"', '"Unpaid this month"', '"Last week paid"'].map((ex) => (
-                <View key={ex} style={styles.voiceExampleChip}>
-                  <Text style={styles.voiceExampleItem}>{ex}</Text>
-                </View>
-              ))}
-            </View>
-
-            <Text style={styles.voiceTapCancel}>Tap anywhere to cancel</Text>
-          </View>
-        </TouchableOpacity>
-      </Modal>
 
       {/* ── Share Transaction bottom sheet ── */}
       <Modal
@@ -766,8 +506,12 @@ const styles = StyleSheet.create({
   pdfBtn: { backgroundColor: colors.redLight, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4 },
   pdfBtnTxt: { fontSize: 11, fontWeight: "700", color: colors.red },
 
-  micBtn: { padding: 4, borderRadius: 8 },
-  micBtnActive: { backgroundColor: colors.primary, padding: 6, borderRadius: 8 },
+  searchBar: {
+    backgroundColor: "#fff", flexDirection: "row", alignItems: "center",
+    paddingHorizontal: 14, paddingVertical: 10, gap: 8,
+    borderBottomWidth: 1, borderBottomColor: colors.border,
+  },
+  searchInput: { flex: 1, fontSize: 14, color: colors.text, padding: 0 },
 
   chipsBar: { flexGrow: 0, backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: colors.border },
   chipsContent: { paddingHorizontal: 16, paddingVertical: 10, gap: 8, alignItems: "center" },
@@ -775,15 +519,6 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   chipTxt: { fontSize: 13, fontWeight: "500", color: colors.textMuted },
   chipTxtActive: { color: "#fff", fontWeight: "600" },
-
-  // Voice filter chip (in the chips bar)
-  voiceChip: {
-    flexDirection: "row", alignItems: "center", gap: 5,
-    paddingHorizontal: 12, paddingVertical: 7,
-    borderRadius: 100, borderWidth: 1.5, borderColor: colors.primary,
-    backgroundColor: "#eff6ff", maxWidth: 200,
-  },
-  voiceChipTxt: { fontSize: 12, fontWeight: "600", color: colors.primary, flexShrink: 1 },
 
   centered: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, padding: 32 },
   errorTxt: { fontSize: 13, color: colors.textMuted, textAlign: "center" },
@@ -799,8 +534,6 @@ const styles = StyleSheet.create({
   empty: { alignItems: "center", paddingVertical: 60, gap: 8 },
   emptyTxt: { fontSize: 15, fontWeight: "600", color: colors.text, textAlign: "center" },
   emptySub: { fontSize: 12, color: colors.textMuted, textAlign: "center" },
-  clearVoiceBtn: { marginTop: 8, paddingHorizontal: 20, paddingVertical: 10, backgroundColor: "#eff6ff", borderRadius: 100, borderWidth: 1, borderColor: colors.primary },
-  clearVoiceBtnTxt: { fontSize: 13, fontWeight: "600", color: colors.primary },
 
   saleCard: { backgroundColor: "#fff", borderRadius: 14, borderWidth: 1, borderColor: colors.border, padding: 14, gap: 10 },
   saleTop: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
@@ -828,47 +561,6 @@ const styles = StyleSheet.create({
   fabWrap: { position: "absolute", left: 0, right: 0, alignItems: "center" },
   fab: { flexDirection: "row", alignItems: "center", gap: 7, backgroundColor: colors.red, borderRadius: 100, paddingHorizontal: 24, paddingVertical: 13, shadowColor: colors.red, shadowOpacity: 0.3, shadowRadius: 16, elevation: 7 },
   fabTxt: { fontSize: 14, fontWeight: "600", color: "#fff" },
-
-  // Text search fallback styles
-  textSearchHeader: { flexDirection: "row", alignItems: "center", gap: 8, alignSelf: "flex-start" },
-  textSearchTitle: { fontSize: 18, fontWeight: "700", color: colors.text },
-  textSearchInput: {
-    width: "100%", borderWidth: 1.5, borderColor: colors.primary, borderRadius: 12,
-    paddingHorizontal: 16, paddingVertical: 13, fontSize: 15, color: colors.text,
-    backgroundColor: "#f8faff",
-  },
-  voiceExampleChip: { backgroundColor: "#f1f5f9", borderRadius: 100, paddingHorizontal: 12, paddingVertical: 5 },
-  textSearchBtn: {
-    width: "100%", backgroundColor: colors.primary, borderRadius: 12,
-    paddingVertical: 14, alignItems: "center",
-  },
-  textSearchBtnTxt: { color: "#fff", fontWeight: "700", fontSize: 15 },
-
-  // Voice listening overlay
-  voiceOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", alignItems: "center", justifyContent: "flex-end" },
-  voiceSheet: {
-    width: "100%", backgroundColor: "#fff", borderTopLeftRadius: 28, borderTopRightRadius: 28,
-    paddingTop: 40, paddingBottom: 48, paddingHorizontal: 28, alignItems: "center", gap: 14,
-  },
-  voicePulseRing: {
-    width: 96, height: 96, borderRadius: 48,
-    backgroundColor: `${colors.primary}22`,
-    alignItems: "center", justifyContent: "center",
-  },
-  voiceMicCircle: {
-    width: 72, height: 72, borderRadius: 36,
-    backgroundColor: colors.primary,
-    alignItems: "center", justifyContent: "center",
-  },
-  voiceListeningTxt: { fontSize: 20, fontWeight: "700", color: colors.text, marginTop: 4 },
-  voicePartialTxt: {
-    fontSize: 15, color: colors.primary, fontWeight: "500", textAlign: "center",
-    fontStyle: "italic", paddingHorizontal: 16,
-  },
-  voiceHintTxt: { fontSize: 13, color: colors.textMuted, textAlign: "center" },
-  voiceExamples: { flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "center", marginTop: 4, width: "100%" },
-  voiceExampleItem: { fontSize: 11.5, color: colors.textMuted },
-  voiceTapCancel: { fontSize: 12, color: colors.textLight, marginTop: 8 },
 
   // Bottom sheet shared
   sheetOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" },
