@@ -8046,7 +8046,7 @@ body,
    like the Sale list's own filter bar.
 ═══════════════════════════════════════════════════════════ */
 .eip-screen {
-  display: flex; flex-direction: column; flex: 1; overflow: hidden; background: #f5f6fa;
+  display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; background: #f5f6fa;
 }
 .eip-appbar {
   display: flex; align-items: center; gap: 14px;
@@ -8063,7 +8063,7 @@ body,
   border-bottom: 1px solid #e5e7eb; background: #fff;
 }
 .eip-checkall { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: #374151; cursor: pointer; }
-.eip-list { flex: 1; overflow-y: auto; padding: 0 20px; }
+.eip-list { flex: 1; min-height: 0; overflow-y: auto; padding: 0 20px; }
 .eip-empty { padding: 60px 0; text-align: center; color: #9ca3af; font-size: 13px; }
 .eip-table { width: 100%; border-collapse: collapse; font-size: 13px; background: #fff; }
 .eip-table thead th {
