@@ -3,6 +3,7 @@ import * as XLSX from "xlsx";
 
 import { api } from "../lib/api";
 import { BulkInvoicePreviewModal } from "./BulkInvoicePreviewModal";
+import { ExportInvoicesModal } from "./ExportInvoicesModal";
 import { loadMemberId, loadPermissions, canEditSale, canDeleteSale } from "../lib/permissions";
 import type { Transaction, Party, Item, Company, TeamMember, TaxRate } from "@vyapar/api-client";
 import { useCompany } from "../lib/CompanyContext";
@@ -312,8 +313,11 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
   /* invoice preview */
   const [previewSale, setPreviewSale] = useState<SaleRow | null>(null);
   const [previewIdx,  setPreviewIdx]  = useState(0);
-  /* bulk invoice preview (the filter bar's "Export to PDF") */
+  /* bulk invoice preview (the filter bar's "Export to PDF") — reached via the checkbox
+     selection step below, which narrows `filtered` down to what the user actually picks. */
   const [showBulkPreview, setShowBulkPreview] = useState(false);
+  const [bulkPreviewSales, setBulkPreviewSales] = useState<SaleRow[]>([]);
+  const [showExportInvoices, setShowExportInvoices] = useState(false);
   /* row action menu */
   const [menuId, setMenuId] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
@@ -720,7 +724,7 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
               <button type="button" className="dc-icon-btn" onClick={() => exportSalesToExcel(filtered, parties, filterFrom, filterTo)}>
                 📊 Excel Report
               </button>
-              <button type="button" className="dc-icon-btn" onClick={() => setShowBulkPreview(true)}>
+              <button type="button" className="dc-icon-btn" onClick={() => setShowExportInvoices(true)}>
                 📄 Export to PDF
               </button>
               <button type="button" className="dc-icon-btn" onClick={() => window.print()}>
@@ -977,10 +981,24 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
         />
       )}
 
-      {/* ── Bulk Invoice Preview (filter bar's "Export to PDF") ── */}
+      {/* ── Export Invoices (checkbox selection step, filter bar's "Export to PDF") ── */}
+      {showExportInvoices && (
+        <ExportInvoicesModal
+          sales={filtered}
+          filterLabel={`${filterPreset} · ${fmtChip(filterFrom)} to ${fmtChip(filterTo)} · ${salesmanFilterId ? (teamMembers.find((m) => m.id === salesmanFilterId)?.name ?? "All Salesmen") : "All Salesmen"} · ${filter === "all" ? "All" : filter === "unpaid" ? "Unpaid" : "Paid"}`}
+          onClose={() => setShowExportInvoices(false)}
+          onContinue={(selected) => {
+            setShowExportInvoices(false);
+            setBulkPreviewSales(selected);
+            setShowBulkPreview(true);
+          }}
+        />
+      )}
+
+      {/* ── Bulk Invoice Preview (one real invoice paper per selected sale) ── */}
       {showBulkPreview && (
         <BulkInvoicePreviewModal
-          sales={filtered}
+          sales={bulkPreviewSales}
           parties={parties}
           onClose={() => setShowBulkPreview(false)}
         />
