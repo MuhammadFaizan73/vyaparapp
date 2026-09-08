@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Tabs, router } from "expo-router";
-import { Platform, View, StyleSheet, Text, TouchableOpacity, Modal, Pressable, ScrollView } from "react-native";
+import { View, StyleSheet, Text, TouchableOpacity, Modal, Pressable, ScrollView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { colors } from "../../src/theme";
@@ -184,6 +184,15 @@ export default function TabLayout() {
   const [permissions, setPermissions] = useState<string[] | null>(null);
   const [showAddTxn, setShowAddTxn] = useState(false);
   const { settings } = useSettings();
+  const insets = useSafeAreaInsets();
+  // The native bar's height/padding used to be hardcoded per-platform, which didn't account
+  // for the device's real bottom safe-area inset (gesture nav / home indicator) — on phones
+  // with a taller inset than that guess, the tappable icon row sat partly under the system
+  // nav area and became unreachable. Size it off the actual inset instead.
+  const nativeTabBarStyle = [
+    styles.tabBar,
+    { height: 50 + insets.bottom, paddingBottom: insets.bottom + 6 },
+  ];
 
   useEffect(() => {
     const load = () => {
@@ -212,7 +221,7 @@ export default function TabLayout() {
         tabBar={settings.appTheme === "modern" ? undefined : () => <CustomTabBar theme={settings.appTheme} onAddPress={() => setShowAddTxn(true)} />}
         screenOptions={{
           headerShown: false,
-          tabBarStyle: styles.tabBar,
+          tabBarStyle: nativeTabBarStyle,
           tabBarActiveTintColor: colors.tabActive,
           tabBarInactiveTintColor: colors.textLight,
           tabBarLabelStyle: styles.label,
@@ -305,8 +314,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderTopColor: "#e7edf3",
     borderTopWidth: 1,
-    height: Platform.OS === "ios" ? 82 : 66,
-    paddingBottom: Platform.OS === "ios" ? 24 : 8,
+    // height/paddingBottom are set responsively at render time — see nativeTabBarStyle above.
     paddingTop: 6,
     shadowColor: "#000",
     shadowOpacity: 0.05,
