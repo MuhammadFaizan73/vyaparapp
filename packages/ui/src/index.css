@@ -7986,8 +7986,16 @@ body,
 
 /* Printing/saving from inside the preview must produce just the invoice paper —
    the theme sidebar, share panel, and top/action bars are editor chrome, not part
-   of the document. Same convention as .dc-paper's print rule for Delivery Challan. */
+   of the document. Same convention as .dc-paper's print rule for Delivery Challan.
+   This modal is rendered via a portal as a SIBLING of the app root, not nested inside
+   it — hiding only the modal's own chrome left the app shell (sidebar/topbar) and
+   whatever screen was still mounted behind the modal (typically the Sale Invoices
+   list) in the printed page, ahead of the actual invoice in DOM order. Same fix
+   applied to .bipv-* below and .dc-* further down. */
 @media print {
+  .sidebar, .topbar, .expired-banner, .readonly-banner, .sale-main {
+    display: none !important;
+  }
   .ipv-overlay { position: static; inset: auto; }
   .ipv-root { background: none; overflow: visible; }
   .ipv-topbar, .ipv-actionbar, .ipv-sidebar, .ipv-share { display: none !important; }
@@ -8021,6 +8029,9 @@ body,
 .bipv-pages { display: flex; flex-direction: column; align-items: center; gap: 24px; padding: 24px; }
 
 @media print {
+  .sidebar, .topbar, .expired-banner, .readonly-banner, .sale-main {
+    display: none !important;
+  }
   .bipv-overlay { position: static; inset: auto; background: none; overflow: visible; }
   .bipv-actionbar { display: none !important; }
   .bipv-pages { padding: 0; gap: 0; }
@@ -8505,8 +8516,16 @@ body,
 }
 .dc-footer-btn--primary:hover { background: #b91c1c; }
 
+/* .dc-paper is nested INSIDE .dc-overlay (see DeliveryChallanModal.tsx) — hiding the
+   overlay itself hid the paper along with it, printing a blank page. Hide only the
+   overlay's own chrome (header/footer) plus the app shell behind it, same convention
+   as .ipv-*/.bipv-* above. */
 @media print {
-  .dc-overlay, .dc-modal-header, .dc-footer { display: none !important; }
+  .sidebar, .topbar, .expired-banner, .readonly-banner, .sale-main {
+    display: none !important;
+  }
+  .dc-overlay { position: static; inset: auto; background: none; }
+  .dc-modal-header, .dc-footer { display: none !important; }
   .dc-paper { border: none; box-shadow: none; }
 }
 
