@@ -86,6 +86,7 @@ import { ItemsScreen } from "./ItemsScreen";
 import { StoresScreen } from "./StoresScreen";
 import { StockTransferScreen } from "./StockTransferScreen";
 import { SaleScreen } from "./SaleScreen";
+import { ExportInvoicesScreen, type ExportInvoicesFilters } from "./ExportInvoicesScreen";
 import { PurchaseScreen } from "./PurchaseScreen";
 import { PaymentInScreen } from "./PaymentInScreen";
 import { SaleTxnScreen } from "./SaleTxnScreen";
@@ -229,6 +230,7 @@ type Props = {
 export function Shell({ status, onLogout, onLicenseActivated }: Props) {
   const [active, setActive]     = useState("home");
   const [pendingReportKey, setPendingReportKey] = useState<string | null>(null);
+  const [exportInvoicesFilters, setExportInvoicesFilters] = useState<ExportInvoicesFilters | null>(null);
   // Bumped (never reset) so SaleScreen/PurchaseScreen's useEffect fires on every click,
   // even repeat clicks while already on that screen — a plain boolean wouldn't re-trigger.
   const [autoOpenSaleNonce, setAutoOpenSaleNonce] = useState(0);
@@ -386,6 +388,7 @@ export function Shell({ status, onLogout, onLicenseActivated }: Props) {
     if (active.startsWith("parties"))       return "parties";
     if (active === "sale-payment-in")        return "payment-in";
     if (active === "sale-estimate" || active === "sale-proforma" || active === "sale-order" || active === "sale-delivery" || active === "sale-return") return "sale-txn";
+    if (active === "sale-export")            return "sale-export";
     if (active.startsWith("sale"))          return "sale";
     if (active.startsWith("purchase"))      return "purchase";
     if (active === "sync-share")            return "sync-share";
@@ -614,7 +617,15 @@ export function Shell({ status, onLogout, onLicenseActivated }: Props) {
         {screenKey === "import-cash-flow" && <ImportCashFlowPage onGoToParties={() => setActive("parties")} />}
         {screenKey === "import-expenses" && <ImportExpensesPage onGoToExpenses={() => setActive("purchase-expense")} />}
         {screenKey === "payment-in"  && <PaymentInScreen isLocked={isLocked} onLockedAction={handleLockedAction} />}
-        {screenKey === "sale"        && <SaleScreen     isLocked={isLocked} onLockedAction={handleLockedAction} activeKey={active} autoOpenAdd={autoOpenSaleNonce} />}
+        {screenKey === "sale"        && (
+          <SaleScreen
+            isLocked={isLocked} onLockedAction={handleLockedAction} activeKey={active} autoOpenAdd={autoOpenSaleNonce}
+            onOpenExportInvoices={(filters) => { setExportInvoicesFilters(filters); setActive("sale-export"); }}
+          />
+        )}
+        {screenKey === "sale-export" && exportInvoicesFilters && (
+          <ExportInvoicesScreen {...exportInvoicesFilters} onBack={() => setActive("sale-invoices")} />
+        )}
         {screenKey === "sale-txn"    && <SaleTxnScreen  isLocked={isLocked} onLockedAction={handleLockedAction} activeKey={active} />}
         {screenKey === "purchase"    && <PurchaseScreen isLocked={isLocked} onLockedAction={handleLockedAction} activeKey={active} autoOpenAdd={autoOpenPurchaseNonce} />}
         {screenKey === "sync-share"  && <SyncShareScreen />}

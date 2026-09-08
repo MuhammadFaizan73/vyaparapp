@@ -8038,6 +8038,55 @@ body,
   .bipv-page { box-shadow: none !important; border: none !important; margin: 0 !important; }
 }
 
+/* ═══════════════════════════════════════════════════════════
+   EXPORT INVOICES SCREEN  (.eip-*)  — full page (not a popup),
+   checkbox selection step in front of BulkInvoicePreviewModal,
+   opened from Sale list's "Export to PDF". Reuses .sale-filterbar*
+   for its Date/Salesman/status filter row so it looks and behaves
+   like the Sale list's own filter bar.
+═══════════════════════════════════════════════════════════ */
+.eip-screen {
+  display: flex; flex-direction: column; flex: 1; overflow: hidden; background: #f5f6fa;
+}
+.eip-appbar {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 20px; background: #fff; border-bottom: 1px solid #e5e7eb;
+}
+.eip-back {
+  background: none; border: none; cursor: pointer;
+  font-size: 13px; font-weight: 600; color: #374151; padding: 4px 0;
+}
+.eip-title { font-size: 16px; font-weight: 700; color: #111827; flex: 1; }
+.eip-count-badge { font-size: 12.5px; color: #6b7280; font-weight: 600; }
+.eip-toolbar {
+  display: flex; align-items: center; padding: 10px 20px;
+  border-bottom: 1px solid #e5e7eb; background: #fff;
+}
+.eip-checkall { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: #374151; cursor: pointer; }
+.eip-list { flex: 1; overflow-y: auto; padding: 0 20px; }
+.eip-empty { padding: 60px 0; text-align: center; color: #9ca3af; font-size: 13px; }
+.eip-table { width: 100%; border-collapse: collapse; font-size: 13px; background: #fff; }
+.eip-table thead th {
+  position: sticky; top: 0; background: #fff;
+  text-align: left; padding: 10px 8px; font-size: 11.5px; font-weight: 700;
+  color: #9ca3af; text-transform: uppercase; letter-spacing: 0.4px;
+  border-bottom: 1px solid #e5e7eb;
+}
+.eip-table tbody tr { cursor: pointer; border-bottom: 1px solid #f3f4f6; }
+.eip-table tbody tr:hover { background: #f9fafb; }
+.eip-table td { padding: 9px 8px; color: #374151; }
+.eip-th-check { width: 36px; }
+.eip-footer {
+  display: flex; align-items: center; justify-content: flex-end; gap: 10px;
+  padding: 14px 20px; border-top: 1px solid #e5e7eb; background: #fff;
+}
+.eip-btn {
+  padding: 8px 16px; border-radius: 8px; border: 1px solid #d1d5db;
+  background: #fff; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.eip-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.eip-btn--primary { background: #3b82f6; color: #fff; border-color: #3b82f6; }
+
 /* ── Top bar ── */
 .ipv-topbar {
   display: flex; align-items: center;

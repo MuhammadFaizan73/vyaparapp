@@ -2,8 +2,6 @@ import React, { useState, useEffect, useRef } from "react";
 import * as XLSX from "xlsx";
 
 import { api } from "../lib/api";
-import { BulkInvoicePreviewModal } from "./BulkInvoicePreviewModal";
-import { ExportInvoicesModal } from "./ExportInvoicesModal";
 import { loadMemberId, loadPermissions, canEditSale, canDeleteSale } from "../lib/permissions";
 import type { Transaction, Party, Item, Company, TeamMember, TaxRate } from "@vyapar/api-client";
 import { useCompany } from "../lib/CompanyContext";
@@ -241,9 +239,12 @@ function exportSalesToExcel(rows: SaleRow[], parties: Party[], from: string, to:
 /* ═══════════════════════════════════════════════════════════
    MAIN COMPONENT
 ═══════════════════════════════════════════════════════════ */
-type Props = { isLocked?: boolean; onLockedAction?: () => void; activeKey?: string; autoOpenAdd?: number };
+type Props = {
+  isLocked?: boolean; onLockedAction?: () => void; activeKey?: string; autoOpenAdd?: number;
+  onOpenExportInvoices?: (filters: { filterPreset: string; filterFrom: string; filterTo: string; salesmanFilterId: string; status: "all" | "unpaid" | "paid" }) => void;
+};
 
-export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale-invoices", autoOpenAdd }: Props = {}) {
+export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale-invoices", autoOpenAdd, onOpenExportInvoices }: Props = {}) {
   const subTab: SubTab = ACTIVE_KEY_TO_SUBTAB[activeKey] ?? "invoices";
   const [filter, setFilter] = useState<"all" | "unpaid" | "paid">("all");
   const [sales, setSales] = useState<SaleRow[]>([]);
@@ -313,11 +314,8 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
   /* invoice preview */
   const [previewSale, setPreviewSale] = useState<SaleRow | null>(null);
   const [previewIdx,  setPreviewIdx]  = useState(0);
-  /* bulk invoice preview (the filter bar's "Export to PDF") — reached via the checkbox
-     selection step below, which narrows `filtered` down to what the user actually picks. */
-  const [showBulkPreview, setShowBulkPreview] = useState(false);
-  const [bulkPreviewSales, setBulkPreviewSales] = useState<SaleRow[]>([]);
-  const [showExportInvoices, setShowExportInvoices] = useState(false);
+  /* the filter bar's "Export to PDF" navigates to the full ExportInvoicesScreen instead of
+     opening a bulk preview modal directly — see onOpenExportInvoices below. */
   /* row action menu */
   const [menuId, setMenuId] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
@@ -724,7 +722,7 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
               <button type="button" className="dc-icon-btn" onClick={() => exportSalesToExcel(filtered, parties, filterFrom, filterTo)}>
                 📊 Excel Report
               </button>
-              <button type="button" className="dc-icon-btn" onClick={() => setShowExportInvoices(true)}>
+              <button type="button" className="dc-icon-btn" onClick={() => onOpenExportInvoices?.({ filterPreset, filterFrom, filterTo, salesmanFilterId, status: filter })}>
                 📄 Export to PDF
               </button>
               <button type="button" className="dc-icon-btn" onClick={() => window.print()}>
@@ -981,28 +979,6 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
         />
       )}
 
-      {/* ── Export Invoices (checkbox selection step, filter bar's "Export to PDF") ── */}
-      {showExportInvoices && (
-        <ExportInvoicesModal
-          sales={filtered}
-          filterLabel={`${filterPreset} · ${fmtChip(filterFrom)} to ${fmtChip(filterTo)} · ${salesmanFilterId ? (teamMembers.find((m) => m.id === salesmanFilterId)?.name ?? "All Salesmen") : "All Salesmen"} · ${filter === "all" ? "All" : filter === "unpaid" ? "Unpaid" : "Paid"}`}
-          onClose={() => setShowExportInvoices(false)}
-          onContinue={(selected) => {
-            setShowExportInvoices(false);
-            setBulkPreviewSales(selected);
-            setShowBulkPreview(true);
-          }}
-        />
-      )}
-
-      {/* ── Bulk Invoice Preview (one real invoice paper per selected sale) ── */}
-      {showBulkPreview && (
-        <BulkInvoicePreviewModal
-          sales={bulkPreviewSales}
-          parties={parties}
-          onClose={() => setShowBulkPreview(false)}
-        />
-      )}
 
       {/* ── Receive Payment (Payment-In form pre-filled with party + outstanding balance) ── */}
       {receivePaymentSale && (
