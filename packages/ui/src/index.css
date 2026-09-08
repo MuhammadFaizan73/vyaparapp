@@ -7984,6 +7984,15 @@ body,
   background: #f3f4f6; overflow: hidden;
 }
 
+/* No @page rule meant every printer/OS used its own default margins — often large
+   enough, combined with .ipv-paper's fixed 700px width, to clip the invoice's right
+   edge. Fix the printable area explicitly instead of relying on whatever the driver
+   defaults to. */
+@page {
+  size: A4;
+  margin: 10mm;
+}
+
 /* Printing/saving from inside the preview must produce just the invoice paper —
    the theme sidebar, share panel, and top/action bars are editor chrome, not part
    of the document. Same convention as .dc-paper's print rule for Delivery Challan.
@@ -8001,7 +8010,10 @@ body,
   .ipv-topbar, .ipv-actionbar, .ipv-sidebar, .ipv-share { display: none !important; }
   .ipv-body { display: block !important; }
   .ipv-center { display: block !important; }
-  .ipv-paper { box-shadow: none !important; border: none !important; margin: 0 !important; }
+  /* .ipv-paper's fixed 700px screen-preview width doesn't fit every printer's actual
+     printable area (varies by paper size/default margins) — it was getting clipped on
+     the right edge. Let it size to whatever the page provides instead. */
+  .ipv-paper { box-shadow: none !important; border: none !important; margin: 0 !important; width: auto !important; max-width: 100% !important; }
 }
 
 /* ═══════════════════════════════════════════════════════════
