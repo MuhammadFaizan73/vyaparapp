@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback, useMemo, type ReactNode } from "react";
 import * as SecureStore from "expo-secure-store";
 import type { Company, Distributor, Branch } from "@vyapar/api-client";
-import { api, loadToken, getToken } from "./auth";
+import { api, loadToken, getToken, onAuthChange } from "./auth";
 
 const SELECTED_DISTRIBUTOR_KEY = "vyapar_selected_distributor_id";
 const SELECTED_BRANCH_KEY = "vyapar_selected_branch_id";
@@ -102,6 +102,29 @@ export function SelectedCompanyProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     }
   }, []);
+
+  // This provider mounts once at the app root and otherwise never re-fetches — without
+  // this, logging out and into a DIFFERENT account in the same running app session (no
+  // force-quit in between) would leave the previous tenant's companies/selection in
+  // memory, so the new login could show someone else's company. Every saveToken/
+  // clearToken fires this so state is wiped and reloaded fresh for whoever is now
+  // signed in.
+  useEffect(() => {
+    return onAuthChange(() => {
+      setDistributors([]);
+      setBranches([]);
+      setCompanies([]);
+      setCompaniesError(null);
+      setSelectedDistributorIdState(null);
+      setSelectedBranchIdState(null);
+      setSelectedCompanyIdState(null);
+      setLoading(true);
+      void getToken().then((token) => {
+        if (token) void refreshCompanies();
+        else setLoading(false);
+      });
+    });
+  }, [refreshCompanies]);
 
   useEffect(() => {
     // This provider mounts once at the app root, before the user has necessarily

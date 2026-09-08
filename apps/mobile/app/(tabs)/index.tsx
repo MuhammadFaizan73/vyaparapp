@@ -992,7 +992,7 @@ const t = StyleSheet.create({
   statCard: {
     backgroundColor: "#fff", borderRadius: 14, padding: 14,
     shadowColor: "#0f172a", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6,
-    elevation: 2,
+    elevation: 2, overflow: "hidden",
   },
   statTop: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
   statIconWrap: {
@@ -1000,7 +1000,7 @@ const t = StyleSheet.create({
     alignItems: "center", justifyContent: "center",
   },
   statLabel: { flex: 1, fontSize: 12.5, fontWeight: "600", color: colors.textMuted },
-  statAmt: { fontSize: 16.5, fontWeight: "700", color: colors.text },
+  statAmt: { fontSize: 16.5, fontWeight: "700", color: colors.text, flexShrink: 1, width: "100%" },
   statPctRow: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 6 },
   statPct: { fontSize: 11.5, fontWeight: "700" },
 

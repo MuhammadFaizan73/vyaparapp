@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from "react";
 import {
-  View, Text, TouchableOpacity, FlatList, StyleSheet, Animated, Modal,
+  View, Text, TouchableOpacity, FlatList, StyleSheet, Animated, Modal, TextInput,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useFocusEffect } from "expo-router";
@@ -39,10 +39,14 @@ export default function PaymentInListScreen() {
   const insets = useSafeAreaInsets();
 
   const [rows, setRows] = useState<PiRow[]>([]);
+  const [parties, setParties] = useState<Party[]>([]);
   const [loading, setLoading] = useState(true);
   const [range, setRange] = useState<DateRange>(() => getRange("all"));
   const [salesmanFilter, setSalesmanFilter] = useState("");
   const [showSalesmanPicker, setShowSalesmanPicker] = useState(false);
+  const [partyFilter, setPartyFilter] = useState("");
+  const [showPartyPicker, setShowPartyPicker] = useState(false);
+  const [partySearch, setPartySearch] = useState("");
   const teamMembers = useTeamMembers();
 
   // FAB animation
@@ -55,6 +59,7 @@ export default function PaymentInListScreen() {
         api.getParties(),
       ]);
       const partyMap = Object.fromEntries(parties.map((p: Party) => [p.id, p.name]));
+      setParties(parties);
       const colorMap: Record<string, number> = {};
       let colorCounter = 0;
       setRows(
@@ -80,9 +85,13 @@ export default function PaymentInListScreen() {
   );
 
   const filtered = rows.filter((r) =>
-    isWithinRange(r.date, range) && (!salesmanFilter || r.bookerId === salesmanFilter)
+    isWithinRange(r.date, range)
+    && (!salesmanFilter || r.bookerId === salesmanFilter)
+    && (!partyFilter || r.partyId === partyFilter)
   );
   const selectedSalesmanName = salesmanFilter ? teamMembers.find((m) => m.id === salesmanFilter)?.name : null;
+  const selectedPartyName = partyFilter ? parties.find((p) => p.id === partyFilter)?.name : null;
+  const partyResults = parties.filter((p) => p.name.toLowerCase().includes(partySearch.trim().toLowerCase()));
   const filteredTotal = filtered.reduce((s, r) => s + r.total, 0);
   const filteredBalance = filtered.reduce((s, r) => s + r.balance, 0);
 
@@ -143,8 +152,8 @@ export default function PaymentInListScreen() {
         {/* Row 4: Party Name */}
         <View style={[styles.filterRow, { borderBottomWidth: 0 }]}>
           <Text style={styles.filterLabelTeal}>Party Name</Text>
-          <TouchableOpacity style={styles.filterDropdown}>
-            <Text style={styles.filterDropdownTxt}>All parties</Text>
+          <TouchableOpacity style={styles.filterDropdown} onPress={() => setShowPartyPicker(true)}>
+            <Text style={styles.filterDropdownTxt} numberOfLines={1}>{selectedPartyName ?? "All parties"}</Text>
             <Ionicons name="chevron-down" size={13} color={colors.textMuted} />
           </TouchableOpacity>
         </View>
@@ -279,6 +288,59 @@ export default function PaymentInListScreen() {
           ))}
         </View>
       </Modal>
+
+      {/* Party picker with search */}
+      <Modal
+        visible={showPartyPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowPartyPicker(false)}
+      >
+        <TouchableOpacity style={styles.pickerOverlay} activeOpacity={1} onPress={() => setShowPartyPicker(false)} />
+        <View style={styles.pickerSheet}>
+          <Text style={styles.pickerTitle}>Filter by Party</Text>
+          <View style={styles.pickerSearchBar}>
+            <Ionicons name="search-outline" size={16} color={colors.textMuted} />
+            <TextInput
+              style={styles.pickerSearchInput}
+              value={partySearch}
+              onChangeText={setPartySearch}
+              placeholder="Search party by name…"
+              placeholderTextColor={colors.textLight}
+              autoFocus
+            />
+          </View>
+          <FlatList
+            data={partyResults}
+            keyExtractor={(p) => p.id}
+            style={{ maxHeight: 360 }}
+            ListHeaderComponent={
+              !partySearch ? (
+                <TouchableOpacity
+                  style={styles.pickerRow}
+                  onPress={() => { setPartyFilter(""); setPartySearch(""); setShowPartyPicker(false); }}
+                >
+                  <Text style={styles.pickerRowTxt}>All parties</Text>
+                  {!partyFilter && <Ionicons name="checkmark" size={18} color={colors.primary} />}
+                </TouchableOpacity>
+              ) : null
+            }
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.pickerRow}
+                onPress={() => { setPartyFilter(item.id); setPartySearch(""); setShowPartyPicker(false); }}
+              >
+                <Text style={styles.pickerRowTxt}>{item.name}</Text>
+                {partyFilter === item.id && <Ionicons name="checkmark" size={18} color={colors.primary} />}
+              </TouchableOpacity>
+            )}
+            ListEmptyComponent={
+              <Text style={styles.pickerEmptyTxt}>No parties match "{partySearch}"</Text>
+            }
+            keyboardShouldPersistTaps="handled"
+          />
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -406,4 +468,11 @@ const styles = StyleSheet.create({
     paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: "#f1f5f9",
   },
   pickerRowTxt: { fontSize: 14.5, color: colors.text },
+  pickerSearchBar: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    backgroundColor: colors.bg, borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 10, marginBottom: 10,
+  },
+  pickerSearchInput: { flex: 1, fontSize: 14, color: colors.text },
+  pickerEmptyTxt: { fontSize: 13, color: colors.textMuted, textAlign: "center", paddingVertical: 20 },
 });

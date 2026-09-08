@@ -46,24 +46,22 @@ const TXN_SECTIONS: Array<{ title: string; items: TxnTypeItem[] }> = [
   {
     title: "Sale Transactions",
     items: [
-      { label: "Payment-In",         icon: "arrow-down-circle-outline",  route: "/payment-in/new",    iconBg: "#dbeafe" },
-      { label: "Sale Return",        icon: "return-down-back-outline",   route: "/sale-return/new",   iconBg: "#fee2e2" },
-      { label: "Delivery Note",      icon: "car-outline",                route: "/delivery-note/new", iconBg: "#dbeafe" },
-      { label: "Estimate/Quotation", icon: "calculator-outline",         route: undefined,            iconBg: "#dbeafe" },
-      { label: "Proforma Invoice",   icon: "document-text-outline",      route: undefined,            iconBg: "#dbeafe" },
-      { label: "Sale Order",         icon: "bag-outline",                route: undefined,            iconBg: "#dbeafe" },
-      { label: "Sale Invoice",       icon: "receipt-outline",            route: "/sale/new",          iconBg: "#dbeafe" },
+      { label: "Payment-In",         icon: "arrow-down-circle-outline",  route: "/payment-in/new",         iconBg: "#dbeafe" },
+      { label: "Sale Return",        icon: "return-down-back-outline",   route: "/sale-return/new",        iconBg: "#fee2e2" },
+      { label: "Delivery Note",      icon: "car-outline",                route: "/delivery-note/new",      iconBg: "#dbeafe" },
+      { label: "Estimate/Quotation", icon: "calculator-outline",         route: "/estimate/new",           iconBg: "#dbeafe" },
+      { label: "Proforma Invoice",   icon: "document-text-outline",      route: "/proforma-invoice/new",   iconBg: "#dbeafe" },
+      { label: "Sale Order",         icon: "bag-outline",                route: "/sale-order/new",         iconBg: "#dbeafe" },
+      { label: "Sale Invoice",       icon: "receipt-outline",            route: "/sale/new",               iconBg: "#dbeafe" },
     ],
   },
   {
     title: "Purchase Transactions",
     items: [
-      // Purchase/Payment-Out were previously stubbed ("Soon") even though these screens
-      // already exist — the new bottom nav's Purchase/Pay-Out buttons need them wired.
-      { label: "Purchase",          icon: "cart-outline",               route: "/purchase/new",    iconBg: "#dcfce7" },
-      { label: "Payment-Out",       icon: "arrow-up-circle-outline",    route: "/payment-out/new", iconBg: "#fee2e2" },
-      { label: "Purchase Return",   icon: "return-up-back-outline",     route: undefined,          iconBg: "#dcfce7" },
-      { label: "Purchase Order",    icon: "clipboard-outline",          route: undefined,          iconBg: "#dcfce7" },
+      { label: "Purchase",          icon: "cart-outline",               route: "/purchase/new",         iconBg: "#dcfce7" },
+      { label: "Payment-Out",       icon: "arrow-up-circle-outline",    route: "/payment-out/new",      iconBg: "#fee2e2" },
+      { label: "Purchase Return",   icon: "return-up-back-outline",     route: "/purchase-return/new",  iconBg: "#dcfce7" },
+      { label: "Purchase Order",    icon: "clipboard-outline",          route: "/purchase-order/new",   iconBg: "#dcfce7" },
     ],
   },
   {

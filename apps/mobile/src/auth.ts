@@ -2,6 +2,15 @@ import * as SecureStore from "expo-secure-store";
 import { VyaparApiClient } from "@vyapar/api-client";
 
 const TOKEN_KEY = "vyapar_jwt";
+// Duplicated from useSelectedCompany.tsx rather than imported — that module imports
+// from this one, and importing back would create a cycle. These three must be cleared
+// on every login/logout: they're SecureStore-persisted (survives across accounts on
+// the same device), and without clearing them a new phone number logging in on a
+// device previously used by a different tenant would start pre-selected onto that
+// tenant's company until the async company-list validation effect happened to catch it.
+const SELECTED_DISTRIBUTOR_KEY = "vyapar_selected_distributor_id";
+const SELECTED_BRANCH_KEY = "vyapar_selected_branch_id";
+const SELECTED_COMPANY_KEY = "vyapar_selected_company_id";
 // The JWT itself only carries memberId/role/permissions, not a display identity (see
 // getMemberId below) — the staff member's name/contact are only ever returned once, in
 // the staff-login/accept-invite response body, so they're saved here at that moment for
@@ -11,6 +20,22 @@ const STAFF_CONTACT_KEY = "vyapar_staff_contact";
 const API_BASE = process.env.EXPO_PUBLIC_API_BASE ?? "https://63dfc27578ffa4d0-125-62-88-237.serveousercontent.com/api";
 
 export const api = new VyaparApiClient(API_BASE);
+
+// SelectedCompanyProvider mounts once at the app root and otherwise never re-fetches —
+// without this, switching accounts within the same running app session (not force-
+// quitting between logins, as happens during QA when testing several phone numbers in
+// a row) leaves its in-memory company list and selection from the PREVIOUS tenant in
+// place, so the new login can show someone else's company until the app is killed and
+// reopened. Every saveToken/clearToken notifies listeners so that provider can reset.
+type AuthListener = () => void;
+const authListeners = new Set<AuthListener>();
+export function onAuthChange(fn: AuthListener): () => void {
+  authListeners.add(fn);
+  return () => authListeners.delete(fn);
+}
+function notifyAuthChange() {
+  authListeners.forEach((fn) => fn());
+}
 
 // JWT uses base64url (- and _ instead of + and /). atob() needs standard base64.
 function decodeJwtPayload(token: string): Record<string, any> {
@@ -35,16 +60,26 @@ export async function saveToken(token: string) {
   // Every login (owner or staff) starts from a clean slate — staff-login/accept-invite
   // call saveStaffIdentity() right after this, so an owner login on a device previously
   // used by staff doesn't keep showing that staff member's identity on the Home screen.
+  // Same reasoning for the selected distributor/branch/company: a device previously
+  // used by a different tenant must not start this login pre-selected onto their company.
   await SecureStore.deleteItemAsync(STAFF_NAME_KEY);
   await SecureStore.deleteItemAsync(STAFF_CONTACT_KEY);
+  await SecureStore.deleteItemAsync(SELECTED_DISTRIBUTOR_KEY);
+  await SecureStore.deleteItemAsync(SELECTED_BRANCH_KEY);
+  await SecureStore.deleteItemAsync(SELECTED_COMPANY_KEY);
   api.setToken(token);
+  notifyAuthChange();
 }
 
 export async function clearToken() {
   await SecureStore.deleteItemAsync(TOKEN_KEY);
   await SecureStore.deleteItemAsync(STAFF_NAME_KEY);
   await SecureStore.deleteItemAsync(STAFF_CONTACT_KEY);
+  await SecureStore.deleteItemAsync(SELECTED_DISTRIBUTOR_KEY);
+  await SecureStore.deleteItemAsync(SELECTED_BRANCH_KEY);
+  await SecureStore.deleteItemAsync(SELECTED_COMPANY_KEY);
   api.clearToken();
+  notifyAuthChange();
 }
 
 export async function saveStaffIdentity(name: string, contact?: string | null) {
