@@ -1,4 +1,5 @@
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from "react-native";
+import { useState } from "react";
+import { View, Text, TextInput, ScrollView, TouchableOpacity, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -18,7 +19,14 @@ function fmtRs(n: number) { return "₨ " + n.toLocaleString("en-IN"); }
 export default function ExpenseScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const [search, setSearch] = useState("");
   const total = CATEGORIES.reduce((a, c) => a + c.amt, 0);
+
+  const q = search.toLowerCase();
+  const filteredCategories = CATEGORIES.filter((c) => {
+    const matchesSearch = c.name.toLowerCase().includes(q);
+    return matchesSearch;
+  });
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
@@ -27,7 +35,22 @@ export default function ExpenseScreen() {
           <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.appBarTitle}>Expense</Text>
-        <Ionicons name="search-outline" size={20} color={colors.textSecondary} />
+      </View>
+
+      <View style={styles.searchBar}>
+        <Ionicons name="search-outline" size={16} color={colors.textLight} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search by category"
+          placeholderTextColor={colors.textLight}
+          value={search}
+          onChangeText={setSearch}
+        />
+        {search.length > 0 && (
+          <TouchableOpacity onPress={() => setSearch("")} hitSlop={8}>
+            <Ionicons name="close-circle" size={16} color={colors.textLight} />
+          </TouchableOpacity>
+        )}
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.body}>
@@ -42,24 +65,33 @@ export default function ExpenseScreen() {
         </View>
 
         <Text style={styles.sectionTxt}>Categories</Text>
-        <View style={styles.grid}>
-          {CATEGORIES.map((c) => {
-            const pct = ((c.amt / total) * 100).toFixed(0);
-            return (
-              <View key={c.name} style={styles.catCard}>
-                <View style={styles.catCardTop}>
-                  <View style={[styles.catIcon, { backgroundColor: c.tint }]}>
-                    <Text style={{ fontSize: 17 }}>{c.icon}</Text>
+        {filteredCategories.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Ionicons name="search-outline" size={40} color={colors.border} />
+            <Text style={styles.emptyTitle}>
+              {search ? "No matching records" : "No categories yet"}
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.grid}>
+            {filteredCategories.map((c) => {
+              const pct = ((c.amt / total) * 100).toFixed(0);
+              return (
+                <View key={c.name} style={styles.catCard}>
+                  <View style={styles.catCardTop}>
+                    <View style={[styles.catIcon, { backgroundColor: c.tint }]}>
+                      <Text style={{ fontSize: 17 }}>{c.icon}</Text>
+                    </View>
+                    <Text style={[styles.catPct, { color: c.fg }]}>{pct}%</Text>
                   </View>
-                  <Text style={[styles.catPct, { color: c.fg }]}>{pct}%</Text>
+                  <Text style={styles.catName}>{c.name}</Text>
+                  <Text style={styles.catAmt}>{fmtRs(c.amt)}</Text>
+                  <Text style={styles.catCount}>{c.count} {c.count === 1 ? "entry" : "entries"}</Text>
                 </View>
-                <Text style={styles.catName}>{c.name}</Text>
-                <Text style={styles.catAmt}>{fmtRs(c.amt)}</Text>
-                <Text style={styles.catCount}>{c.count} {c.count === 1 ? "entry" : "entries"}</Text>
-              </View>
-            );
-          })}
-        </View>
+              );
+            })}
+          </View>
+        )}
       </ScrollView>
 
       <View style={[styles.fabWrap, { bottom: 24 + (insets.bottom || 8) }]}>
@@ -80,6 +112,17 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: colors.border,
   },
   appBarTitle: { flex: 1, fontSize: 17, fontWeight: "600", color: colors.text },
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#fff",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  searchInput: { flex: 1, fontSize: 14, color: colors.text },
   body: { padding: 18, paddingBottom: 120 },
   totalCard: {
     backgroundColor: "#fff", borderRadius: 14, padding: 18,
@@ -91,6 +134,8 @@ const styles = StyleSheet.create({
   trendBadge: { backgroundColor: "#fff7ed", borderRadius: 100, paddingHorizontal: 10, paddingVertical: 5 },
   trendTxt: { fontSize: 11, fontWeight: "700", color: "#c2410c" },
   sectionTxt: { fontSize: 13, fontWeight: "600", color: colors.text, marginTop: 20, marginBottom: 12 },
+  emptyState: { alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 40 },
+  emptyTitle: { fontSize: 14, fontWeight: "600", color: colors.textLight },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   catCard: {
     width: "48%", backgroundColor: "#fff", borderRadius: 14, padding: 14,

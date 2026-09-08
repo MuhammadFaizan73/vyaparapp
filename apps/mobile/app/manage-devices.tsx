@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
+  TextInput,
   StyleSheet,
   FlatList,
   TouchableOpacity,
@@ -14,6 +15,7 @@ import { router } from "expo-router";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { api } from "../src/auth";
 import { useDevice } from "../src/useDeviceSession";
+import { colors } from "../src/theme";
 import type { DeviceSession } from "@vyapar/api-client";
 
 type MCIName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
@@ -42,6 +44,7 @@ export default function ManageDevicesScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activating, setActivating] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -109,6 +112,14 @@ export default function ManageDevicesScreen() {
     );
   };
 
+  const q = search.toLowerCase();
+  const filteredSessions = sessions.filter((s) => {
+    const matchesSearch =
+      s.deviceName.toLowerCase().includes(q) ||
+      (s.deviceType ?? "").toLowerCase().includes(q);
+    return matchesSearch;
+  });
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -127,13 +138,29 @@ export default function ManageDevicesScreen() {
         <Text style={styles.headerTitle}>Manage Devices</Text>
       </View>
 
+      <View style={styles.searchBar}>
+        <Ionicons name="search-outline" size={16} color={colors.textLight} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search by device name or type"
+          placeholderTextColor={colors.textLight}
+          value={search}
+          onChangeText={setSearch}
+        />
+        {search.length > 0 && (
+          <TouchableOpacity onPress={() => setSearch("")} hitSlop={8}>
+            <Ionicons name="close-circle" size={16} color={colors.textLight} />
+          </TouchableOpacity>
+        )}
+      </View>
+
       <Text style={styles.subtitle}>
         Only the <Text style={{ fontWeight: "700" }}>active</Text> device can add or edit data.
         Tap a device to activate it.
       </Text>
 
       <FlatList
-        data={sessions}
+        data={filteredSessions}
         keyExtractor={(s) => s.id}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={TEAL} />}
         contentContainerStyle={{ padding: 16, gap: 12 }}
@@ -193,7 +220,9 @@ export default function ManageDevicesScreen() {
         ListEmptyComponent={
           <View style={styles.empty}>
             <MaterialCommunityIcons name="devices" size={48} color="#cbd5e1" />
-            <Text style={styles.emptyText}>No devices found</Text>
+            <Text style={styles.emptyText}>
+              {search ? "No matching records" : "No devices found"}
+            </Text>
           </View>
         }
       />
@@ -215,6 +244,17 @@ const styles = StyleSheet.create({
   },
   back: { padding: 4 },
   headerTitle: { color: "#fff", fontSize: 18, fontWeight: "700" },
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#fff",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  searchInput: { flex: 1, fontSize: 14, color: colors.text },
   subtitle: {
     margin: 16,
     marginBottom: 4,

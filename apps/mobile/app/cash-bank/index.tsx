@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
-  Alert, Modal, Pressable, ActivityIndicator,
+  Alert, Modal, Pressable, ActivityIndicator, TextInput,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
@@ -32,6 +32,7 @@ export default function BankAccountsScreen() {
   const [accounts, setAccounts] = useState<BankAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<BankAccount | null>(null);
+  const [search, setSearch] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -67,6 +68,12 @@ export default function BankAccountsScreen() {
     Alert.alert(option.label, "Coming soon.");
   }
 
+  const q = search.toLowerCase();
+  const filteredAccounts = accounts.filter((a) => {
+    const matchesSearch = a.name.toLowerCase().includes(q);
+    return matchesSearch;
+  });
+
   return (
     <View style={[s.screen, { paddingTop: insets.top }]}>
       {/* App bar */}
@@ -78,6 +85,23 @@ export default function BankAccountsScreen() {
         <View style={{ width: 22 }} />
       </View>
 
+      {/* Search bar */}
+      <View style={s.searchBar}>
+        <Ionicons name="search-outline" size={16} color={colors.textLight} />
+        <TextInput
+          style={s.searchInput}
+          placeholder="Search by account name"
+          placeholderTextColor={colors.textLight}
+          value={search}
+          onChangeText={setSearch}
+        />
+        {search.length > 0 && (
+          <TouchableOpacity onPress={() => setSearch("")} hitSlop={8}>
+            <Ionicons name="close-circle" size={16} color={colors.textLight} />
+          </TouchableOpacity>
+        )}
+      </View>
+
       {/* List */}
       {loading ? (
         <View style={s.center}>
@@ -85,9 +109,9 @@ export default function BankAccountsScreen() {
         </View>
       ) : (
         <FlatList
-          data={accounts}
+          data={filteredAccounts}
           keyExtractor={a => a.id}
-          contentContainerStyle={[s.list, accounts.length === 0 && s.listEmpty]}
+          contentContainerStyle={[s.list, filteredAccounts.length === 0 && s.listEmpty]}
           renderItem={({ item }) => (
             <TouchableOpacity
               style={s.card}
@@ -103,8 +127,12 @@ export default function BankAccountsScreen() {
           ListEmptyComponent={
             <View style={s.emptyWrap}>
               <Ionicons name="business-outline" size={52} color={colors.border} />
-              <Text style={s.emptyTxt}>No bank accounts yet.</Text>
-              <Text style={s.emptySub}>Tap Add Bank to create one.</Text>
+              <Text style={s.emptyTxt}>
+                {search ? "No matching accounts" : "No bank accounts yet."}
+              </Text>
+              <Text style={s.emptySub}>
+                {search ? "Try a different search" : "Tap Add Bank to create one."}
+              </Text>
             </View>
           }
         />
@@ -165,6 +193,18 @@ const s = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: "#e8ecf0",
   },
   appBarTitle: { fontSize: 17, fontWeight: "600", color: colors.text },
+
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#fff",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  searchInput: { flex: 1, fontSize: 14, color: colors.text },
 
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   list: { padding: 16 },

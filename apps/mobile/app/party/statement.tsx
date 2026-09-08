@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import {
-  View, Text, TouchableOpacity, ScrollView, StyleSheet,
+  View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet,
   ActivityIndicator, Modal, FlatList,
 } from "react-native";
 import { useRouter } from "expo-router";
@@ -75,6 +75,7 @@ export default function PartyStatementScreen() {
   const [dateRange, setDateRange] = useState<DateRange>("this_month");
   const [txns, setTxns] = useState<Transaction[]>([]);
   const [txnLoading, setTxnLoading] = useState(false);
+  const [search, setSearch] = useState("");
 
   const [showPartyPicker, setShowPartyPicker] = useState(false);
   const [showRangePicker, setShowRangePicker] = useState(false);
@@ -97,11 +98,17 @@ export default function PartyStatementScreen() {
   }
 
   const filteredTxns = useMemo(() => {
+    const q = search.toLowerCase();
     return txns.filter(t => {
       const d = new Date(t.date);
-      return d >= range.from && d <= range.to;
+      const matchesDate = d >= range.from && d <= range.to;
+      const txnNumber = t.number ?? `#${t.id.slice(-4)}`;
+      const typeLabel = TXN_TYPE_LABEL[t.type] ?? t.type;
+      const matchesSearch =
+        txnNumber.toLowerCase().includes(q) || typeLabel.toLowerCase().includes(q);
+      return matchesDate && matchesSearch;
     });
-  }, [txns, dateRange]);
+  }, [txns, dateRange, search]);
 
   return (
     <View style={[s.screen, { paddingTop: insets.top }]}>
@@ -119,6 +126,23 @@ export default function PartyStatementScreen() {
             <Text style={s.headerBtnTxt}>XLS</Text>
           </TouchableOpacity>
         </View>
+      </View>
+
+      {/* Search bar */}
+      <View style={s.searchBar}>
+        <Ionicons name="search-outline" size={16} color={colors.textLight} />
+        <TextInput
+          style={s.searchInput}
+          placeholder="Search by ref # or type"
+          placeholderTextColor={colors.textLight}
+          value={search}
+          onChangeText={setSearch}
+        />
+        {search.length > 0 && (
+          <TouchableOpacity onPress={() => setSearch("")} hitSlop={8}>
+            <Ionicons name="close-circle" size={16} color={colors.textLight} />
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Date Range Row */}
@@ -164,8 +188,10 @@ export default function PartyStatementScreen() {
       ) : filteredTxns.length === 0 ? (
         <View style={s.emptyState}>
           <Text style={s.emptyIllustration}>📭</Text>
-          <Text style={s.emptyTitle}>No Transactions</Text>
-          <Text style={s.emptyText}>No transactions found for this period.</Text>
+          <Text style={s.emptyTitle}>{search ? "No Matching Records" : "No Transactions"}</Text>
+          <Text style={s.emptyText}>
+            {search ? "Try a different search term." : "No transactions found for this period."}
+          </Text>
         </View>
       ) : (
         <ScrollView horizontal showsHorizontalScrollIndicator>
@@ -289,6 +315,18 @@ const s = StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 6,
   },
   headerBtnTxt: { fontSize: 12, fontWeight: "700", color: colors.textMuted },
+
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#fff",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  searchInput: { flex: 1, fontSize: 14, color: colors.text },
 
   rangeRow: {
     backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: colors.border,

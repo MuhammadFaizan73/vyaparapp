@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from "react";
 import {
-  View, Text, TouchableOpacity, ScrollView, FlatList,
+  View, Text, TouchableOpacity, ScrollView, FlatList, TextInput,
   StyleSheet, ActivityIndicator, RefreshControl,
 } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
@@ -38,6 +38,7 @@ export function TxnList({ title, txnType, chips, dateRange, emptyMessage, fabLab
   const [activeChip, setActiveChip] = useState(0);
   const [range, setRange] = useState<DateRange>(() => getRange("all"));
   const [salesmanFilter, setSalesmanFilter] = useState("");
+  const [search, setSearch] = useState("");
   const [rows, setRows] = useState<TxnRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -74,6 +75,11 @@ export function TxnList({ title, txnType, chips, dateRange, emptyMessage, fabLab
   const filtered = rows.filter((r) => {
     if (dateRange && !isWithinRange(r.date, range)) return false;
     if (salesmanFilter && r.bookerId !== salesmanFilter) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      const matchesSearch = r.partyName.toLowerCase().includes(q) || (r.number ?? "").toLowerCase().includes(q);
+      if (!matchesSearch) return false;
+    }
     if (chipLabel === "all") return true;
     if (chipLabel === "open") return r.balance > 0;
     if (chipLabel === "closed" || chipLabel === "converted") return r.balance === 0;
@@ -96,6 +102,23 @@ export function TxnList({ title, txnType, chips, dateRange, emptyMessage, fabLab
         </TouchableOpacity>
         <Text style={s.appBarTitle}>{title}</Text>
         {headerRight ?? <View style={{ width: 24 }} />}
+      </View>
+
+      {/* Search bar */}
+      <View style={s.searchBar}>
+        <Ionicons name="search-outline" size={16} color={colors.textLight} />
+        <TextInput
+          style={s.searchInput}
+          placeholder="Search by party or number"
+          placeholderTextColor={colors.textLight}
+          value={search}
+          onChangeText={setSearch}
+        />
+        {search.length > 0 && (
+          <TouchableOpacity onPress={() => setSearch("")} hitSlop={8}>
+            <Ionicons name="close-circle" size={16} color={colors.textLight} />
+          </TouchableOpacity>
+        )}
       </View>
 
       {dateRange && <DateRangeFilterBar range={range} onChange={setRange} />}
@@ -126,7 +149,7 @@ export function TxnList({ title, txnType, chips, dateRange, emptyMessage, fabLab
             </View>
             <View style={s.docAccent} />
           </View>
-          <Text style={s.emptyTxt}>{emptyMessage}</Text>
+          <Text style={s.emptyTxt}>{search || salesmanFilter ? "No matching records" : emptyMessage}</Text>
           <TouchableOpacity style={s.fab} onPress={() => router.push(fabRoute as never)}>
             <Ionicons name="add" size={18} color="#fff" />
             <Text style={s.fabTxt}>{fabLabel}</Text>
@@ -190,6 +213,18 @@ const s = StyleSheet.create({
   },
   appBarTitle: { flex: 1, fontSize: 17, fontWeight: "600", color: colors.text },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
+
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#fff",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  searchInput: { flex: 1, fontSize: 14, color: colors.text },
 
   chipsBar: { flexGrow: 0, backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: colors.border },
   chipsContent: { paddingHorizontal: 16, paddingVertical: 10, gap: 8 },

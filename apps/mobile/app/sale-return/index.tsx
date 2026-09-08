@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from "react";
 import {
-  View, Text, TouchableOpacity, FlatList,
+  View, Text, TextInput, TouchableOpacity, FlatList,
   StyleSheet, ActivityIndicator, RefreshControl, Modal, Pressable, Platform,
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -59,6 +59,7 @@ export default function SaleReturnListScreen() {
   const [rows, setRows] = useState<TxnRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [search, setSearch] = useState("");
 
   // Preset filter
   const [preset, setPreset] = useState<Preset>("This Month");
@@ -102,6 +103,11 @@ export default function SaleReturnListScreen() {
   }
 
   const filtered = rows.filter((r) => {
+    const q = search.toLowerCase();
+    const matchesSearch =
+      r.partyName.toLowerCase().includes(q) ||
+      (r.number ?? "").toLowerCase().includes(q);
+    if (!matchesSearch) return false;
     const d = new Date(r.date);
     return d >= from && d < to;
   });
@@ -165,6 +171,23 @@ export default function SaleReturnListScreen() {
         <View style={{ width: 24 }} />
       </View>
 
+      {/* Search bar */}
+      <View style={s.searchBar}>
+        <Ionicons name="search-outline" size={16} color={colors.textLight} />
+        <TextInput
+          style={s.searchInput}
+          placeholder="Search by party name or return number"
+          placeholderTextColor={colors.textLight}
+          value={search}
+          onChangeText={setSearch}
+        />
+        {search.length > 0 && (
+          <TouchableOpacity onPress={() => setSearch("")} hitSlop={8}>
+            <Ionicons name="close-circle" size={16} color={colors.textLight} />
+          </TouchableOpacity>
+        )}
+      </View>
+
       {/* Date filter bar */}
       <View style={s.filterBar}>
         <TouchableOpacity style={s.presetBtn} onPress={() => setShowPresets(true)}>
@@ -221,7 +244,9 @@ export default function SaleReturnListScreen() {
           ListEmptyComponent={
             <View style={s.emptyWrap}>
               <Ionicons name="receipt-outline" size={52} color={colors.border} />
-              <Text style={s.emptyTxt}>No sale returns in this period.</Text>
+              <Text style={s.emptyTxt}>
+                {search ? "No matching records" : "No sale returns in this period."}
+              </Text>
             </View>
           }
           renderItem={renderItem}
@@ -336,6 +361,18 @@ const s = StyleSheet.create({
   },
   appBarTitle: { flex: 1, fontSize: 17, fontWeight: "600", color: colors.text },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
+
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#fff",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  searchInput: { flex: 1, fontSize: 14, color: colors.text },
 
   filterBar: {
     backgroundColor: "#fff", flexDirection: "row", alignItems: "center",

@@ -50,6 +50,7 @@ function StandardHome() {
   const [parties, setParties] = useState<Party[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [search, setSearch] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -73,6 +74,11 @@ function StandardHome() {
   const receivable = parties.filter((p) => (p.balance ?? 0) > 0).reduce((sum, p) => sum + (p.balance ?? 0), 0);
   const payable = parties.filter((p) => (p.balance ?? 0) < 0).reduce((sum, p) => sum + Math.abs(p.balance ?? 0), 0);
 
+  const q = search.toLowerCase();
+  const filteredParties = q
+    ? parties.filter((p) => p.name.toLowerCase().includes(q) || (p.phone ?? "").toLowerCase().includes(q))
+    : [];
+
   return (
     <View style={[s.screen, { paddingTop: insets.top }]}>
       {/* App bar */}
@@ -80,10 +86,7 @@ function StandardHome() {
         <TouchableOpacity style={s.iconBtn} onPress={() => router.push("/menu" as never)} hitSlop={8}>
           <Ionicons name="menu" size={24} color="#fff" />
         </TouchableOpacity>
-        <View style={s.searchBar}>
-          <Ionicons name="search-outline" size={16} color="rgba(255,255,255,0.85)" />
-          <Text style={s.searchPlaceholder}>Search Transactions</Text>
-        </View>
+        <View style={{ flex: 1 }} />
         <TouchableOpacity style={s.iconBtn} hitSlop={8}>
           <Ionicons name="notifications-outline" size={22} color="#fff" />
         </TouchableOpacity>
@@ -92,10 +95,55 @@ function StandardHome() {
         </TouchableOpacity>
       </View>
 
+      {/* Search */}
+      <View style={s.searchBar}>
+        <Ionicons name="search-outline" size={16} color={colors.textLight} />
+        <TextInput
+          style={s.searchInput}
+          placeholder="Search parties by name or phone"
+          placeholderTextColor={colors.textLight}
+          value={search}
+          onChangeText={setSearch}
+        />
+        {search.length > 0 && (
+          <TouchableOpacity onPress={() => setSearch("")} hitSlop={8}>
+            <Ionicons name="close-circle" size={16} color={colors.textLight} />
+          </TouchableOpacity>
+        )}
+      </View>
+
       {loading ? (
         <View style={s.center}>
           <ActivityIndicator color={colors.primary} size="large" />
         </View>
+      ) : q ? (
+        <FlatList
+          data={filteredParties}
+          keyExtractor={(p) => p.id}
+          contentContainerStyle={s.searchList}
+          keyboardShouldPersistTaps="handled"
+          renderItem={({ item }) => (
+            <TouchableOpacity style={s.searchRow} onPress={() => router.push(`/party/${item.id}` as never)} activeOpacity={0.8}>
+              <View style={s.searchAvatar}>
+                <Text style={s.searchAvatarTxt}>{item.name[0]?.toUpperCase()}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.searchRowTitle} numberOfLines={1}>{item.name}</Text>
+                {item.phone ? <Text style={s.searchRowSub}>{item.phone}</Text> : null}
+              </View>
+              <Text style={[s.searchRowAmt, { color: (item.balance ?? 0) > 0 ? colors.red : colors.green }]}>
+                Rs {Math.abs(item.balance ?? 0).toLocaleString("en-PK")}
+              </Text>
+            </TouchableOpacity>
+          )}
+          ListEmptyComponent={
+            <View style={s.center}>
+              <Ionicons name="people-outline" size={52} color={colors.border} />
+              <Text style={s.emptyTitle}>No matching records</Text>
+              <Text style={s.emptySub}>Try a different name or phone number</Text>
+            </View>
+          }
+        />
       ) : (
         <ScrollView
           contentContainerStyle={s.body}
@@ -946,14 +994,36 @@ const s = StyleSheet.create({
   },
   iconBtn: { padding: 4 },
   searchBar: {
-    flex: 1, flexDirection: "row", alignItems: "center", gap: 8,
-    backgroundColor: "rgba(255,255,255,0.18)", borderRadius: 8,
-    paddingHorizontal: 12, paddingVertical: 9,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#fff",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
-  searchPlaceholder: { fontSize: 13.5, color: "rgba(255,255,255,0.85)" },
+  searchInput: { flex: 1, fontSize: 14, color: colors.text },
 
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 10 },
   body: { padding: 16, paddingBottom: 32 },
+
+  searchList: { padding: 12, flexGrow: 1 },
+  searchRow: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    backgroundColor: "#fff", borderRadius: 10, borderWidth: 1, borderColor: "#e8ecf0",
+    padding: 14, marginBottom: 8,
+  },
+  searchAvatar: {
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: "#dbeafe", alignItems: "center", justifyContent: "center",
+  },
+  searchAvatarTxt: { fontSize: 15, fontWeight: "700", color: colors.primary },
+  searchRowTitle: { fontSize: 14, fontWeight: "600", color: colors.text },
+  searchRowSub: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
+  searchRowAmt: { fontSize: 13.5, fontWeight: "700" },
+  emptyTitle: { fontSize: 16, fontWeight: "700", color: colors.text },
+  emptySub: { fontSize: 13, color: colors.textMuted, textAlign: "center", lineHeight: 18 },
 
   balanceRow: { flexDirection: "row", gap: 12 },
   balanceCard: { flex: 1, borderRadius: 12, padding: 16 },

@@ -73,6 +73,7 @@ export default function MyVisitsScreen() {
   const [openVisit, setOpenVisit] = useState<Visit | null>(null);
   const [visits, setVisits] = useState<Visit[]>([]);
   const [visitsLoading, setVisitsLoading] = useState(true);
+  const [search, setSearch] = useState("");
 
   const [notesModal, setNotesModal] = useState(false);
   const [notes, setNotes] = useState("");
@@ -197,6 +198,15 @@ export default function MyVisitsScreen() {
     }
   }
 
+  // ---- Search filter ----
+  const filteredVisits = visits.filter((v) => {
+    const q = search.toLowerCase();
+    const matchesSearch =
+      fmtDate(v.checkedInAt).toLowerCase().includes(q) ||
+      (v.notes ?? "").toLowerCase().includes(q);
+    return matchesSearch;
+  });
+
   // ---- Distance text ----
   const distText = distance == null
     ? "Calculating distance…"
@@ -218,6 +228,23 @@ export default function MyVisitsScreen() {
         >
           <Ionicons name="refresh-outline" size={22} color={colors.textMuted} />
         </TouchableOpacity>
+      </View>
+
+      {/* Search bar */}
+      <View style={s.searchBar}>
+        <Ionicons name="search-outline" size={16} color={colors.textLight} />
+        <TextInput
+          style={s.searchInput}
+          placeholder="Search by date or notes"
+          placeholderTextColor={colors.textLight}
+          value={search}
+          onChangeText={setSearch}
+        />
+        {search.length > 0 && (
+          <TouchableOpacity onPress={() => setSearch("")} hitSlop={8}>
+            <Ionicons name="close-circle" size={16} color={colors.textLight} />
+          </TouchableOpacity>
+        )}
       </View>
 
       <ScrollView contentContainerStyle={s.scroll}>
@@ -331,13 +358,15 @@ export default function MyVisitsScreen() {
 
         {visitsLoading ? (
           <ActivityIndicator color={colors.primary} style={{ marginTop: 20 }} />
-        ) : visits.length === 0 ? (
+        ) : filteredVisits.length === 0 ? (
           <View style={s.empty}>
             <Ionicons name="calendar-outline" size={40} color={colors.border} />
-            <Text style={s.emptyTxt}>No attendance records yet</Text>
+            <Text style={s.emptyTxt}>
+              {search ? "No matching records" : "No attendance records yet"}
+            </Text>
           </View>
         ) : (
-          visits.map((v) => (
+          filteredVisits.map((v) => (
             <View key={v.id} style={s.histCard}>
               <View style={[s.histBar, { backgroundColor: v.checkedOutAt ? colors.green : colors.primary }]} />
               <View style={{ flex: 1, paddingLeft: 14 }}>
@@ -452,6 +481,18 @@ const s = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: colors.border,
   },
   appBarTitle: { flex: 1, fontSize: 17, fontWeight: "600", color: colors.text },
+
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#fff",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  searchInput: { flex: 1, fontSize: 14, color: colors.text },
 
   scroll: { padding: 16, gap: 14, paddingBottom: 60 },
 

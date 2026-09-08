@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -19,6 +19,7 @@ export default function StockTransferHistoryScreen() {
   const { selectedCompanyId } = useSelectedCompany();
   const [transfers, setTransfers] = useState<StockTransfer[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
 
   const load = useCallback(async () => {
     if (!selectedCompanyId) { setTransfers([]); setLoading(false); return; }
@@ -35,6 +36,15 @@ export default function StockTransferHistoryScreen() {
 
   useFocusEffect(useCallback(() => { void load(); }, [load]));
 
+  const filteredTransfers = transfers.filter((t) => {
+    const q = search.toLowerCase();
+    const matchesSearch =
+      (t.fromStoreName ?? "").toLowerCase().includes(q) ||
+      (t.toStoreName ?? "").toLowerCase().includes(q) ||
+      t.lines.some((l) => l.itemName.toLowerCase().includes(q));
+    return matchesSearch;
+  });
+
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.appBar}>
@@ -45,17 +55,33 @@ export default function StockTransferHistoryScreen() {
         <View style={{ width: 24 }} />
       </View>
 
+      <View style={styles.searchBar}>
+        <Ionicons name="search-outline" size={16} color={colors.textLight} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search by store or item name"
+          placeholderTextColor={colors.textLight}
+          value={search}
+          onChangeText={setSearch}
+        />
+        {search.length > 0 && (
+          <TouchableOpacity onPress={() => setSearch("")} hitSlop={8}>
+            <Ionicons name="close-circle" size={16} color={colors.textLight} />
+          </TouchableOpacity>
+        )}
+      </View>
+
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={colors.primary} /></View>
       ) : (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.body}>
-          {transfers.length === 0 && (
+          {filteredTransfers.length === 0 && (
             <View style={styles.center}>
               <Ionicons name="swap-horizontal-outline" size={44} color={colors.textLight} />
-              <Text style={styles.emptyTxt}>No transfers yet.</Text>
+              <Text style={styles.emptyTxt}>{search ? "No matching records" : "No transfers yet."}</Text>
             </View>
           )}
-          {transfers.map((t) => (
+          {filteredTransfers.map((t) => (
             <View key={t.id} style={styles.card}>
               <View style={styles.cardTop}>
                 <Text style={styles.cardRoute}>{t.fromStoreName} → {t.toStoreName}</Text>
@@ -91,6 +117,17 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: colors.border,
   },
   appBarTitle: { flex: 1, fontSize: 17, fontWeight: "600", color: colors.text },
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#fff",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  searchInput: { flex: 1, fontSize: 14, color: colors.text },
   body: { padding: 16, paddingBottom: 110 },
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 40, gap: 10 },
   emptyTxt: { fontSize: 13.5, color: colors.textMuted },

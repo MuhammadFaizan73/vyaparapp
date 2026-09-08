@@ -35,6 +35,7 @@ export default function ManageCompaniesScreen() {
   const [active, setActive] = useState<ActiveCompany | null>(null);
   const [extras, setExtras] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
 
   // Edit-active bottom sheet
   const [editActive, setEditActive] = useState(false);
@@ -147,6 +148,11 @@ export default function ManageCompaniesScreen() {
   const displayName = active?.companyName || active?.phone || "My Company";
   const { tint: activeTint, fg: activeFg } = tintFor(0);
 
+  const q = search.toLowerCase();
+  const activeMatches = !!active && displayName.toLowerCase().includes(q);
+  const filteredExtras = extras.filter((c) => c.name.toLowerCase().includes(q));
+  const hasResults = activeMatches || filteredExtras.length > 0;
+
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.appBar}>
@@ -157,21 +163,47 @@ export default function ManageCompaniesScreen() {
         <View style={{ width: 24 }} />
       </View>
 
+      <View style={styles.searchBar}>
+        <Ionicons name="search-outline" size={16} color={colors.textLight} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search by company name"
+          placeholderTextColor={colors.textLight}
+          value={search}
+          onChangeText={setSearch}
+        />
+        {search.length > 0 && (
+          <TouchableOpacity onPress={() => setSearch("")} hitSlop={8}>
+            <Ionicons name="close-circle" size={16} color={colors.textLight} />
+          </TouchableOpacity>
+        )}
+      </View>
+
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={colors.primary} /></View>
+      ) : !hasResults ? (
+        <View style={styles.center}>
+          <Ionicons name="business-outline" size={52} color={colors.border} />
+          <Text style={styles.emptyTitle}>
+            {search ? "No matching companies" : "No companies yet"}
+          </Text>
+          <Text style={styles.emptySub}>
+            {search ? "Try a different search" : "Add your first company"}
+          </Text>
+        </View>
       ) : (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.body}>
           <View style={styles.card}>
             {/* Active (current tenant) company */}
-            {active && (
-              <View style={[styles.row, extras.length === 0 && styles.rowLast]}>
+            {activeMatches && (
+              <View style={[styles.row, filteredExtras.length === 0 && styles.rowLast]}>
                 <View style={[styles.avatar, { backgroundColor: activeTint }]}>
                   <Text style={[styles.avatarTxt, { color: activeFg }]}>{initial(displayName)}</Text>
                 </View>
                 <View style={styles.rowMid}>
                   <Text style={styles.rowName}>{displayName}</Text>
                   <Text style={styles.rowSub}>
-                    {active.businessType ? `${active.businessType} · ` : ""}Owner · Active
+                    {active?.businessType ? `${active.businessType} · ` : ""}Owner · Active
                   </Text>
                 </View>
                 <View style={styles.activeBadge}>
@@ -184,10 +216,10 @@ export default function ManageCompaniesScreen() {
             )}
 
             {/* Extra companies from AsyncStorage */}
-            {extras.map((c, i) => {
+            {filteredExtras.map((c, i) => {
               const { tint, fg } = tintFor(i + 1);
               return (
-                <View key={c.id} style={[styles.row, i === extras.length - 1 && styles.rowLast]}>
+                <View key={c.id} style={[styles.row, i === filteredExtras.length - 1 && styles.rowLast]}>
                   <View style={[styles.avatar, { backgroundColor: tint }]}>
                     <Text style={[styles.avatarTxt, { color: fg }]}>{initial(c.name)}</Text>
                   </View>
@@ -290,7 +322,21 @@ const styles = StyleSheet.create({
   },
   appBarTitle: { flex: 1, fontSize: 17, fontWeight: "600", color: colors.text },
   body: { padding: 18, paddingBottom: 110 },
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 10, padding: 40 },
+  emptyTitle: { fontSize: 16, fontWeight: "600", color: colors.text },
+  emptySub: { fontSize: 13, color: colors.textMuted, textAlign: "center", lineHeight: 20 },
+
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#fff",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  searchInput: { flex: 1, fontSize: 14, color: colors.text },
 
   card: {
     backgroundColor: "#fff", borderRadius: 14,

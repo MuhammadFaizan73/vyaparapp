@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import {
-  View, Text, TouchableOpacity, ScrollView, StyleSheet,
+  View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet,
   Modal, Alert, ActivityIndicator, FlatList, Switch,
 } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
@@ -69,6 +69,7 @@ export default function UserManagementScreen() {
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState("");
   const [activeRole, setActiveRole] = useState("all");
+  const [search, setSearch] = useState("");
 
   // Change role sheet
   const [changeRoleTarget, setChangeRoleTarget] = useState<TeamMember | null>(null);
@@ -168,9 +169,12 @@ export default function UserManagementScreen() {
     }
   }
 
-  const displayed = activeRole === "all"
-    ? members
-    : members.filter((m) => m.role === activeRole);
+  const displayed = members.filter((m) => {
+    const matchesRole = activeRole === "all" || m.role === activeRole;
+    const q = search.toLowerCase();
+    const matchesSearch = m.name.toLowerCase().includes(q) || (m.contact ?? "").toLowerCase().includes(q);
+    return matchesRole && matchesSearch;
+  });
 
   function countFor(roleId: string) {
     if (roleId === "all") return members.length;
@@ -192,6 +196,23 @@ export default function UserManagementScreen() {
           <Ionicons name="person-add-outline" size={15} color="#fff" />
           <Text style={s.addBtnTxt}>Add User</Text>
         </TouchableOpacity>
+      </View>
+
+      {/* Search bar */}
+      <View style={s.searchBar}>
+        <Ionicons name="search-outline" size={16} color={colors.textLight} />
+        <TextInput
+          style={s.searchInput}
+          placeholder="Search by name or contact"
+          placeholderTextColor={colors.textLight}
+          value={search}
+          onChangeText={setSearch}
+        />
+        {search.length > 0 && (
+          <TouchableOpacity onPress={() => setSearch("")} hitSlop={8}>
+            <Ionicons name="close-circle" size={16} color={colors.textLight} />
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Role filter tabs */}
@@ -235,17 +256,23 @@ export default function UserManagementScreen() {
         <View style={s.center}>
           <Ionicons name="person-outline" size={52} color={colors.border} />
           <Text style={s.emptyTitle}>
-            {activeRole === "all" ? "No team members yet" : `No ${getRoleInfo(activeRole).label} users`}
+            {search
+              ? "No matching users"
+              : activeRole === "all" ? "No team members yet" : `No ${getRoleInfo(activeRole).label} users`}
           </Text>
           <Text style={s.emptySub}>
-            {activeRole === "all"
+            {search
+              ? "Try a different search"
+              : activeRole === "all"
               ? 'Tap "Add User" to invite your first team member'
               : `Tap "Add User" and select ${getRoleInfo(activeRole).label} role`}
           </Text>
-          <TouchableOpacity style={s.emptyAddBtn} onPress={() => router.push("/add-user" as never)}>
-            <Ionicons name="person-add-outline" size={15} color="#fff" />
-            <Text style={s.emptyAddTxt}>Add User</Text>
-          </TouchableOpacity>
+          {!search && (
+            <TouchableOpacity style={s.emptyAddBtn} onPress={() => router.push("/add-user" as never)}>
+              <Ionicons name="person-add-outline" size={15} color="#fff" />
+              <Text style={s.emptyAddTxt}>Add User</Text>
+            </TouchableOpacity>
+          )}
         </View>
       ) : (
         <ScrollView contentContainerStyle={s.list}>
@@ -471,6 +498,18 @@ const s = StyleSheet.create({
   appBarTitle: { flex: 1, fontSize: 17, fontWeight: "600", color: colors.text },
   addBtn: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: colors.primary, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
   addBtnTxt: { fontSize: 13, fontWeight: "700", color: "#fff" },
+
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#fff",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  searchInput: { flex: 1, fontSize: 14, color: colors.text },
 
   tabWrap: { backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: colors.border },
   tabRow: { paddingHorizontal: 12, paddingVertical: 10, gap: 8 },

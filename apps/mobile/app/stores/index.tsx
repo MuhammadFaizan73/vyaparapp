@@ -29,6 +29,13 @@ export default function StoresScreen() {
   const [storeType, setStoreType] = useState("Store");
   const [phone, setPhone] = useState("");
   const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState("");
+
+  const q = search.toLowerCase();
+  const filteredStores = stores.filter((st) => {
+    const matchesSearch = st.name.toLowerCase().includes(q);
+    return matchesSearch;
+  });
 
   function openAdd() {
     setName("");
@@ -91,6 +98,24 @@ export default function StoresScreen() {
         <View style={{ width: 24 }} />
       </View>
 
+      {selectedCompanyId && (
+        <View style={styles.searchBar}>
+          <Ionicons name="search-outline" size={16} color={colors.textLight} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search by store name"
+            placeholderTextColor={colors.textLight}
+            value={search}
+            onChangeText={setSearch}
+          />
+          {search.length > 0 && (
+            <TouchableOpacity onPress={() => setSearch("")} hitSlop={8}>
+              <Ionicons name="close-circle" size={16} color={colors.textLight} />
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+
       {!selectedCompanyId ? (
         <View style={styles.center}>
           <Text style={styles.emptyTxt}>Select a company from the switcher first.</Text>
@@ -105,8 +130,8 @@ export default function StoresScreen() {
           </TouchableOpacity>
 
           <View style={styles.card}>
-            {stores.map((s, i) => (
-              <View key={s.id} style={[styles.row, i === stores.length - 1 && styles.rowLast]}>
+            {filteredStores.map((s, i) => (
+              <View key={s.id} style={[styles.row, i === filteredStores.length - 1 && styles.rowLast]}>
                 <View style={styles.rowMid}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                     <Text style={styles.rowName}>{s.name}</Text>
@@ -126,8 +151,10 @@ export default function StoresScreen() {
                 )}
               </View>
             ))}
-            {stores.length === 0 && (
-              <Text style={[styles.emptyTxt, { padding: 16 }]}>No stores yet.</Text>
+            {filteredStores.length === 0 && (
+              <Text style={[styles.emptyTxt, { padding: 16 }]}>
+                {search ? "No matching stores" : "No stores yet."}
+              </Text>
             )}
           </View>
         </ScrollView>
@@ -192,6 +219,17 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: colors.border,
   },
   appBarTitle: { flex: 1, fontSize: 17, fontWeight: "600", color: colors.text },
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#fff",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  searchInput: { flex: 1, fontSize: 14, color: colors.text },
   body: { padding: 18, paddingBottom: 110 },
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },
 
