@@ -8,9 +8,7 @@
     "scheme": "vyapar",
     "newArchEnabled": false,
     "icon": "./assets/icon.png",
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
+    "runtimeVersion": "0.1.0",
     "updates": {
       "url": "https://u.expo.dev/00626370-deea-4cb9-b4c9-e3fe14486c17"
     },
