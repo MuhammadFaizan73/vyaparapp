@@ -210,23 +210,22 @@ function monthChange(txns: TxnRow[], type: string): { current: number; pct: numb
   return { current, pct: prev > 0 ? ((current - prev) / prev) * 100 : null };
 }
 
-function StatCard({ icon, iconColor, label, amount, pct, width }: {
+function StatCard({ icon, iconColor, bgColor, label, amount, pct, width }: {
   icon: React.ComponentProps<typeof Ionicons>["name"];
   iconColor: string;
+  bgColor: string;
   label: string;
   amount: number;
   pct?: number | null;
   width: number;
 }) {
   return (
-    <View style={[t.statCard, { width }]}>
+    <View style={[t.statCard, { width, backgroundColor: bgColor }]}>
       <View style={t.statTop}>
-        <View style={[t.statIconWrap, { backgroundColor: iconColor + "1c" }]}>
-          <Ionicons name={icon} size={14} color={iconColor} />
-        </View>
+        <Ionicons name={icon} size={14} color={iconColor} />
         <Text style={t.statLabel} numberOfLines={1}>{label}</Text>
       </View>
-      <Text style={t.statAmt} numberOfLines={1}>Rs {amount.toLocaleString("en-PK")}</Text>
+      <Text style={[t.statAmt, { color: iconColor }]} numberOfLines={1}>Rs {amount.toLocaleString("en-PK")}</Text>
       {pct != null ? (
         <View style={t.statPctRow}>
           <Ionicons name={pct < 0 ? "arrow-down" : "arrow-up"} size={11} color={pct < 0 ? colors.red : colors.green} />
@@ -321,10 +320,10 @@ function TrendingHome() {
         style={t.statScroll}
         contentContainerStyle={t.statScrollContent}
       >
-        <StatCard icon="arrow-down-circle" iconColor={colors.green} label="You'll Get" amount={youllGet} width={statCardWidth} />
-        <StatCard icon="document-text" iconColor={colors.primary} label={`Sale (${monthLabel})`} amount={sale.current} pct={sale.pct} width={statCardWidth} />
-        <StatCard icon="arrow-up-circle" iconColor={colors.orange} label="You'll Give" amount={youllGive} width={statCardWidth} />
-        <StatCard icon="cart" iconColor={colors.primary} label={`Purchase (${monthLabel})`} amount={purchase.current} pct={purchase.pct} width={statCardWidth} />
+        <StatCard icon="arrow-down-circle" iconColor={colors.green} bgColor={colors.greenBg} label="You'll Get" amount={youllGet} width={statCardWidth} />
+        <StatCard icon="document-text" iconColor={colors.blue} bgColor={colors.blueLight} label={`Sale (${monthLabel})`} amount={sale.current} pct={sale.pct} width={statCardWidth} />
+        <StatCard icon="arrow-up-circle" iconColor={colors.orange} bgColor={colors.orangeLight} label="You'll Give" amount={youllGive} width={statCardWidth} />
+        <StatCard icon="cart" iconColor={colors.purple} bgColor={colors.purpleLight} label={`Purchase (${monthLabel})`} amount={purchase.current} pct={purchase.pct} width={statCardWidth} />
       </ScrollView>
 
       {/* Tabs + New button */}
@@ -1065,11 +1064,7 @@ const t = StyleSheet.create({
     elevation: 2, overflow: "hidden",
   },
   statTop: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
-  statIconWrap: {
-    width: 26, height: 26, borderRadius: 13,
-    alignItems: "center", justifyContent: "center",
-  },
-  statLabel: { flex: 1, fontSize: 12.5, fontWeight: "600", color: colors.textMuted },
+  statLabel: { flex: 1, fontSize: 12.5, fontWeight: "600", color: colors.text },
   statAmt: { fontSize: 16.5, fontWeight: "700", color: colors.text, flexShrink: 1, width: "100%" },
   statPctRow: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 6 },
   statPct: { fontSize: 11.5, fontWeight: "700" },
