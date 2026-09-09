@@ -133,7 +133,7 @@ const pb = StyleSheet.create({
   toTxt: { fontSize: 12, color: colors.textMuted, fontWeight: "600" },
 });
 
-function PeriodModal({ visible, range, onClose, onChange, datesOnly }: {
+export function PeriodModal({ visible, range, onClose, onChange, datesOnly }: {
   visible: boolean; range: DateRange;
   onClose: () => void; onChange: (r: DateRange) => void;
   // Skips the "All Time / Today / This Week / ..." preset list and jumps straight to the

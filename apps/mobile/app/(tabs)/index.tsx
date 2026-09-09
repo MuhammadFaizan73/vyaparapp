@@ -16,6 +16,7 @@ import { setHandoffTxn } from "../../src/txnHandoff";
 import { buildInvoiceHtml } from "../../src/invoiceHtml";
 import { useInvoiceHtmlOptions, useSettings } from "../../src/useSettings";
 import { getItems as getCachedItems, loadItems, subscribeItems, type Item } from "../../src/itemsStore";
+import { getRange, isWithinRange, PeriodModal, type DateRange } from "../../src/components/DateRangeFilter";
 import type { Party, Transaction } from "@vyapar/api-client";
 
 export default function HomeScreen() {
@@ -193,56 +194,80 @@ function trendingAddLabel(tab: TrendingTab): string {
   return tab === "parties" ? "+ New Party" : tab === "items" ? "+ New Item" : "+ New Sale";
 }
 
-// Current-calendar-month total for a txn type plus % change vs the prior month
-// (null when there's no prior-month total to compare against).
-function monthChange(txns: TxnRow[], type: string): { current: number; pct: number | null } {
-  const now = new Date();
-  const curM = now.getMonth(), curY = now.getFullYear();
-  const prevRef = new Date(curY, curM - 1, 1);
-  const prevM = prevRef.getMonth(), prevY = prevRef.getFullYear();
+// Total for a txn type within `range`, plus % change vs an equal-length immediately-preceding
+// period (null when that preceding period has no total to compare against — e.g. "All Time",
+// where there's nothing before the range to compare to).
+function rangeChange(txns: TxnRow[], type: string, range: DateRange): { current: number; pct: number | null } {
+  const from = new Date(`${range.from}T00:00:00`).getTime();
+  const to = new Date(`${range.to}T23:59:59.999`).getTime();
+  const span = to - from;
+  const prevTo = from - 1;
+  const prevFrom = prevTo - span;
   let current = 0, prev = 0;
   for (const txn of txns) {
     if (txn.type !== type) continue;
-    const d = new Date(txn.date);
-    if (d.getFullYear() === curY && d.getMonth() === curM) current += txn.total;
-    else if (d.getFullYear() === prevY && d.getMonth() === prevM) prev += txn.total;
+    const t = new Date(txn.date).getTime();
+    if (t >= from && t <= to) current += txn.total;
+    else if (t >= prevFrom && t <= prevTo) prev += txn.total;
   }
   return { current, pct: prev > 0 ? ((current - prev) / prev) * 100 : null };
 }
 
-function StatCard({ icon, iconColor, bgColor, label, amount, pct, width }: {
+// Lakh/Crore-abbreviated amount for the stat-card row — "6451517.7" -> "64.52L". Keeps the
+// list rows below (party balances etc.) in plain toLocaleString form; this is only for the
+// compact top strip, matching the client's own mockup (vyapar-parties.png).
+function fmtAbbrev(n: number): string {
+  const sign = n < 0 ? "-" : "";
+  const abs = Math.abs(n);
+  if (abs >= 1e7) return `${sign}${parseFloat((abs / 1e7).toFixed(2))}Cr`;
+  if (abs >= 1e5) return `${sign}${parseFloat((abs / 1e5).toFixed(2))}L`;
+  return `${sign}${abs.toLocaleString("en-PK")}`;
+}
+
+function StatCard({ icon, iconColor, label, amount, pct, width }: {
   icon: React.ComponentProps<typeof Ionicons>["name"];
   iconColor: string;
-  bgColor: string;
   label: string;
   amount: number;
   pct?: number | null;
   width: number;
 }) {
   return (
-    <View style={[t.statCard, { width, backgroundColor: bgColor }]}>
+    <View style={[t.statCard, { width }]}>
       <View style={t.statTop}>
-        <Ionicons name={icon} size={14} color={iconColor} />
+        <Ionicons name={icon} size={13} color={iconColor} />
         <Text style={t.statLabel} numberOfLines={1}>{label}</Text>
+        {pct != null ? (
+          <View style={t.statPctInline}>
+            <Ionicons name={pct < 0 ? "arrow-down" : "arrow-up"} size={10} color={pct < 0 ? colors.red : colors.green} />
+            <Text style={[t.statPct, { color: pct < 0 ? colors.red : colors.green }]}>{Math.abs(pct).toFixed(1)}%</Text>
+          </View>
+        ) : null}
       </View>
-      <Text style={[t.statAmt, { color: iconColor }]} numberOfLines={1}>Rs {amount.toLocaleString("en-PK")}</Text>
-      {pct != null ? (
-        <View style={t.statPctRow}>
-          <Ionicons name={pct < 0 ? "arrow-down" : "arrow-up"} size={11} color={pct < 0 ? colors.red : colors.green} />
-          <Text style={[t.statPct, { color: pct < 0 ? colors.red : colors.green }]}>{Math.abs(pct).toFixed(2)}%</Text>
-        </View>
-      ) : null}
+      <Text numberOfLines={1}>
+        <Text style={t.statRs}>Rs </Text>
+        <Text style={t.statAmt}>{fmtAbbrev(amount)}</Text>
+      </Text>
     </View>
   );
+}
+
+const PARTY_FILTERS = ["All", "Customer", "Supplier", "To Collect", "To Pay"];
+const TXN_FILTERS = ["All", "Sale", "Purchase", "Payment In", "Payment Out"];
+const ITEM_FILTERS = ["All", "Low Stock"];
+
+function fmtRowDate(iso: string) {
+  const d = new Date(iso);
+  return `${String(d.getDate()).padStart(2, "0")} ${d.toLocaleString("en", { month: "short" })} ${d.getFullYear()}`;
 }
 
 function TrendingHome() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { width: screenWidth } = useWindowDimensions();
-  // ~2.2 cards visible at once, so the next card always peeks in rather than
-  // getting hard-clipped flush at the screen edge.
-  const statCardWidth = Math.round((screenWidth - 12 * 2 - 10) / 2.2);
+  // ~3.2 cards visible at once (compact, matches the client's own mockup) — the next card
+  // still peeks in rather than getting hard-clipped flush at the screen edge.
+  const statCardWidth = Math.round((screenWidth - 12 * 2 - 10) / 3.2);
 
   const [tab, setTab] = useState<TrendingTab>("parties");
   const [companyName, setCompanyName] = useState("My Company");
@@ -251,6 +276,18 @@ function TrendingHome() {
   const [items, setItems] = useState<Item[]>(getCachedItems());
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  // App-bar date-range filter — scopes the Sale/Purchase stat cards and the Transactions
+  // tab (Parties/Items aren't date-bound entities, so they're left unfiltered by it).
+  const [range, setRange] = useState<DateRange>(() => getRange("all"));
+  const [showDateFilter, setShowDateFilter] = useState(false);
+
+  // Search + filter row (mirrors party/index.tsx's All/Customer/Supplier/To Collect/To Pay
+  // convention for Parties; Transactions/Items get an analogous filter for their own tab).
+  const [search, setSearch] = useState("");
+  const [listFilterIdx, setListFilterIdx] = useState(0);
+  const [showListFilter, setShowListFilter] = useState(false);
+  useEffect(() => { setSearch(""); setListFilterIdx(0); }, [tab]);
 
   const load = useCallback(async () => {
     try {
@@ -290,12 +327,47 @@ function TrendingHome() {
     else router.push("/sale/new" as never);
   }
 
-  // Same receivable/payable split as StandardHome's To Receive/To Pay cards.
+  // Same receivable/payable split as StandardHome's To Receive/To Pay cards — cumulative
+  // balances, not date-bound, so the app-bar date filter doesn't apply to these two.
   const youllGet = parties.filter((p) => (p.balance ?? 0) > 0).reduce((sum, p) => sum + (p.balance ?? 0), 0);
   const youllGive = parties.filter((p) => (p.balance ?? 0) < 0).reduce((sum, p) => sum + Math.abs(p.balance ?? 0), 0);
-  const sale = monthChange(txns, "sale");
-  const purchase = monthChange(txns, "purchase");
-  const monthLabel = new Date().toLocaleString("en", { month: "short" });
+  const sale = rangeChange(txns, "sale", range);
+  const purchase = rangeChange(txns, "purchase", range);
+
+  const filterOptsForTab = tab === "parties" ? PARTY_FILTERS : tab === "transactions" ? TXN_FILTERS : ITEM_FILTERS;
+
+  const filteredParties = parties.filter((p) => {
+    const q = search.trim().toLowerCase();
+    const matchesSearch = !q || p.name.toLowerCase().includes(q) || (p.phone ?? "").includes(search.trim());
+    const matchesFilter =
+      listFilterIdx === 0 ||
+      (listFilterIdx === 1 && (p.partyType === "customer" || p.partyType === "both")) ||
+      (listFilterIdx === 2 && (p.partyType === "supplier" || p.partyType === "both")) ||
+      (listFilterIdx === 3 && (p.balance ?? 0) > 0) ||
+      (listFilterIdx === 4 && (p.balance ?? 0) < 0);
+    return matchesSearch && matchesFilter;
+  });
+
+  const filteredTxns = txns.filter((r) => {
+    if (!isWithinRange(r.date, range)) return false;
+    const q = search.trim().toLowerCase();
+    const matchesSearch = !q || r.partyName.toLowerCase().includes(q);
+    const matchesFilter =
+      listFilterIdx === 0 ||
+      (listFilterIdx === 1 && r.type === "sale") ||
+      (listFilterIdx === 2 && r.type === "purchase") ||
+      (listFilterIdx === 3 && r.type === "payment_in") ||
+      (listFilterIdx === 4 && r.type === "payment_out");
+    return matchesSearch && matchesFilter;
+  });
+
+  const filteredItems = items.filter((i) => {
+    const q = search.trim().toLowerCase();
+    const matchesSearch = !q || i.name.toLowerCase().includes(q) || (i.sku ?? "").toLowerCase().includes(q);
+    const stock = i.totalStock ?? i.openingStock ?? 0;
+    const matchesFilter = listFilterIdx === 0 || (listFilterIdx === 1 && stock <= i.minStock);
+    return matchesSearch && matchesFilter;
+  });
 
   return (
     <View style={[s.screen, { paddingTop: insets.top }]}>
@@ -305,6 +377,9 @@ function TrendingHome() {
           <Ionicons name="menu" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={t.companyName} numberOfLines={1}>{companyName}</Text>
+        <TouchableOpacity style={t.filterBtn} onPress={() => setShowDateFilter(true)} hitSlop={8}>
+          <Ionicons name="filter" size={16} color="#fff" />
+        </TouchableOpacity>
         <TouchableOpacity style={s.iconBtn} hitSlop={8}>
           <Ionicons name="notifications-outline" size={22} color={colors.text} />
         </TouchableOpacity>
@@ -313,20 +388,22 @@ function TrendingHome() {
         </TouchableOpacity>
       </View>
 
-      {/* Swipeable stat cards: You'll Get, Sale (month), You'll Give, Purchase (month) */}
+      {/* Swipeable stat cards: You'll Get, Sale, You'll Give, Purchase — Sale/Purchase scoped
+          to the app-bar date filter (default "All Time"). */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         style={t.statScroll}
         contentContainerStyle={t.statScrollContent}
       >
-        <StatCard icon="arrow-down-circle" iconColor={colors.green} bgColor={colors.greenBg} label="You'll Get" amount={youllGet} width={statCardWidth} />
-        <StatCard icon="document-text" iconColor={colors.blue} bgColor={colors.blueLight} label={`Sale (${monthLabel})`} amount={sale.current} pct={sale.pct} width={statCardWidth} />
-        <StatCard icon="arrow-up-circle" iconColor={colors.orange} bgColor={colors.orangeLight} label="You'll Give" amount={youllGive} width={statCardWidth} />
-        <StatCard icon="cart" iconColor={colors.purple} bgColor={colors.purpleLight} label={`Purchase (${monthLabel})`} amount={purchase.current} pct={purchase.pct} width={statCardWidth} />
+        <StatCard icon="arrow-down-circle" iconColor={colors.green} label="You'll Get" amount={youllGet} width={statCardWidth} />
+        <StatCard icon="document-text" iconColor={colors.blue} label={`Sale (${range.label})`} amount={sale.current} pct={sale.pct} width={statCardWidth} />
+        <StatCard icon="arrow-up-circle" iconColor={colors.orange} label="You'll Give" amount={youllGive} width={statCardWidth} />
+        <StatCard icon="cart" iconColor={colors.purple} label={`Purchase (${range.label})`} amount={purchase.current} pct={purchase.pct} width={statCardWidth} />
       </ScrollView>
+      <PeriodModal visible={showDateFilter} range={range} onClose={() => setShowDateFilter(false)} onChange={setRange} />
 
-      {/* Tabs + New button */}
+      {/* Tabs */}
       <View style={t.tabRow}>
         {TRENDING_TABS.map((tb) => (
           <TouchableOpacity
@@ -338,11 +415,46 @@ function TrendingHome() {
           </TouchableOpacity>
         ))}
       </View>
-      <View style={t.newBtnRow}>
+
+      {/* Search + filter + New + more row */}
+      <View style={t.searchRow}>
+        <View style={t.searchBox}>
+          <Ionicons name="search" size={15} color={colors.primary} />
+          <TextInput
+            style={t.searchInput}
+            placeholder={`SEARCH ${tab === "parties" ? "PARTY" : tab === "transactions" ? "TRANSACTION" : "ITEM"}`}
+            placeholderTextColor={colors.textLight}
+            value={search}
+            onChangeText={setSearch}
+            autoCapitalize="none"
+          />
+        </View>
+        <TouchableOpacity style={t.smallIconBtn} onPress={() => setShowListFilter(true)} hitSlop={6}>
+          <Ionicons name="options-outline" size={18} color={colors.text} />
+        </TouchableOpacity>
         <TouchableOpacity style={t.newBtn} onPress={handleAddPress}>
           <Text style={t.newBtnTxt}>{trendingAddLabel(tab)}</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={t.smallIconBtn} hitSlop={6}>
+          <Ionicons name="ellipsis-vertical" size={18} color={colors.text} />
+        </TouchableOpacity>
       </View>
+
+      {/* List filter picker (options depend on the active tab) */}
+      <Modal visible={showListFilter} transparent animationType="fade" onRequestClose={() => setShowListFilter(false)}>
+        <Pressable style={t.filterOverlay} onPress={() => setShowListFilter(false)}>
+          <View style={t.filterSheet}>
+            {filterOptsForTab.map((label, i) => (
+              <TouchableOpacity key={label} style={t.filterRow} onPress={() => { setListFilterIdx(i); setShowListFilter(false); }}>
+                <Text style={[t.filterRowTxt, listFilterIdx === i && t.filterRowTxtActive]}>{label}</Text>
+                {listFilterIdx === i
+                  ? <Ionicons name="checkmark-circle" size={18} color={colors.primary} />
+                  : <View style={t.filterCircle} />}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
 
       {loading ? (
         <View style={s.center}>
@@ -350,27 +462,31 @@ function TrendingHome() {
         </View>
       ) : tab === "parties" ? (
         <FlatList
-          data={parties}
+          data={filteredParties}
           keyExtractor={(p) => p.id}
           contentContainerStyle={t.list}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
           renderItem={({ item }) => (
             <TouchableOpacity style={t.row} onPress={() => router.push(`/party/${item.id}` as never)}>
-              <View style={t.rowAvatar}><Text style={t.rowAvatarTxt}>{item.name[0]?.toUpperCase()}</Text></View>
               <View style={{ flex: 1 }}>
                 <Text style={t.rowTitle} numberOfLines={1}>{item.name}</Text>
-                {item.phone ? <Text style={t.rowSub}>{item.phone}</Text> : null}
+                <Text style={t.rowSub}>{fmtRowDate(item.createdAt)}</Text>
               </View>
-              <Text style={[t.rowAmt, { color: (item.balance ?? 0) > 0 ? colors.red : colors.green }]}>
-                Rs {Math.abs(item.balance ?? 0).toLocaleString("en-PK")}
-              </Text>
+              <View style={{ alignItems: "flex-end" }}>
+                <Text style={[t.rowAmt, { color: (item.balance ?? 0) > 0 ? colors.red : colors.green }]}>
+                  Rs {Math.abs(item.balance ?? 0).toLocaleString("en-PK")}
+                </Text>
+                <Text style={[t.rowAmtSub, { color: (item.balance ?? 0) > 0 ? colors.red : colors.green }]}>
+                  {(item.balance ?? 0) > 0 ? "You'll Give" : "You'll Get"}
+                </Text>
+              </View>
             </TouchableOpacity>
           )}
-          ListEmptyComponent={<EmptyState icon="people-outline" title="Add Parties" sub="Add customers (parties) of your business" />}
+          ListEmptyComponent={<EmptyState icon="people-outline" title={search || listFilterIdx ? "No matching parties" : "Add Parties"} sub={search || listFilterIdx ? "Try a different search or filter" : "Add customers (parties) of your business"} />}
         />
       ) : tab === "transactions" ? (
         <FlatList
-          data={txns}
+          data={filteredTxns}
           keyExtractor={(r) => r.id}
           contentContainerStyle={t.list}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
@@ -378,18 +494,18 @@ function TrendingHome() {
             <TouchableOpacity style={t.row} onPress={() => router.push(`/txn/${item.id}` as never)}>
               <View style={{ flex: 1 }}>
                 <Text style={t.rowTitle} numberOfLines={1}>{item.partyName}</Text>
-                <Text style={t.rowSub}>{item.type.replace(/_/g, " ")}</Text>
+                <Text style={t.rowSub}>{item.type.replace(/_/g, " ")} · {fmtRowDate(item.date)}</Text>
               </View>
               <Text style={[t.rowAmt, { color: item.balance > 0 ? colors.red : colors.textMuted }]}>
                 Rs {item.total.toLocaleString("en-PK")}
               </Text>
             </TouchableOpacity>
           )}
-          ListEmptyComponent={<EmptyState icon="receipt-outline" title="Add Transactions" sub="Record sales, purchases and payments" />}
+          ListEmptyComponent={<EmptyState icon="receipt-outline" title={search || listFilterIdx ? "No matching transactions" : "Add Transactions"} sub={search || listFilterIdx ? "Try a different search or filter" : "Record sales, purchases and payments"} />}
         />
       ) : (
         <FlatList
-          data={items}
+          data={filteredItems}
           keyExtractor={(i) => i.id}
           contentContainerStyle={t.list}
           renderItem={({ item }) => (
@@ -401,7 +517,7 @@ function TrendingHome() {
               <Text style={t.rowAmt}>{item.totalStock ?? item.openingStock ?? 0} {item.unit ?? ""}</Text>
             </TouchableOpacity>
           )}
-          ListEmptyComponent={<EmptyState icon="cube-outline" title="Add Items" sub="Add products/services you sell or stock" />}
+          ListEmptyComponent={<EmptyState icon="cube-outline" title={search || listFilterIdx ? "No matching items" : "Add Items"} sub={search || listFilterIdx ? "Try a different search or filter" : "Add products/services you sell or stock"} />}
         />
       )}
     </View>
@@ -1053,6 +1169,10 @@ const t = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: "#e8ecf0",
   },
   companyName: { flex: 1, fontSize: 18, fontWeight: "700", color: colors.text },
+  filterBtn: {
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: colors.gold, alignItems: "center", justifyContent: "center",
+  },
 
   statScroll: {
     backgroundColor: "#f0f2f5",
@@ -1068,11 +1188,12 @@ const t = StyleSheet.create({
     shadowColor: "#0f172a", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6,
     elevation: 2,
   },
-  statTop: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
-  statLabel: { flex: 1, fontSize: 12.5, fontWeight: "600", color: colors.text },
-  statAmt: { fontSize: 16.5, fontWeight: "700", color: colors.text, flexShrink: 1, width: "100%" },
-  statPctRow: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 6 },
-  statPct: { fontSize: 11.5, fontWeight: "700" },
+  statTop: { flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 8 },
+  statLabel: { fontSize: 11.5, fontWeight: "600", color: colors.text, flexShrink: 1 },
+  statPctInline: { flexDirection: "row", alignItems: "center", gap: 2, marginLeft: "auto" },
+  statPct: { fontSize: 10.5, fontWeight: "700" },
+  statRs: { fontSize: 12, fontWeight: "500", color: colors.textMuted },
+  statAmt: { fontSize: 17, fontWeight: "700", color: colors.text },
 
   tabRow: {
     flexDirection: "row", gap: 10,
@@ -1086,16 +1207,36 @@ const t = StyleSheet.create({
   tabTxt: { fontSize: 13.5, fontWeight: "600", color: colors.textMuted },
   tabTxtActive: { color: colors.red },
 
-  newBtnRow: {
+  searchRow: {
+    flexDirection: "row", alignItems: "center", gap: 8,
     backgroundColor: "#fff", paddingHorizontal: 16, paddingBottom: 12,
-    alignItems: "flex-end",
     borderBottomWidth: 1, borderBottomColor: "#e8ecf0",
+  },
+  searchBox: {
+    flex: 1, flexDirection: "row", alignItems: "center", gap: 8,
+    backgroundColor: "#f5f7fa", borderRadius: 100, paddingHorizontal: 12, paddingVertical: 8,
+  },
+  searchInput: { flex: 1, fontSize: 12, fontWeight: "600", color: colors.text, letterSpacing: 0.3, padding: 0 },
+  smallIconBtn: {
+    width: 34, height: 34, borderRadius: 17, backgroundColor: "#f0f2f5",
+    alignItems: "center", justifyContent: "center",
   },
   newBtn: {
     backgroundColor: colors.primaryLight + "22", borderRadius: 100,
-    paddingHorizontal: 16, paddingVertical: 9,
+    paddingHorizontal: 14, paddingVertical: 9,
   },
-  newBtnTxt: { fontSize: 13.5, fontWeight: "700", color: colors.primary },
+  newBtnTxt: { fontSize: 12.5, fontWeight: "700", color: colors.primary },
+
+  filterOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.35)", justifyContent: "center", paddingHorizontal: 40 },
+  filterSheet: { backgroundColor: "#fff", borderRadius: 14, paddingVertical: 6 },
+  filterRow: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 18, paddingVertical: 13,
+    borderBottomWidth: 1, borderBottomColor: colors.borderLight,
+  },
+  filterRowTxt: { fontSize: 14, color: colors.text },
+  filterRowTxtActive: { color: colors.primary, fontWeight: "600" },
+  filterCircle: { width: 18, height: 18, borderRadius: 9, borderWidth: 1.5, borderColor: colors.border },
 
   list: { padding: 12, flexGrow: 1 },
   row: {
@@ -1103,14 +1244,10 @@ const t = StyleSheet.create({
     backgroundColor: "#fff", borderRadius: 10, borderWidth: 1, borderColor: "#e8ecf0",
     padding: 14, marginBottom: 8,
   },
-  rowAvatar: {
-    width: 38, height: 38, borderRadius: 19,
-    backgroundColor: "#dbeafe", alignItems: "center", justifyContent: "center",
-  },
-  rowAvatarTxt: { fontSize: 15, fontWeight: "700", color: colors.primary },
   rowTitle: { fontSize: 14, fontWeight: "600", color: colors.text },
   rowSub: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
   rowAmt: { fontSize: 13.5, fontWeight: "700", color: colors.text },
+  rowAmtSub: { fontSize: 11, fontWeight: "600", marginTop: 2 },
 
   emptyWrap: { flex: 1, alignItems: "center", justifyContent: "center", gap: 10, marginTop: 80, paddingHorizontal: 40 },
   emptyTitle: { fontSize: 16, fontWeight: "700", color: colors.text },
