@@ -261,13 +261,30 @@ function fmtRowDate(iso: string) {
   return `${String(d.getDate()).padStart(2, "0")} ${d.toLocaleString("en", { month: "short" })} ${d.getFullYear()}`;
 }
 
+// A short, constant-width suffix for the Sale/Purchase stat cards — range.label itself
+// ("This Financial Year", "All Time") can run long enough to visibly squeeze the card's
+// text at this width, regardless of which preset the user picks.
+function shortRangeLabel(range: DateRange): string {
+  switch (range.preset) {
+    case "all": return "";
+    case "today": return "Today";
+    case "week": return "Wk";
+    case "month": return new Date().toLocaleString("en", { month: "short" });
+    case "quarter": return "Qtr";
+    case "financial_year": return "FY";
+    case "custom": return "Custom";
+    default: return "";
+  }
+}
+
 function TrendingHome() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { width: screenWidth } = useWindowDimensions();
-  // ~3.2 cards visible at once (compact, matches the client's own mockup) — the next card
-  // still peeks in rather than getting hard-clipped flush at the screen edge.
-  const statCardWidth = Math.round((screenWidth - 12 * 2 - 10) / 3.2);
+  // ~2.5 cards visible at once — 3.2 was too narrow for "Sale (This Month)"-length labels
+  // to fit without the text visibly squeezing/garbling; the next card still peeks in rather
+  // than getting hard-clipped flush at the screen edge.
+  const statCardWidth = Math.round((screenWidth - 12 * 2 - 10) / 2.5);
 
   const [tab, setTab] = useState<TrendingTab>("parties");
   const [companyName, setCompanyName] = useState("My Company");
@@ -397,9 +414,9 @@ function TrendingHome() {
         contentContainerStyle={t.statScrollContent}
       >
         <StatCard icon="arrow-down-circle" iconColor={colors.green} label="You'll Get" amount={youllGet} width={statCardWidth} />
-        <StatCard icon="document-text" iconColor={colors.blue} label={`Sale (${range.label})`} amount={sale.current} pct={sale.pct} width={statCardWidth} />
+        <StatCard icon="document-text" iconColor={colors.blue} label={shortRangeLabel(range) ? `Sale (${shortRangeLabel(range)})` : "Sale"} amount={sale.current} pct={sale.pct} width={statCardWidth} />
         <StatCard icon="arrow-up-circle" iconColor={colors.orange} label="You'll Give" amount={youllGive} width={statCardWidth} />
-        <StatCard icon="cart" iconColor={colors.purple} label={`Purchase (${range.label})`} amount={purchase.current} pct={purchase.pct} width={statCardWidth} />
+        <StatCard icon="cart" iconColor={colors.purple} label={shortRangeLabel(range) ? `Purchase (${shortRangeLabel(range)})` : "Purchase"} amount={purchase.current} pct={purchase.pct} width={statCardWidth} />
       </ScrollView>
       <PeriodModal visible={showDateFilter} range={range} onClose={() => setShowDateFilter(false)} onChange={setRange} />
 
@@ -465,6 +482,10 @@ function TrendingHome() {
           data={filteredParties}
           keyExtractor={(p) => p.id}
           contentContainerStyle={t.list}
+          initialNumToRender={12}
+          maxToRenderPerBatch={10}
+          windowSize={7}
+          removeClippedSubviews
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
           renderItem={({ item }) => (
             <TouchableOpacity style={t.row} onPress={() => router.push(`/party/${item.id}` as never)}>
@@ -489,6 +510,10 @@ function TrendingHome() {
           data={filteredTxns}
           keyExtractor={(r) => r.id}
           contentContainerStyle={t.list}
+          initialNumToRender={12}
+          maxToRenderPerBatch={10}
+          windowSize={7}
+          removeClippedSubviews
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
           renderItem={({ item }) => (
             <TouchableOpacity style={t.row} onPress={() => router.push(`/txn/${item.id}` as never)}>
@@ -508,6 +533,10 @@ function TrendingHome() {
           data={filteredItems}
           keyExtractor={(i) => i.id}
           contentContainerStyle={t.list}
+          initialNumToRender={12}
+          maxToRenderPerBatch={10}
+          windowSize={7}
+          removeClippedSubviews
           renderItem={({ item }) => (
             <TouchableOpacity style={t.row} onPress={() => router.push(`/items/${item.id}` as never)}>
               <View style={{ flex: 1 }}>
