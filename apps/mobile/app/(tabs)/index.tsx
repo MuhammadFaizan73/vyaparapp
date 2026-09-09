@@ -236,14 +236,14 @@ function StatCard({ icon, iconColor, label, amount, pct, width }: {
       <View style={t.statTop}>
         <Ionicons name={icon} size={13} color={iconColor} />
         <Text style={t.statLabel} numberOfLines={1}>{label}</Text>
-        {pct != null ? (
-          <View style={t.statPctInline}>
-            <Ionicons name={pct < 0 ? "arrow-down" : "arrow-up"} size={10} color={pct < 0 ? colors.red : colors.green} />
-            <Text style={[t.statPct, { color: pct < 0 ? colors.red : colors.green }]}>{Math.abs(pct).toFixed(1)}%</Text>
-          </View>
-        ) : null}
       </View>
       <Text style={t.statAmt} numberOfLines={1}>Rs {fmtAbbrev(amount)}</Text>
+      {pct != null ? (
+        <View style={t.statPctRow}>
+          <Ionicons name={pct < 0 ? "arrow-down" : "arrow-up"} size={10} color={pct < 0 ? colors.red : colors.green} />
+          <Text style={[t.statPct, { color: pct < 0 ? colors.red : colors.green }]}>{Math.abs(pct).toFixed(1)}%</Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -1216,9 +1216,9 @@ const t = StyleSheet.create({
     shadowColor: "#0f172a", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6,
     elevation: 2,
   },
-  statTop: { flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 8 },
-  statLabel: { fontSize: 11.5, fontWeight: "600", color: colors.text, flexShrink: 1 },
-  statPctInline: { flexDirection: "row", alignItems: "center", gap: 2, marginLeft: "auto" },
+  statTop: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 },
+  statLabel: { flex: 1, fontSize: 11.5, fontWeight: "600", color: colors.text },
+  statPctRow: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 6 },
   statPct: { fontSize: 10.5, fontWeight: "700" },
   statAmt: { fontSize: 17, fontWeight: "700", color: colors.text },
 
