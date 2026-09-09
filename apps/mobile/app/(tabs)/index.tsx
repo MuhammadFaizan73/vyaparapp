@@ -2,7 +2,6 @@ import { useState, useCallback, useEffect } from "react";
 import {
   View, Text, TextInput, TouchableOpacity, FlatList,
   StyleSheet, ActivityIndicator, RefreshControl, ScrollView, Modal, Pressable, Alert,
-  useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
@@ -244,10 +243,7 @@ function StatCard({ icon, iconColor, label, amount, pct, width }: {
           </View>
         ) : null}
       </View>
-      <Text numberOfLines={1}>
-        <Text style={t.statRs}>Rs </Text>
-        <Text style={t.statAmt}>{fmtAbbrev(amount)}</Text>
-      </Text>
+      <Text style={t.statAmt} numberOfLines={1}>Rs {fmtAbbrev(amount)}</Text>
     </View>
   );
 }
@@ -280,11 +276,14 @@ function shortRangeLabel(range: DateRange): string {
 function TrendingHome() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { width: screenWidth } = useWindowDimensions();
-  // ~2.5 cards visible at once — 3.2 was too narrow for "Sale (This Month)"-length labels
-  // to fit without the text visibly squeezing/garbling; the next card still peeks in rather
-  // than getting hard-clipped flush at the screen edge.
-  const statCardWidth = Math.round((screenWidth - 12 * 2 - 10) / 2.5);
+  // A fixed width, not screenWidth-derived — computing it from useWindowDimensions() was
+  // the actual bug: on some devices/timings that hook's value isn't reliable on the very
+  // first render (garbled/near-invisible card content — exactly the symptom reported —
+  // is what a negative or near-zero computed width looks like), and nothing forced a
+  // second render to correct it until some unrelated state change (typing in search)
+  // happened to re-run this computation with a by-then-correct value. A constant sidesteps
+  // the whole class of bug.
+  const statCardWidth = 148;
 
   const [tab, setTab] = useState<TrendingTab>("parties");
   const [companyName, setCompanyName] = useState("My Company");
@@ -1221,7 +1220,6 @@ const t = StyleSheet.create({
   statLabel: { fontSize: 11.5, fontWeight: "600", color: colors.text, flexShrink: 1 },
   statPctInline: { flexDirection: "row", alignItems: "center", gap: 2, marginLeft: "auto" },
   statPct: { fontSize: 10.5, fontWeight: "700" },
-  statRs: { fontSize: 12, fontWeight: "500", color: colors.textMuted },
   statAmt: { fontSize: 17, fontWeight: "700", color: colors.text },
 
   tabRow: {
