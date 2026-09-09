@@ -1057,11 +1057,16 @@ const t = StyleSheet.create({
   statScroll: {
     backgroundColor: "#f0f2f5",
   },
-  statScrollContent: { paddingHorizontal: 12, paddingVertical: 14, gap: 12 },
+  // alignItems: "flex-start" — without it, a horizontal ScrollView's row defaults to
+  // stretch, forcing every card to the same height as its tallest sibling (the pct-row
+  // cards); combined with statCard's overflow:hidden that silently clipped the amount/pct
+  // text of whichever card that stretch got wrong instead of letting each size to its
+  // own content.
+  statScrollContent: { paddingHorizontal: 12, paddingVertical: 14, gap: 12, alignItems: "flex-start" },
   statCard: {
     backgroundColor: "#fff", borderRadius: 14, padding: 14,
     shadowColor: "#0f172a", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6,
-    elevation: 2, overflow: "hidden",
+    elevation: 2,
   },
   statTop: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
   statLabel: { flex: 1, fontSize: 12.5, fontWeight: "600", color: colors.text },
