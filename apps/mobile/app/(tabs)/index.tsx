@@ -1210,7 +1210,7 @@ const t = StyleSheet.create({
   // cards); combined with statCard's overflow:hidden that silently clipped the amount/pct
   // text of whichever card that stretch got wrong instead of letting each size to its
   // own content.
-  statScrollContent: { paddingHorizontal: 12, paddingTop: 14, paddingBottom: 28, gap: 12, alignItems: "flex-start" },
+  statScrollContent: { paddingHorizontal: 12, paddingTop: 14, paddingBottom: 40, gap: 12, alignItems: "flex-start" },
   statCard: {
     backgroundColor: "#fff", borderRadius: 14, padding: 14, minHeight: 80,
     shadowColor: "#0f172a", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6,
