@@ -428,7 +428,7 @@ function TrendingHome() {
         <StatCard icon="arrow-down-circle" iconColor={colors.green} label="You'll Get" amount={youllGet} width={statCardWidth} colored onPress={() => goToPartyFilter(3)} />
         <StatCard icon="document-text" iconColor={colors.blue} label={shortRangeLabel(range) ? `Sale (${shortRangeLabel(range)})` : "Sale"} amount={sale.current} pct={sale.pct} width={statCardWidth} onPress={() => router.push("/sale" as never)} />
         <StatCard icon="arrow-up-circle" iconColor={colors.orange} label="You'll Give" amount={youllGive} width={statCardWidth} colored onPress={() => goToPartyFilter(4)} />
-        <StatCard icon="cart" iconColor={colors.purple} label={shortRangeLabel(range) ? `Purchase (${shortRangeLabel(range)})` : "Purchase"} amount={purchase.current} pct={purchase.pct} width={statCardWidth} />
+        <StatCard icon="cart" iconColor={colors.purple} label={shortRangeLabel(range) ? `Purchase (${shortRangeLabel(range)})` : "Purchase"} amount={purchase.current} pct={purchase.pct} width={statCardWidth} onPress={() => router.push("/purchase" as never)} />
       </ScrollView>
       <PeriodModal visible={showDateFilter} range={range} onClose={() => setShowDateFilter(false)} onChange={setRange} />
 
