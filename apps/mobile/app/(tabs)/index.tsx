@@ -233,11 +233,14 @@ function StatCard({ icon, iconColor, label, amount, pct, colored, width, onPress
   width: number;
   onPress?: () => void;
 }) {
+  // "colored" here means "this is the active/selected card" — always green regardless of
+  // the card's own semantic icon color, per the client's request that the tapped card turn
+  // green rather than each card carrying its own permanent color.
   const fg = colored ? "#fff" : colors.text;
   const Wrapper = onPress ? TouchableOpacity : View;
   return (
     <Wrapper
-      style={[t.statCard, { width }, colored && { backgroundColor: iconColor }]}
+      style={[t.statCard, { width }, colored && { backgroundColor: colors.green }]}
       {...(onPress ? { onPress, activeOpacity: 0.7 } : {})}
     >
       <View style={t.statTop}>
@@ -317,6 +320,10 @@ function TrendingHome() {
     if (tab === "parties") setListFilterIdx(idx);
     else { pendingFilterRef.current = idx; setTab("parties"); }
   }
+
+  // No stat card is colored until the user taps one — then that card turns green to show
+  // it's the active selection, regardless of which card it is.
+  const [activeStat, setActiveStat] = useState<"receivable" | "payable" | "sale" | "purchase" | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -425,10 +432,10 @@ function TrendingHome() {
         style={t.statScroll}
         contentContainerStyle={t.statScrollContent}
       >
-        <StatCard icon="arrow-down-circle" iconColor={colors.green} label="You'll Get" amount={youllGet} width={statCardWidth} colored onPress={() => goToPartyFilter(3)} />
-        <StatCard icon="document-text" iconColor={colors.blue} label={shortRangeLabel(range) ? `Sale (${shortRangeLabel(range)})` : "Sale"} amount={sale.current} pct={sale.pct} width={statCardWidth} onPress={() => router.push("/sale" as never)} />
-        <StatCard icon="arrow-up-circle" iconColor={colors.orange} label="You'll Give" amount={youllGive} width={statCardWidth} colored onPress={() => goToPartyFilter(4)} />
-        <StatCard icon="cart" iconColor={colors.purple} label={shortRangeLabel(range) ? `Purchase (${shortRangeLabel(range)})` : "Purchase"} amount={purchase.current} pct={purchase.pct} width={statCardWidth} onPress={() => router.push("/purchase" as never)} />
+        <StatCard icon="arrow-down-circle" iconColor={colors.green} label="You'll Get" amount={youllGet} width={statCardWidth} colored={activeStat === "receivable"} onPress={() => { setActiveStat("receivable"); goToPartyFilter(3); }} />
+        <StatCard icon="document-text" iconColor={colors.blue} label={shortRangeLabel(range) ? `Sale (${shortRangeLabel(range)})` : "Sale"} amount={sale.current} pct={sale.pct} width={statCardWidth} colored={activeStat === "sale"} onPress={() => { setActiveStat("sale"); router.push("/sale" as never); }} />
+        <StatCard icon="arrow-up-circle" iconColor={colors.orange} label="You'll Give" amount={youllGive} width={statCardWidth} colored={activeStat === "payable"} onPress={() => { setActiveStat("payable"); goToPartyFilter(4); }} />
+        <StatCard icon="cart" iconColor={colors.purple} label={shortRangeLabel(range) ? `Purchase (${shortRangeLabel(range)})` : "Purchase"} amount={purchase.current} pct={purchase.pct} width={statCardWidth} colored={activeStat === "purchase"} onPress={() => { setActiveStat("purchase"); router.push("/purchase" as never); }} />
       </ScrollView>
       <PeriodModal visible={showDateFilter} range={range} onClose={() => setShowDateFilter(false)} onChange={setRange} />
 
