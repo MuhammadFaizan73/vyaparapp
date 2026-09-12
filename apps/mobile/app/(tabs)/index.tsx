@@ -1213,10 +1213,14 @@ const t = StyleSheet.create({
   // alignItems: "flex-start" — without it, a horizontal ScrollView's row defaults to
   // stretch, forcing every card to the same height as its tallest sibling.
   statScrollContent: { paddingHorizontal: 12, paddingTop: 14, paddingBottom: 14, gap: 12, alignItems: "flex-start" },
+  // No shadow/elevation: Android draws an elevated view on its own hardware Z-layer, which
+  // can render above later siblings regardless of the gap between them — a plausible cause
+  // of the card visually bleeding into the tab row below no matter how much margin was added.
+  // A plain border (same pattern as the party/transaction list rows below) avoids that
+  // whole class of bug.
   statCard: {
     backgroundColor: "#fff", borderRadius: 14, padding: 14, minHeight: 80,
-    shadowColor: "#0f172a", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6,
-    elevation: 2,
+    borderWidth: 1, borderColor: "#e8ecf0",
   },
   statTop: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 },
   statLabel: { flex: 1, fontSize: 11.5, fontWeight: "600", color: colors.text },
