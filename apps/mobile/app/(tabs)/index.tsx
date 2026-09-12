@@ -1200,13 +1200,14 @@ const t = StyleSheet.create({
   // A horizontal ScrollView with no explicit height sizes itself to its children's laid-out
   // height on Android, and that auto-measurement isn't reliable (it's the same class of bug
   // as statCardWidth above, and previously showed up as content overlapping the row below).
-  // statCard always renders at exactly 80 (its content is shorter than minHeight, so minHeight
-  // wins deterministically for every variant) — so this box's height is knowably
-  // 14 (paddingTop) + 80 (card) + 14 (paddingBottom) = 108. A fixed height sidesteps the
-  // auto-measurement entirely instead of trusting it.
+  // statCard's content (icon+label row, then amount) is ~73 tall, under its own minHeight:80 —
+  // but text line-height varies slightly by device/font-scale, so this height is deliberately
+  // generous (80 card + 14 top/bottom padding + slack) rather than an exact fit: a tight fixed
+  // height that undershoots real content clips the card's bottom instead of letting it grow,
+  // which is worse than the auto-measurement bug it's meant to replace.
   statScroll: {
     backgroundColor: "#f0f2f5",
-    height: 108,
+    height: 132,
     marginBottom: 16,
   },
   // alignItems: "flex-start" — without it, a horizontal ScrollView's row defaults to
