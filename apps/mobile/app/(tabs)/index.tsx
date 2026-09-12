@@ -223,17 +223,18 @@ function fmtAbbrev(n: number): string {
   return `${sign}${abs.toLocaleString("en-PK")}`;
 }
 
-function StatCard({ icon, iconColor, label, amount, pct, colored }: {
+function StatCard({ icon, iconColor, label, amount, pct, colored, width }: {
   icon: React.ComponentProps<typeof Ionicons>["name"];
   iconColor: string;
   label: string;
   amount: number;
   pct?: number | null;
   colored?: boolean;
+  width: number;
 }) {
   const fg = colored ? "#fff" : colors.text;
   return (
-    <View style={[t.statCard, colored && { backgroundColor: iconColor }]}>
+    <View style={[t.statCard, { width }, colored && { backgroundColor: iconColor }]}>
       <View style={t.statTop}>
         <Ionicons name={icon} size={14} color={colored ? "#fff" : iconColor} />
         <Text style={[t.statLabel, { color: fg }]} numberOfLines={1}>{label}</Text>
@@ -277,6 +278,8 @@ function shortRangeLabel(range: DateRange): string {
 function TrendingHome() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const statCardWidth = 148;
+
   const [tab, setTab] = useState<TrendingTab>("parties");
   const [companyName, setCompanyName] = useState("My Company");
   const [parties, setParties] = useState<Party[]>([]);
@@ -335,10 +338,12 @@ function TrendingHome() {
     else router.push("/sale/new" as never);
   }
 
-  // Cumulative receivable balance — not date-bound, so the app-bar date filter doesn't
-  // apply to this one (Sale is scoped to the filter via rangeChange below).
+  // Cumulative receivable/payable balances — not date-bound, so the app-bar date filter
+  // doesn't apply to these two (Sale/Purchase are scoped to it via rangeChange below).
   const youllGet = parties.filter((p) => (p.balance ?? 0) > 0).reduce((sum, p) => sum + (p.balance ?? 0), 0);
+  const youllGive = parties.filter((p) => (p.balance ?? 0) < 0).reduce((sum, p) => sum + Math.abs(p.balance ?? 0), 0);
   const sale = rangeChange(txns, "sale", range);
+  const purchase = rangeChange(txns, "purchase", range);
 
   const filterOptsForTab = tab === "parties" ? PARTY_FILTERS : tab === "transactions" ? TXN_FILTERS : ITEM_FILTERS;
 
@@ -394,12 +399,19 @@ function TrendingHome() {
         </TouchableOpacity>
       </View>
 
-      {/* Stat cards: You'll Get + Sale — Sale scoped to the app-bar date filter (default
-          "All Time"). */}
-      <View style={t.statRow}>
-        <StatCard icon="arrow-down-circle" iconColor={colors.green} label="You'll Get" amount={youllGet} colored />
-        <StatCard icon="document-text" iconColor={colors.blue} label={shortRangeLabel(range) ? `Sale (${shortRangeLabel(range)})` : "Sale"} amount={sale.current} pct={sale.pct} />
-      </View>
+      {/* Swipeable stat cards: You'll Get, Sale, You'll Give, Purchase — Sale/Purchase scoped
+          to the app-bar date filter (default "All Time"). */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={t.statScroll}
+        contentContainerStyle={t.statScrollContent}
+      >
+        <StatCard icon="arrow-down-circle" iconColor={colors.green} label="You'll Get" amount={youllGet} width={statCardWidth} colored />
+        <StatCard icon="document-text" iconColor={colors.blue} label={shortRangeLabel(range) ? `Sale (${shortRangeLabel(range)})` : "Sale"} amount={sale.current} pct={sale.pct} width={statCardWidth} />
+        <StatCard icon="arrow-up-circle" iconColor={colors.orange} label="You'll Give" amount={youllGive} width={statCardWidth} colored />
+        <StatCard icon="cart" iconColor={colors.purple} label={shortRangeLabel(range) ? `Purchase (${shortRangeLabel(range)})` : "Purchase"} amount={purchase.current} pct={purchase.pct} width={statCardWidth} />
+      </ScrollView>
       <PeriodModal visible={showDateFilter} range={range} onClose={() => setShowDateFilter(false)} onChange={setRange} />
 
       {/* Tabs */}
@@ -1185,13 +1197,20 @@ const t = StyleSheet.create({
     backgroundColor: colors.gold, alignItems: "center", justifyContent: "center",
   },
 
-  statRow: {
-    flexDirection: "row", gap: 12,
-    backgroundColor: "#f0f2f5", paddingHorizontal: 12, paddingTop: 14, paddingBottom: 14,
+  // marginBottom (not contentContainerStyle paddingBottom) for the gap below this row: a
+  // horizontal ScrollView with no explicit height sizes itself to its children's laid-out
+  // height on Android, and contentContainerStyle's vertical padding isn't reliably reflected
+  // in that measurement. marginBottom on the ScrollView's own (non-scrolling) style sits
+  // outside that measurement and affects the next sibling's position directly.
+  statScroll: {
+    backgroundColor: "#f0f2f5",
     marginBottom: 16,
   },
+  // alignItems: "flex-start" — without it, a horizontal ScrollView's row defaults to
+  // stretch, forcing every card to the same height as its tallest sibling.
+  statScrollContent: { paddingHorizontal: 12, paddingTop: 14, paddingBottom: 14, gap: 12, alignItems: "flex-start" },
   statCard: {
-    flex: 1, backgroundColor: "#fff", borderRadius: 14, padding: 14, minHeight: 80,
+    backgroundColor: "#fff", borderRadius: 14, padding: 14, minHeight: 80,
     shadowColor: "#0f172a", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6,
     elevation: 2,
   },
