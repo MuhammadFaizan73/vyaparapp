@@ -1212,7 +1212,7 @@ const t = StyleSheet.create({
   // own content.
   statScrollContent: { paddingHorizontal: 12, paddingTop: 14, paddingBottom: 20, gap: 12, alignItems: "flex-start" },
   statCard: {
-    backgroundColor: "#fff", borderRadius: 14, padding: 14,
+    backgroundColor: "#fff", borderRadius: 14, padding: 14, minHeight: 80,
     shadowColor: "#0f172a", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6,
     elevation: 2,
   },
