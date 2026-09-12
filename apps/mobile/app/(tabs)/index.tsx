@@ -1208,7 +1208,7 @@ const t = StyleSheet.create({
   statScroll: {
     backgroundColor: "#f0f2f5",
     height: 132,
-    marginBottom: 16,
+    marginBottom: 24,
   },
   // alignItems: "flex-start" — without it, a horizontal ScrollView's row defaults to
   // stretch, forcing every card to the same height as its tallest sibling.
