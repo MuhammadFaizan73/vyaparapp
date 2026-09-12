@@ -1202,15 +1202,22 @@ const t = StyleSheet.create({
     backgroundColor: colors.gold, alignItems: "center", justifyContent: "center",
   },
 
+  // marginBottom (not contentContainerStyle paddingBottom) for the gap below this row:
+  // a horizontal ScrollView with no explicit height sizes itself to its children's laid-out
+  // height on Android, and contentContainerStyle's vertical padding isn't reliably reflected
+  // in that measurement — three rounds of bumping paddingBottom (28, then 40) produced zero
+  // visible change on-device. marginBottom on the ScrollView's own (non-scrolling) style sits
+  // outside that measurement and affects the next sibling's position directly.
   statScroll: {
     backgroundColor: "#f0f2f5",
+    marginBottom: 16,
   },
   // alignItems: "flex-start" — without it, a horizontal ScrollView's row defaults to
   // stretch, forcing every card to the same height as its tallest sibling (the pct-row
   // cards); combined with statCard's overflow:hidden that silently clipped the amount/pct
   // text of whichever card that stretch got wrong instead of letting each size to its
   // own content.
-  statScrollContent: { paddingHorizontal: 12, paddingTop: 14, paddingBottom: 40, gap: 12, alignItems: "flex-start" },
+  statScrollContent: { paddingHorizontal: 12, paddingTop: 14, paddingBottom: 14, gap: 12, alignItems: "flex-start" },
   statCard: {
     backgroundColor: "#fff", borderRadius: 14, padding: 14, minHeight: 80,
     shadowColor: "#0f172a", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6,
