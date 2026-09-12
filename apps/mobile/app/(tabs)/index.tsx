@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import {
   View, Text, TextInput, TouchableOpacity, FlatList,
   StyleSheet, ActivityIndicator, RefreshControl, ScrollView, Modal, Pressable, Alert,
@@ -303,7 +303,20 @@ function TrendingHome() {
   const [search, setSearch] = useState("");
   const [listFilterIdx, setListFilterIdx] = useState(0);
   const [showListFilter, setShowListFilter] = useState(false);
-  useEffect(() => { setSearch(""); setListFilterIdx(0); }, [tab]);
+  // Stat cards (You'll Get/You'll Give) jump to the Parties tab pre-filtered to To
+  // Collect/To Pay — this holds the target filter across that tab switch so the effect
+  // below doesn't reset it back to "All" the moment `tab` changes.
+  const pendingFilterRef = useRef<number | null>(null);
+  useEffect(() => {
+    setSearch("");
+    setListFilterIdx(pendingFilterRef.current ?? 0);
+    pendingFilterRef.current = null;
+  }, [tab]);
+
+  function goToPartyFilter(idx: number) {
+    if (tab === "parties") setListFilterIdx(idx);
+    else { pendingFilterRef.current = idx; setTab("parties"); }
+  }
 
   const load = useCallback(async () => {
     try {
@@ -412,9 +425,9 @@ function TrendingHome() {
         style={t.statScroll}
         contentContainerStyle={t.statScrollContent}
       >
-        <StatCard icon="arrow-down-circle" iconColor={colors.green} label="You'll Get" amount={youllGet} width={statCardWidth} colored />
+        <StatCard icon="arrow-down-circle" iconColor={colors.green} label="You'll Get" amount={youllGet} width={statCardWidth} colored onPress={() => goToPartyFilter(3)} />
         <StatCard icon="document-text" iconColor={colors.blue} label={shortRangeLabel(range) ? `Sale (${shortRangeLabel(range)})` : "Sale"} amount={sale.current} pct={sale.pct} width={statCardWidth} onPress={() => router.push("/sale" as never)} />
-        <StatCard icon="arrow-up-circle" iconColor={colors.orange} label="You'll Give" amount={youllGive} width={statCardWidth} colored />
+        <StatCard icon="arrow-up-circle" iconColor={colors.orange} label="You'll Give" amount={youllGive} width={statCardWidth} colored onPress={() => goToPartyFilter(4)} />
         <StatCard icon="cart" iconColor={colors.purple} label={shortRangeLabel(range) ? `Purchase (${shortRangeLabel(range)})` : "Purchase"} amount={purchase.current} pct={purchase.pct} width={statCardWidth} />
       </ScrollView>
       <PeriodModal visible={showDateFilter} range={range} onClose={() => setShowDateFilter(false)} onChange={setRange} />
