@@ -223,6 +223,14 @@ function fmtAbbrev(n: number): string {
   return `${sign}${abs.toLocaleString("en-PK")}`;
 }
 
+type StatKey = "receivable" | "payable" | "sale" | "purchase";
+const STAT_OPTIONS: Array<{ key: StatKey; label: string }> = [
+  { key: "receivable", label: "Receivable" },
+  { key: "payable", label: "Payable" },
+  { key: "sale", label: "Sale" },
+  { key: "purchase", label: "Purchase" },
+];
+
 function StatCard({ icon, iconColor, label, amount, pct, colored, width }: {
   icon: React.ComponentProps<typeof Ionicons>["name"];
   iconColor: string;
@@ -230,11 +238,11 @@ function StatCard({ icon, iconColor, label, amount, pct, colored, width }: {
   amount: number;
   pct?: number | null;
   colored?: boolean;
-  width: number;
+  width?: number;
 }) {
   const fg = colored ? "#fff" : colors.text;
   return (
-    <View style={[t.statCard, { width }, colored && { backgroundColor: iconColor }]}>
+    <View style={[t.statCard, width != null && { width }, colored && { backgroundColor: iconColor }]}>
       <View style={t.statTop}>
         <Ionicons name={icon} size={14} color={colored ? "#fff" : iconColor} />
         <Text style={[t.statLabel, { color: fg }]} numberOfLines={1}>{label}</Text>
@@ -278,9 +286,9 @@ function shortRangeLabel(range: DateRange): string {
 function TrendingHome() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const statCardWidth = 148;
-
   const [tab, setTab] = useState<TrendingTab>("parties");
+  // "sale" so nothing shows red/green until the user actively picks Receivable or Payable.
+  const [selectedStat, setSelectedStat] = useState<StatKey>("sale");
   const [companyName, setCompanyName] = useState("My Company");
   const [parties, setParties] = useState<Party[]>([]);
   const [txns, setTxns] = useState<TxnRow[]>([]);
@@ -399,19 +407,32 @@ function TrendingHome() {
         </TouchableOpacity>
       </View>
 
-      {/* Swipeable stat cards: You'll Get, Sale, You'll Give, Purchase — Sale/Purchase scoped
-          to the app-bar date filter (default "All Time"). */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={t.statScroll}
-        contentContainerStyle={t.statScrollContent}
-      >
-        <StatCard icon="arrow-down-circle" iconColor={colors.green} label="You'll Get" amount={youllGet} width={statCardWidth} colored />
-        <StatCard icon="document-text" iconColor={colors.blue} label={shortRangeLabel(range) ? `Sale (${shortRangeLabel(range)})` : "Sale"} amount={sale.current} pct={sale.pct} width={statCardWidth} />
-        <StatCard icon="arrow-up-circle" iconColor={colors.orange} label="You'll Give" amount={youllGive} width={statCardWidth} colored />
-        <StatCard icon="cart" iconColor={colors.purple} label={shortRangeLabel(range) ? `Purchase (${shortRangeLabel(range)})` : "Purchase"} amount={purchase.current} pct={purchase.pct} width={statCardWidth} />
-      </ScrollView>
+      {/* Single stat box driven by the Receivable/Payable/Sale/Purchase selector — replaces
+          the old always-visible swipeable 4-card row (a plain View, no ScrollView/elevation,
+          which kept hitting Android-specific rendering bugs in that form). Defaults to
+          "sale" so nothing shows red/green until the user actively picks Receivable/Payable. */}
+      <View style={t.statSection}>
+        <View style={t.statSelectorRow}>
+          {STAT_OPTIONS.map((opt) => (
+            <TouchableOpacity
+              key={opt.key}
+              style={[t.statSelectorPill, selectedStat === opt.key && t.statSelectorPillActive]}
+              onPress={() => setSelectedStat(opt.key)}
+            >
+              <Text style={[t.statSelectorTxt, selectedStat === opt.key && t.statSelectorTxtActive]}>{opt.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        {selectedStat === "receivable" ? (
+          <StatCard icon="arrow-down-circle" iconColor={colors.green} label="You'll Get" amount={youllGet} colored />
+        ) : selectedStat === "payable" ? (
+          <StatCard icon="arrow-up-circle" iconColor={colors.red} label="You'll Give" amount={youllGive} colored />
+        ) : selectedStat === "sale" ? (
+          <StatCard icon="document-text" iconColor={colors.blue} label={shortRangeLabel(range) ? `Sale (${shortRangeLabel(range)})` : "Sale"} amount={sale.current} pct={sale.pct} />
+        ) : (
+          <StatCard icon="cart" iconColor={colors.purple} label={shortRangeLabel(range) ? `Purchase (${shortRangeLabel(range)})` : "Purchase"} amount={purchase.current} pct={purchase.pct} />
+        )}
+      </View>
       <PeriodModal visible={showDateFilter} range={range} onClose={() => setShowDateFilter(false)} onChange={setRange} />
 
       {/* Tabs */}
@@ -1197,22 +1218,15 @@ const t = StyleSheet.create({
     backgroundColor: colors.gold, alignItems: "center", justifyContent: "center",
   },
 
-  // A horizontal ScrollView with no explicit height sizes itself to its children's laid-out
-  // height on Android, and that auto-measurement isn't reliable (it's the same class of bug
-  // as statCardWidth above, and previously showed up as content overlapping the row below).
-  // statCard's content (icon+label row, then amount) is ~73 tall, under its own minHeight:80 —
-  // but text line-height varies slightly by device/font-scale, so this height is deliberately
-  // generous (80 card + 14 top/bottom padding + slack) rather than an exact fit: a tight fixed
-  // height that undershoots real content clips the card's bottom instead of letting it grow,
-  // which is worse than the auto-measurement bug it's meant to replace.
-  statScroll: {
-    backgroundColor: "#f0f2f5",
-    height: 132,
-    marginBottom: 24,
+  statSection: { backgroundColor: "#f0f2f5", paddingHorizontal: 12, paddingTop: 14, paddingBottom: 16 },
+  statSelectorRow: { flexDirection: "row", gap: 8, marginBottom: 12 },
+  statSelectorPill: {
+    flex: 1, paddingVertical: 8, borderRadius: 100, alignItems: "center",
+    backgroundColor: "#fff", borderWidth: 1, borderColor: "#e5e7eb",
   },
-  // alignItems: "flex-start" — without it, a horizontal ScrollView's row defaults to
-  // stretch, forcing every card to the same height as its tallest sibling.
-  statScrollContent: { paddingHorizontal: 12, paddingTop: 14, paddingBottom: 14, gap: 12, alignItems: "flex-start" },
+  statSelectorPillActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  statSelectorTxt: { fontSize: 12.5, fontWeight: "600", color: colors.textMuted },
+  statSelectorTxtActive: { color: "#fff" },
   // No shadow/elevation: Android draws an elevated view on its own hardware Z-layer, which
   // can render above later siblings regardless of the gap between them — a plausible cause
   // of the card visually bleeding into the tab row below no matter how much margin was added.
