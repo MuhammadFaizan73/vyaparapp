@@ -223,7 +223,7 @@ function fmtAbbrev(n: number): string {
   return `${sign}${abs.toLocaleString("en-PK")}`;
 }
 
-function StatCard({ icon, iconColor, label, amount, pct, colored, width }: {
+function StatCard({ icon, iconColor, label, amount, pct, colored, width, onPress }: {
   icon: React.ComponentProps<typeof Ionicons>["name"];
   iconColor: string;
   label: string;
@@ -231,10 +231,15 @@ function StatCard({ icon, iconColor, label, amount, pct, colored, width }: {
   pct?: number | null;
   colored?: boolean;
   width: number;
+  onPress?: () => void;
 }) {
   const fg = colored ? "#fff" : colors.text;
+  const Wrapper = onPress ? TouchableOpacity : View;
   return (
-    <View style={[t.statCard, { width }, colored && { backgroundColor: iconColor }]}>
+    <Wrapper
+      style={[t.statCard, { width }, colored && { backgroundColor: iconColor }]}
+      {...(onPress ? { onPress, activeOpacity: 0.7 } : {})}
+    >
       <View style={t.statTop}>
         <Ionicons name={icon} size={14} color={colored ? "#fff" : iconColor} />
         <Text style={[t.statLabel, { color: fg }]} numberOfLines={1}>{label}</Text>
@@ -246,7 +251,7 @@ function StatCard({ icon, iconColor, label, amount, pct, colored, width }: {
         ) : null}
       </View>
       <Text style={[t.statAmt, { color: fg }]} numberOfLines={1}>Rs {fmtAbbrev(amount)}</Text>
-    </View>
+    </Wrapper>
   );
 }
 
@@ -408,7 +413,7 @@ function TrendingHome() {
         contentContainerStyle={t.statScrollContent}
       >
         <StatCard icon="arrow-down-circle" iconColor={colors.green} label="You'll Get" amount={youllGet} width={statCardWidth} colored />
-        <StatCard icon="document-text" iconColor={colors.blue} label={shortRangeLabel(range) ? `Sale (${shortRangeLabel(range)})` : "Sale"} amount={sale.current} pct={sale.pct} width={statCardWidth} />
+        <StatCard icon="document-text" iconColor={colors.blue} label={shortRangeLabel(range) ? `Sale (${shortRangeLabel(range)})` : "Sale"} amount={sale.current} pct={sale.pct} width={statCardWidth} onPress={() => router.push("/sale" as never)} />
         <StatCard icon="arrow-up-circle" iconColor={colors.orange} label="You'll Give" amount={youllGive} width={statCardWidth} colored />
         <StatCard icon="cart" iconColor={colors.purple} label={shortRangeLabel(range) ? `Purchase (${shortRangeLabel(range)})` : "Purchase"} amount={purchase.current} pct={purchase.pct} width={statCardWidth} />
       </ScrollView>
