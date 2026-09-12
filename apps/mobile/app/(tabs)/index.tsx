@@ -223,27 +223,28 @@ function fmtAbbrev(n: number): string {
   return `${sign}${abs.toLocaleString("en-PK")}`;
 }
 
-function StatCard({ icon, iconColor, label, amount, pct, width }: {
+function StatCard({ icon, iconColor, label, amount, pct, colored }: {
   icon: React.ComponentProps<typeof Ionicons>["name"];
   iconColor: string;
   label: string;
   amount: number;
   pct?: number | null;
-  width: number;
+  colored?: boolean;
 }) {
+  const fg = colored ? "#fff" : colors.text;
   return (
-    <View style={[t.statCard, { width }]}>
+    <View style={[t.statCard, colored && { backgroundColor: iconColor }]}>
       <View style={t.statTop}>
-        <Ionicons name={icon} size={13} color={iconColor} />
-        <Text style={t.statLabel} numberOfLines={1}>{label}</Text>
+        <Ionicons name={icon} size={14} color={colored ? "#fff" : iconColor} />
+        <Text style={[t.statLabel, { color: fg }]} numberOfLines={1}>{label}</Text>
+        {pct != null ? (
+          <View style={t.statPctRow}>
+            <Ionicons name={pct < 0 ? "arrow-down" : "arrow-up"} size={10} color={pct < 0 ? colors.red : colors.green} />
+            <Text style={[t.statPct, { color: pct < 0 ? colors.red : colors.green }]}>{Math.abs(pct).toFixed(1)}%</Text>
+          </View>
+        ) : null}
       </View>
-      <Text style={t.statAmt} numberOfLines={1}>Rs {fmtAbbrev(amount)}</Text>
-      {pct != null ? (
-        <View style={t.statPctRow}>
-          <Ionicons name={pct < 0 ? "arrow-down" : "arrow-up"} size={10} color={pct < 0 ? colors.red : colors.green} />
-          <Text style={[t.statPct, { color: pct < 0 ? colors.red : colors.green }]}>{Math.abs(pct).toFixed(1)}%</Text>
-        </View>
-      ) : null}
+      <Text style={[t.statAmt, { color: fg }]} numberOfLines={1}>Rs {fmtAbbrev(amount)}</Text>
     </View>
   );
 }
@@ -276,15 +277,6 @@ function shortRangeLabel(range: DateRange): string {
 function TrendingHome() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  // A fixed width, not screenWidth-derived — computing it from useWindowDimensions() was
-  // the actual bug: on some devices/timings that hook's value isn't reliable on the very
-  // first render (garbled/near-invisible card content — exactly the symptom reported —
-  // is what a negative or near-zero computed width looks like), and nothing forced a
-  // second render to correct it until some unrelated state change (typing in search)
-  // happened to re-run this computation with a by-then-correct value. A constant sidesteps
-  // the whole class of bug.
-  const statCardWidth = 148;
-
   const [tab, setTab] = useState<TrendingTab>("parties");
   const [companyName, setCompanyName] = useState("My Company");
   const [parties, setParties] = useState<Party[]>([]);
@@ -343,12 +335,10 @@ function TrendingHome() {
     else router.push("/sale/new" as never);
   }
 
-  // Same receivable/payable split as StandardHome's To Receive/To Pay cards — cumulative
-  // balances, not date-bound, so the app-bar date filter doesn't apply to these two.
+  // Cumulative receivable balance — not date-bound, so the app-bar date filter doesn't
+  // apply to this one (Sale is scoped to the filter via rangeChange below).
   const youllGet = parties.filter((p) => (p.balance ?? 0) > 0).reduce((sum, p) => sum + (p.balance ?? 0), 0);
-  const youllGive = parties.filter((p) => (p.balance ?? 0) < 0).reduce((sum, p) => sum + Math.abs(p.balance ?? 0), 0);
   const sale = rangeChange(txns, "sale", range);
-  const purchase = rangeChange(txns, "purchase", range);
 
   const filterOptsForTab = tab === "parties" ? PARTY_FILTERS : tab === "transactions" ? TXN_FILTERS : ITEM_FILTERS;
 
@@ -404,19 +394,12 @@ function TrendingHome() {
         </TouchableOpacity>
       </View>
 
-      {/* Swipeable stat cards: You'll Get, Sale, You'll Give, Purchase — Sale/Purchase scoped
-          to the app-bar date filter (default "All Time"). */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={t.statScroll}
-        contentContainerStyle={t.statScrollContent}
-      >
-        <StatCard icon="arrow-down-circle" iconColor={colors.green} label="You'll Get" amount={youllGet} width={statCardWidth} />
-        <StatCard icon="document-text" iconColor={colors.blue} label={shortRangeLabel(range) ? `Sale (${shortRangeLabel(range)})` : "Sale"} amount={sale.current} pct={sale.pct} width={statCardWidth} />
-        <StatCard icon="arrow-up-circle" iconColor={colors.orange} label="You'll Give" amount={youllGive} width={statCardWidth} />
-        <StatCard icon="cart" iconColor={colors.purple} label={shortRangeLabel(range) ? `Purchase (${shortRangeLabel(range)})` : "Purchase"} amount={purchase.current} pct={purchase.pct} width={statCardWidth} />
-      </ScrollView>
+      {/* Stat cards: You'll Get + Sale — Sale scoped to the app-bar date filter (default
+          "All Time"). */}
+      <View style={t.statRow}>
+        <StatCard icon="arrow-down-circle" iconColor={colors.green} label="You'll Get" amount={youllGet} colored />
+        <StatCard icon="document-text" iconColor={colors.blue} label={shortRangeLabel(range) ? `Sale (${shortRangeLabel(range)})` : "Sale"} amount={sale.current} pct={sale.pct} />
+      </View>
       <PeriodModal visible={showDateFilter} range={range} onClose={() => setShowDateFilter(false)} onChange={setRange} />
 
       {/* Tabs */}
@@ -1202,30 +1185,19 @@ const t = StyleSheet.create({
     backgroundColor: colors.gold, alignItems: "center", justifyContent: "center",
   },
 
-  // marginBottom (not contentContainerStyle paddingBottom) for the gap below this row:
-  // a horizontal ScrollView with no explicit height sizes itself to its children's laid-out
-  // height on Android, and contentContainerStyle's vertical padding isn't reliably reflected
-  // in that measurement — three rounds of bumping paddingBottom (28, then 40) produced zero
-  // visible change on-device. marginBottom on the ScrollView's own (non-scrolling) style sits
-  // outside that measurement and affects the next sibling's position directly.
-  statScroll: {
-    backgroundColor: "#f0f2f5",
+  statRow: {
+    flexDirection: "row", gap: 12,
+    backgroundColor: "#f0f2f5", paddingHorizontal: 12, paddingTop: 14, paddingBottom: 14,
     marginBottom: 16,
   },
-  // alignItems: "flex-start" — without it, a horizontal ScrollView's row defaults to
-  // stretch, forcing every card to the same height as its tallest sibling (the pct-row
-  // cards); combined with statCard's overflow:hidden that silently clipped the amount/pct
-  // text of whichever card that stretch got wrong instead of letting each size to its
-  // own content.
-  statScrollContent: { paddingHorizontal: 12, paddingTop: 14, paddingBottom: 14, gap: 12, alignItems: "flex-start" },
   statCard: {
-    backgroundColor: "#fff", borderRadius: 14, padding: 14, minHeight: 80,
+    flex: 1, backgroundColor: "#fff", borderRadius: 14, padding: 14, minHeight: 80,
     shadowColor: "#0f172a", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 6,
     elevation: 2,
   },
   statTop: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 },
   statLabel: { flex: 1, fontSize: 11.5, fontWeight: "600", color: colors.text },
-  statPctRow: { flexDirection: "row", alignItems: "center", gap: 3, marginTop: 6 },
+  statPctRow: { flexDirection: "row", alignItems: "center", gap: 3 },
   statPct: { fontSize: 10.5, fontWeight: "700" },
   statAmt: { fontSize: 17, fontWeight: "700", color: colors.text },
 
