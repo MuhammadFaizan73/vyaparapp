@@ -1197,13 +1197,16 @@ const t = StyleSheet.create({
     backgroundColor: colors.gold, alignItems: "center", justifyContent: "center",
   },
 
-  // marginBottom (not contentContainerStyle paddingBottom) for the gap below this row: a
-  // horizontal ScrollView with no explicit height sizes itself to its children's laid-out
-  // height on Android, and contentContainerStyle's vertical padding isn't reliably reflected
-  // in that measurement. marginBottom on the ScrollView's own (non-scrolling) style sits
-  // outside that measurement and affects the next sibling's position directly.
+  // A horizontal ScrollView with no explicit height sizes itself to its children's laid-out
+  // height on Android, and that auto-measurement isn't reliable (it's the same class of bug
+  // as statCardWidth above, and previously showed up as content overlapping the row below).
+  // statCard always renders at exactly 80 (its content is shorter than minHeight, so minHeight
+  // wins deterministically for every variant) — so this box's height is knowably
+  // 14 (paddingTop) + 80 (card) + 14 (paddingBottom) = 108. A fixed height sidesteps the
+  // auto-measurement entirely instead of trusting it.
   statScroll: {
     backgroundColor: "#f0f2f5",
+    height: 108,
     marginBottom: 16,
   },
   // alignItems: "flex-start" — without it, a horizontal ScrollView's row defaults to
