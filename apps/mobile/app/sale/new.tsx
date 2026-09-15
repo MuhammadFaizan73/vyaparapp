@@ -1359,10 +1359,13 @@ export default function NewSaleScreen() {
                 />
               </View>
 
-              {/* Catalog suggestions */}
+              {/* Catalog suggestions — its own bounded, independently-scrollable list
+                  (not just the first 6 matches inline) so a search with many matches
+                  (e.g. "Dentify" across a dozen flavour variants) can actually be scrolled
+                  through instead of only ever showing the first few. */}
               {showCatalog && filteredCatalog.length > 0 && (
-                <View style={styles.catalogBox}>
-                  {filteredCatalog.slice(0, 6).map((c) => (
+                <ScrollView style={styles.catalogBox} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                  {filteredCatalog.slice(0, 30).map((c) => (
                     <TouchableOpacity
                       key={c.id}
                       style={styles.catalogRow}
@@ -1387,7 +1390,7 @@ export default function NewSaleScreen() {
                       )}
                     </TouchableOpacity>
                   ))}
-                </View>
+                </ScrollView>
               )}
 
               {/* Qty + Unit row */}
@@ -2035,6 +2038,7 @@ const styles = StyleSheet.create({
   companyChipTxtActive: { color: colors.primary, fontWeight: "600" },
 
   catalogBox: {
+    maxHeight: 260,
     borderWidth: 1, borderColor: colors.border, borderRadius: 6,
     backgroundColor: "#fff", overflow: "hidden",
   },
