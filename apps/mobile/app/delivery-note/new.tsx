@@ -9,6 +9,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../src/theme";
 import { api } from "../../src/auth";
 import { useTransactionSettings } from "../../src/useTransactionSettings";
+import { useSelectedCompany } from "../../src/useSelectedCompany";
 import { getItems, loadItems, subscribeItems, type Item } from "../../src/itemsStore";
 import type { Party } from "@vyapar/api-client";
 
@@ -37,6 +38,7 @@ export default function NewDeliveryNoteScreen() {
 
   const [parties, setParties] = useState<Party[]>([]);
   const [catalog, setCatalog] = useState<Item[]>(getItems());
+  const { selectedCompanyId } = useSelectedCompany();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -118,9 +120,12 @@ export default function NewDeliveryNoteScreen() {
   const filteredParties = parties.filter((p) =>
     p.name.toLowerCase().includes(partyName.toLowerCase())
   );
-  const filteredCatalog = catalog.filter((i) =>
-    i.name.toLowerCase().includes(aiName.toLowerCase())
-  );
+  // itemsStore's cache is shared/unscoped across every company — filter to this one here,
+  // same fix as Add Sale (a salesman under one company was otherwise seeing every other
+  // company's items in the picker too).
+  const filteredCatalog = catalog
+    .filter((i) => !selectedCompanyId || (i as any).companyId === selectedCompanyId)
+    .filter((i) => i.name.toLowerCase().includes(aiName.toLowerCase()));
 
   /* totals */
   const subtotal = lineItems.reduce((s, i) => s + i.rate * i.qty, 0);

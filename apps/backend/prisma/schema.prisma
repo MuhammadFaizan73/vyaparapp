@@ -197,12 +197,26 @@ model License {
   key           String    @unique
   plan          String    @default("pro")
   platform      String    @default("desktop")
+  // Legacy lock, kept for pre-email licenses: activation was checked against the
+  // activating tenant's own phone instead. New licenses are keyed by email instead —
+  // one customer email can hold many licenses (e.g. bought in bulk, or one per device),
+  // and the activation screen looks them up by email rather than requiring the exact
+  // key up front. `phone` stays as a fallback check in LicenseService.activate() for
+  // any row where `email` was never set.
   phone         String?
+  email         String?
+  customerName  String?
+  // "monthly" | "yearly" | "custom" — display/reporting label only (dashboard filters,
+  // "which type was generated"). expiresAt is still computed once at generation time
+  // from whichever duration was picked; changing this after the fact does nothing.
+  durationType  String    @default("custom")
   activatedAt   DateTime?
   expiresAt     DateTime
   desktopTenant Tenant?   @relation("DesktopLicense")
   mobileTenant  Tenant?   @relation("MobileLicense")
   createdAt     DateTime  @default(now())
+
+  @@index([email])
 }
 
 model Party {

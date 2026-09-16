@@ -1,17 +1,14 @@
 import { useState, useEffect } from "react";
 import {
-  View, Text, TouchableOpacity, StyleSheet,
-  TextInput, ActivityIndicator, ScrollView,
+  View, Text, TouchableOpacity, StyleSheet, ScrollView,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../src/theme";
 import { api } from "../../src/auth";
+import { LicenseActivationForm } from "../../src/LicenseActivationForm";
 import type { LicenseStatus } from "@vyapar/api-client";
-
-const DEMO_KEYS = ["VYPR-MOBI-2026-G7H8", "VYPR-MOBI-2026-J9K0", "VYPR-MOBI-2026-L1M2"];
 
 const PLANS = [
   {
@@ -33,13 +30,8 @@ const PLANS = [
 
 export default function PremiumScreen() {
   const insets = useSafeAreaInsets();
-  const router = useRouter();
   const [licenseStatus, setLicenseStatus] = useState<LicenseStatus | null>(null);
-  const [key, setKey] = useState("");
-  const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
 
   useEffect(() => {
     api.getLicenseStatus("mobile")
@@ -48,27 +40,8 @@ export default function PremiumScreen() {
       .finally(() => setChecking(false));
   }, []);
 
-  async function handleActivate() {
-    const trimmed = key.trim().toUpperCase();
-    if (trimmed.length < 8) { setError("Enter a valid license key"); return; }
-    setError(""); setSuccess("");
-    setLoading(true);
-    try {
-      const status = await api.activateLicense(trimmed, "mobile");
-      setLicenseStatus(status);
-      setKey("");
-      setSuccess("License activated! You now have full access.");
-    } catch (e: any) {
-      const msg = e?.response?.data?.message;
-      if (!msg) setError("Cannot connect to server. Check your connection.");
-      else if (msg.includes("desktop")) setError("This is a Desktop key. Use a MOBI-... key for mobile.");
-      else if (msg.includes("another account")) setError("This key is already used by another account.");
-      else if (msg.includes("expired")) setError("This license key has expired.");
-      else if (msg.includes("not found")) setError("Key not found. Check the key and try again.");
-      else setError(msg);
-    } finally {
-      setLoading(false);
-    }
+  async function handleActivated(status: LicenseStatus) {
+    setLicenseStatus(status);
   }
 
   const isLicensed = licenseStatus?.state === "licensed";
@@ -153,48 +126,11 @@ export default function PremiumScreen() {
           </View>
         ))}
 
-        {/* License key input */}
+        {/* License activation */}
         {!isLicensed && (
           <View style={styles.keySection}>
-            <Text style={styles.keySectionTitle}>Have a license key?</Text>
-            <TextInput
-              style={styles.keyInput}
-              placeholder="MOBI-XXXX-XXXX-XXXX"
-              placeholderTextColor={colors.textLight}
-              value={key}
-              onChangeText={(t) => { setKey(t.toUpperCase()); setError(""); setSuccess(""); }}
-              autoCapitalize="characters"
-              autoCorrect={false}
-            />
-            {error ? <Text style={styles.errorTxt}>{error}</Text> : null}
-            {success ? <Text style={styles.successTxt}>{success}</Text> : null}
-            <TouchableOpacity
-              style={[styles.activateBtn, loading && { opacity: 0.7 }]}
-              onPress={handleActivate}
-              disabled={loading}
-            >
-              {loading
-                ? <ActivityIndicator color="#fff" />
-                : <Text style={styles.activateBtnTxt}>Activate License</Text>
-              }
-            </TouchableOpacity>
-
-            {/* Demo keys */}
-            <View style={styles.demoBox}>
-              <Text style={styles.demoTitle}>Demo keys (tap to fill)</Text>
-              {DEMO_KEYS.map((k) => (
-                <TouchableOpacity key={k} onPress={() => { setKey(k); setError(""); setSuccess(""); }}>
-                  <Text style={styles.demoKey}>{k}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <View style={styles.infoBox}>
-              <Text style={styles.infoTxt}>
-                📱 Mobile keys (MOBI-...) work only on mobile{"\n"}
-                🖥️ Desktop keys (DESK-...) work only on desktop
-              </Text>
-            </View>
+            <Text style={styles.keySectionTitle}>Activate a license</Text>
+            <LicenseActivationForm onActivated={handleActivated} />
           </View>
         )}
       </ScrollView>
@@ -265,28 +201,4 @@ const styles = StyleSheet.create({
   // Key section
   keySection: { gap: 12 },
   keySectionTitle: { fontSize: 15, fontWeight: "700", color: colors.text, paddingTop: 8 },
-  keyInput: {
-    borderWidth: 2, borderColor: colors.gold, borderRadius: 12,
-    paddingHorizontal: 16, paddingVertical: 14,
-    fontSize: 15, color: colors.text, backgroundColor: "#fff",
-    letterSpacing: 1, textAlign: "center",
-  },
-  errorTxt: { fontSize: 13, color: colors.red, textAlign: "center" },
-  successTxt: { fontSize: 13, color: colors.green, textAlign: "center", fontWeight: "600" },
-  activateBtn: {
-    backgroundColor: colors.gold, borderRadius: 100,
-    paddingVertical: 13, alignItems: "center",
-  },
-  activateBtnTxt: { fontSize: 14, fontWeight: "700", color: "#fff" },
-  demoBox: {
-    backgroundColor: "#f0fdf4", borderRadius: 12, padding: 14,
-    borderWidth: 1, borderColor: "#bbf7d0", gap: 8,
-  },
-  demoTitle: { fontSize: 12, fontWeight: "700", color: colors.green },
-  demoKey: { fontSize: 13, color: colors.tabActive, textDecorationLine: "underline" },
-  infoBox: {
-    backgroundColor: "#eff6ff", borderRadius: 12, padding: 14,
-    borderWidth: 1, borderColor: "#bfdbfe",
-  },
-  infoTxt: { fontSize: 12, color: colors.textMuted, lineHeight: 20 },
 });

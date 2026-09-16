@@ -725,7 +725,10 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
               <button type="button" className="dc-icon-btn" onClick={() => onOpenExportInvoices?.({ filterPreset, filterFrom, filterTo, salesmanFilterId, status: filter })}>
                 📄 Export to PDF
               </button>
-              <button type="button" className="dc-icon-btn" onClick={() => window.print()}>
+              {/* Used to call window.print() directly on the list itself, which print CSS hides —
+                  always printed blank. Route through the same Export Invoices flow as the PDF
+                  button above (confirmed working) instead of a broken standalone print. */}
+              <button type="button" className="dc-icon-btn" onClick={() => onOpenExportInvoices?.({ filterPreset, filterFrom, filterTo, salesmanFilterId, status: filter })}>
                 🖨 Print
               </button>
 
@@ -887,7 +890,16 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
                         </span>
                       </span>
                       <div className="sale-row__actions" onClick={(e) => e.stopPropagation()}>
-                        <button type="button" className="sale-row__icon-btn" title="Print" onClick={() => window.print()}>🖨</button>
+                        {/* Used to call window.print() directly, printing whatever page was behind
+                            it (the invoice list, hidden by print CSS) instead of the invoice paper —
+                            the preview modal that actually renders printable paper was never opened,
+                            so this always printed blank. Open it first, same as "Preview" below. */}
+                        <button
+                          type="button"
+                          className="sale-row__icon-btn"
+                          title="Print"
+                          onClick={() => { setPreviewSale(sale); setPreviewIdx(sales.indexOf(sale) + 1); }}
+                        >🖨</button>
                         <div style={{ position: "relative" }}>
                           <button
                             type="button"
@@ -938,9 +950,13 @@ export function SaleScreen({ isLocked = false, onLockedAction, activeKey = "sale
               editAllowed && { label: "Cancel Invoice",           action: () => { void api.updateTransaction(sale.id, { balance: 0 }); setMenuId(null); void loadSales(); } },
               deleteAllowed && { label: "Delete",                   action: () => { setDeleteConfirmSale(sale); setMenuId(null); } },
               { label: "Duplicate",                action: () => { setMenuId(null); handleDuplicate(sale); } },
-              { label: "Open PDF",                 action: () => { setMenuId(null); window.print(); } },
+              // Both used to call window.print() directly without ever opening the preview modal
+              // that renders the actual invoice paper — print CSS hides the list behind it, so
+              // this always printed blank. Open the preview instead, same as "Preview" below;
+              // its own Print/Download buttons do the real printing once the paper is on screen.
+              { label: "Open PDF",                 action: () => { setPreviewSale(sale); setPreviewIdx(sales.indexOf(sale) + 1); setMenuId(null); } },
               { label: "Preview",                  action: () => { setPreviewSale(sale); setPreviewIdx(sales.indexOf(sale) + 1); setMenuId(null); } },
-              { label: "Print",                    action: () => { setMenuId(null); window.print(); } },
+              { label: "Print",                    action: () => { setPreviewSale(sale); setPreviewIdx(sales.indexOf(sale) + 1); setMenuId(null); } },
               { label: "View History",             action: () => { setViewHistorySale(sale); setMenuId(null); } },
             ].filter((item): item is { label: string; action: () => void } => Boolean(item)).map(({ label, action }) => (
               <button key={label} type="button" className="sale-row-menu__item" onClick={action}>{label}</button>

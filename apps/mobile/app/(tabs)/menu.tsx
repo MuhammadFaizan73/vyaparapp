@@ -63,13 +63,13 @@ const TOOLS: MenuRow[] = [
   { label: "Salesman Tracking",  sub: "Live map & attendance",          icon: "map-outline",            tint: "#dbeafe", fg: "#1d4ed8",        route: "/salesman-tracking",    allow: ["secondary_admin"] },
   { label: "My Attendance",      sub: "Check in / out at office",       icon: "finger-print-outline",   tint: "#f0fdf4", fg: "#15803d",        route: "/my-visits",            allow: ["salesman", "biller_salesman"] },
   { label: "User Management",    sub: "Team members & roles",           icon: "people-outline",         tint: "#fce7f3", fg: "#be185d",        route: "/user-management",      allow: ["secondary_admin"],   requirePerm: "team_manage" },
-  { label: "Backup & Sync",      sub: "Last sync · 2 min ago",         icon: "cloud-upload-outline",   tint: "#dcfce7", fg: "#15803d",        route: "/sync-share",           allow: ["secondary_admin"],   badge: "Auto" },
+  { label: "Backup & Sync",      sub: "Last sync · 2 min ago",         icon: "cloud-upload-outline",   tint: "#dcfce7", fg: "#15803d",        route: "/sync-share",           allow: ["secondary_admin"],   badge: "Auto", requirePerm: "sync_view" },
   { label: "Manage Devices",    sub: "Control active device access",   icon: "phone-portrait-outline", tint: "#e0f2fe", fg: "#0369a1",        route: "/manage-devices",       allow: ["secondary_admin"] },
-  { label: "Print Settings",     sub: "Thermal & A4",                   icon: "print-outline",          tint: "#fef3c7", fg: "#b45309",        route: "/settings?tab=print", allow: ["secondary_admin"] },
+  { label: "Print Settings",     sub: "Thermal & A4",                   icon: "print-outline",          tint: "#fef3c7", fg: "#b45309",        route: "/settings?tab=print", allow: ["secondary_admin"], requirePerm: "settings_view" },
   { label: "Manage Companies",   sub: "Switch or add company",          icon: "layers-outline",         tint: "#e0e7ff", fg: "#4338ca",        route: "/manage-companies",     allow: [] },
-  { label: "Manage Stores",      sub: "Stores & godowns per company",   icon: "storefront-outline",     tint: "#e0f2fe", fg: colors.primary,  route: "/stores",               allow: ["stock_keeper", "secondary_admin"] },
-  { label: "Stock Transfer",     sub: "Move stock between stores",      icon: "swap-horizontal-outline", tint: "#e0f2fe", fg: colors.primary, route: "/stock-transfer",       allow: ["stock_keeper", "secondary_admin"] },
-  { label: "Settings", sub: "App theme, invoice, tax, prefixes",       icon: "settings-outline",  tint: "#e0f2fe", fg: "#0369a1",        route: "/settings", allow: ["secondary_admin", "ca_accountant", "ca_accountant_edit", "biller", "biller_salesman"] },
+  { label: "Manage Stores",      sub: "Stores & godowns per company",   icon: "storefront-outline",     tint: "#e0f2fe", fg: colors.primary,  route: "/stores",               allow: ["stock_keeper", "secondary_admin"], requirePerm: "stores_view" },
+  { label: "Stock Transfer",     sub: "Move stock between stores",      icon: "swap-horizontal-outline", tint: "#e0f2fe", fg: colors.primary, route: "/stock-transfer",       allow: ["stock_keeper", "secondary_admin"], requirePerm: "stores_view" },
+  { label: "Settings", sub: "App theme, invoice, tax, prefixes",       icon: "settings-outline",  tint: "#e0f2fe", fg: "#0369a1",        route: "/settings", allow: ["secondary_admin", "ca_accountant", "ca_accountant_edit", "biller", "biller_salesman"], requirePerm: "settings_view" },
   { label: "Join with Invite Code", sub: "Enter code from your employer", icon: "key-outline",         tint: "#f0fdf4", fg: "#15803d",        route: "/accept-invite",        memberOnly: true },
   { label: "Plans & Pricing",    sub: "Upgrade your plan",              icon: "diamond-outline",        tint: "#fef3c7", fg: "#b45309",        route: "/plans-pricing",        allow: ["secondary_admin"] },
   { label: "Help & Support",     sub: "Tutorials & FAQs",               icon: "help-circle-outline",    tint: "#e0e7ff", fg: "#4338ca" },
@@ -78,7 +78,7 @@ const TOOLS: MenuRow[] = [
 const REPORTS: MenuRow[] = [
   { label: "Reports",    sub: "GST · P&L · Stock",   icon: "bar-chart-outline", tint: "#ede9fe", fg: "#6d28d9", route: "/reports",            allow: ["secondary_admin", "ca_accountant", "ca_accountant_edit"], requirePerm: "reports_view" },
   { label: "Day Book",   sub: "Today's transactions", icon: "book-outline",      tint: "#dbeafe", fg: "#1d4ed8", route: "/reports/day-book",   allow: ["secondary_admin", "ca_accountant", "ca_accountant_edit", "biller", "biller_salesman"], requirePerm: "reports_view" },
-  { label: "Cash & Bank", sub: "Accounts & balances", icon: "wallet-outline",   tint: "#dcfce7", fg: "#15803d", route: "/cash-bank",          allow: ["secondary_admin", "ca_accountant", "ca_accountant_edit"] },
+  { label: "Cash & Bank", sub: "Accounts & balances", icon: "wallet-outline",   tint: "#dcfce7", fg: "#15803d", route: "/cash-bank",          allow: ["secondary_admin", "ca_accountant", "ca_accountant_edit"], requirePerm: "cash_view" },
 ];
 
 const ROLE_LABELS: Record<string, string> = {

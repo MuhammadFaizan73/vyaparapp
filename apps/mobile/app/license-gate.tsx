@@ -1,47 +1,17 @@
-import { useState } from "react";
-import {
-  View, Text, TextInput, TouchableOpacity,
-  StyleSheet, ActivityIndicator, ScrollView, Alert,
-} from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors } from "../src/theme";
-import { api, clearToken } from "../src/auth";
+import { clearToken } from "../src/auth";
+import { LicenseActivationForm } from "../src/LicenseActivationForm";
+import type { LicenseStatus } from "@vyapar/api-client";
 
 export default function LicenseGateScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [key, setKey] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
 
-  async function handleActivate() {
-    const trimmed = key.trim().toUpperCase();
-    if (trimmed.length < 8) {
-      setError("Enter a valid license key");
-      return;
-    }
-    setError("");
-    setLoading(true);
-    try {
-      await api.activateLicense(trimmed, "mobile");
-      router.replace("/(tabs)" as never);
-    } catch (e: any) {
-      const msg = e?.response?.data?.message;
-      if (!msg) {
-        setError("Cannot connect to server. Make sure your phone is on the same Wi-Fi as the server.");
-      } else if (msg.includes("desktop")) {
-        setError("This is a Desktop key. Mobile requires a MOBI-... key.");
-      } else if (msg.includes("another account")) {
-        setError("This key is already used by another account. Try a different key.");
-      } else if (msg.includes("not found")) {
-        setError("Key not found. Double-check and try again.");
-      } else {
-        setError(msg);
-      }
-    } finally {
-      setLoading(false);
-    }
+  async function handleActivated(_status: LicenseStatus) {
+    router.replace("/(tabs)" as never);
   }
 
   function handleLogout() {
@@ -61,60 +31,17 @@ export default function LicenseGateScreen() {
       contentContainerStyle={[styles.screen, { paddingTop: insets.top + 32, paddingBottom: insets.bottom + 24 }]}
       keyboardShouldPersistTaps="handled"
     >
-      {/* Icon */}
       <View style={styles.iconWrap}>
         <Text style={styles.icon}>🔒</Text>
       </View>
 
       <Text style={styles.title}>Mobile License Required</Text>
       <Text style={styles.sub}>
-        Your free trial has ended. Activate a Mobile license key to continue using Godigi on this device.
+        Your free trial has ended. Enter the email your Godigi license was purchased under to continue.
       </Text>
 
-      {/* Key input */}
-      <View style={styles.inputWrap}>
-        <TextInput
-          style={styles.input}
-          placeholder="MOBI-XXXX-XXXX-XXXX"
-          placeholderTextColor={colors.textLight}
-          value={key}
-          onChangeText={(t) => { setKey(t.toUpperCase()); setError(""); }}
-          autoCapitalize="characters"
-          autoCorrect={false}
-        />
-      </View>
-
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-
-      <TouchableOpacity
-        style={[styles.btn, loading && { opacity: 0.7 }]}
-        onPress={handleActivate}
-        disabled={loading}
-      >
-        {loading
-          ? <ActivityIndicator color="#fff" />
-          : <Text style={styles.btnText}>Activate License</Text>
-        }
-      </TouchableOpacity>
-
-      {/* Info box */}
-      <View style={styles.infoBox}>
-        <Text style={styles.infoTitle}>Mobile vs Desktop keys</Text>
-        <Text style={styles.infoText}>
-          Mobile keys (MOBI-...) work only on mobile devices.{"\n"}
-          Desktop keys (DESK-...) work only on the desktop app.{"\n"}
-          Each platform requires its own license.
-        </Text>
-      </View>
-
-      {/* Demo keys hint */}
-      <View style={styles.demoBox}>
-        <Text style={styles.demoTitle}>Demo Keys (for testing)</Text>
-        {["VYPR-MOBI-2026-G7H8", "VYPR-MOBI-2026-J9K0", "VYPR-MOBI-2026-L1M2"].map((k) => (
-          <TouchableOpacity key={k} onPress={() => setKey(k)}>
-            <Text style={styles.demoKey}>{k}</Text>
-          </TouchableOpacity>
-        ))}
+      <View style={styles.formWrap}>
+        <LicenseActivationForm onActivated={handleActivated} />
       </View>
 
       <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
@@ -144,54 +71,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 22, fontWeight: "800", color: colors.text, textAlign: "center" },
   sub: { fontSize: 14, color: colors.textMuted, textAlign: "center", lineHeight: 20 },
 
-  inputWrap: { width: "100%" },
-  input: {
-    borderWidth: 2,
-    borderColor: colors.primary,
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    color: colors.text,
-    backgroundColor: colors.card,
-    letterSpacing: 1,
-    textAlign: "center",
-  },
-
-  error: { fontSize: 13, color: colors.red, textAlign: "center" },
-
-  btn: {
-    width: "100%",
-    backgroundColor: colors.primary,
-    borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  btnText: { fontSize: 15, fontWeight: "700", color: "#fff" },
-
-  infoBox: {
-    width: "100%",
-    backgroundColor: "#eff6ff",
-    borderRadius: 10,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#bfdbfe",
-    gap: 6,
-  },
-  infoTitle: { fontSize: 13, fontWeight: "700", color: colors.primary },
-  infoText: { fontSize: 12, color: colors.textMuted, lineHeight: 18 },
-
-  demoBox: {
-    width: "100%",
-    backgroundColor: "#f0fdf4",
-    borderRadius: 10,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#bbf7d0",
-    gap: 8,
-  },
-  demoTitle: { fontSize: 13, fontWeight: "700", color: colors.green },
-  demoKey: { fontSize: 13, color: colors.primary, fontFamily: "monospace", textDecorationLine: "underline" },
+  formWrap: { width: "100%" },
 
   logoutBtn: { paddingVertical: 8 },
   logoutText: { fontSize: 13, color: colors.textMuted, textDecorationLine: "underline" },

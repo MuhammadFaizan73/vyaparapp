@@ -645,6 +645,7 @@ export const ALL_PERMISSIONS: TeamPermission[] = [
   // adding it never restricts an existing team member who didn't have it before.
   { id: "sale_edit_today_only", label: "Edit Only Today's Invoices", group: "Sales" },
   { id: "sale_delete",        label: "Delete Sales",              group: "Sales" },
+  { id: "pos_view",           label: "Godigi POS",                group: "Sales" },
   // Purchase
   { id: "purchase_view",        label: "View Purchase Bills",   group: "Purchase" },
   { id: "purchase_create",      label: "Create Purchase Bill",  group: "Purchase" },
@@ -660,6 +661,7 @@ export const ALL_PERMISSIONS: TeamPermission[] = [
   { id: "parties_edit",    label: "Edit Parties",       group: "Parties" },
   { id: "parties_balance", label: "View Party Balance", group: "Parties" },
   { id: "parties_opening_balance", label: "Set Opening Balance", group: "Parties" },
+  { id: "parties_suppliers_view", label: "View Suppliers", group: "Parties" },
   // Items
   { id: "items_view",   label: "View Items",   group: "Items" },
   { id: "items_create", label: "Add Items",    group: "Items" },
@@ -677,6 +679,15 @@ export const ALL_PERMISSIONS: TeamPermission[] = [
   // Team
   { id: "team_view",   label: "View Team Members",         group: "Team" },
   { id: "team_manage", label: "Add / Remove Team Members", group: "Team" },
+  // Stores
+  { id: "stores_view", label: "Stores (Manage & Stock Transfer)", group: "Stores" },
+  // Business Growth
+  { id: "grow_view", label: "Grow Your Business (Reports & Insights)", group: "Business Growth" },
+  // Sync & Backup
+  { id: "sync_view", label: "Sync, Share & Backup", group: "Sync & Backup" },
+  // Utilities
+  { id: "utilities_view", label: "Utilities & Data Import", group: "Utilities" },
+  { id: "settings_view", label: "App Settings (Theme, Invoice, Tax, Prefixes)", group: "Utilities" },
 ];
 
 export const ROLE_DEFAULT_PERMISSIONS: Record<TeamRole, string[]> = {
@@ -692,6 +703,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<TeamRole, string[]> = {
     "cash_view", "cash_create",
     "expense_view", "expense_create",
     "team_view",
+    "stores_view", "sync_view", "settings_view",
   ],
   salesman: [
     "sale_view", "sale_create", "payment_in_view", "sale_edit_own",
@@ -702,12 +714,14 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<TeamRole, string[]> = {
   biller: [
     "sale_view", "sale_create", "payment_in_view", "sale_edit_own",
     "parties_view", "parties_balance",
+    "settings_view",
   ],
   biller_salesman: [
     "sale_view", "sale_create", "payment_in_view", "sale_edit_own",
     "parties_view", "parties_balance",
     "items_view",
     "expense_view", "expense_create",
+    "settings_view",
   ],
   ca_accountant: [
     "sale_view",
@@ -716,6 +730,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<TeamRole, string[]> = {
     "items_view",
     "reports_view", "reports_export",
     "cash_view",
+    "settings_view",
   ],
   ca_accountant_edit: [
     "sale_view", "sale_create", "payment_in_view", "sale_return_view",
@@ -727,12 +742,14 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<TeamRole, string[]> = {
     "reports_view", "reports_export",
     "cash_view",
     "expense_view", "expense_create",
+    "settings_view",
   ],
   stock_keeper: [
     "purchase_view", "purchase_create", "purchase_order_view", "purchase_return_view",
     "purchase_edit_own",
     "items_view", "items_create", "items_edit",
     "expense_view", "expense_create",
+    "stores_view",
   ],
 };
 

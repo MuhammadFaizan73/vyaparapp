@@ -1,0 +1,11 @@
+{
+  "1": { "bucket": "sale", "label": "sale" },
+  "23": { "bucket": "purchase", "label": "purchase return" },
+  "24": { "bucket": "purchase", "label": "purchase" },
+  "2": { "bucket": "purchase", "label": "purchase" },
+  "28": { "bucket": "order", "type": "purchase_order" },
+  "3": { "bucket": "cashflow", "type": "payment_in" },
+  "4": { "bucket": "cashflow", "type": "payment_out" },
+  "7": { "bucket": "expense_by_category" },
+  "29": { "bucket": "cashflow", "type": "payment_in" }
+}

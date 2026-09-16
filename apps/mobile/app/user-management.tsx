@@ -35,6 +35,10 @@ const GROUP_ICONS: Record<string, string> = {
   "Cash & Bank": "cash-outline",
   Expenses: "wallet-outline",
   Team: "person-add-outline",
+  Stores: "storefront-outline",
+  "Business Growth": "trending-up-outline",
+  "Sync & Backup": "cloud-upload-outline",
+  Utilities: "construct-outline",
 };
 
 function getRoleInfo(roleId: string) {

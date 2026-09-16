@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Patch, Post, Query, Request, UseGuards } from "@nestjs/common";
-import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Min } from "class-validator";
+import { IsEmail, IsIn, IsInt, IsOptional, IsString, Min, ValidateIf } from "class-validator";
 import { AdminLicensesService } from "./licenses.service";
 import { AdminGuard, AdminRequest, SuperAdminGuard } from "../admin-auth/admin.guard";
 
@@ -7,7 +7,11 @@ class GenerateDto {
   @IsInt() @Min(1) count!: number;
   @IsString() @IsIn(["desktop", "mobile", "both"]) platform!: string;
   @IsString() plan!: string;
-  @IsInt() @Min(1) daysValid!: number;
+  // "monthly"/"yearly" compute expiresAt from a fixed day count; "custom" requires customDays.
+  @IsString() @IsIn(["monthly", "yearly", "custom"]) durationType!: string;
+  @ValidateIf((o) => o.durationType === "custom") @IsInt() @Min(1) customDays?: number;
+  @IsEmail() email!: string;
+  @IsOptional() @IsString() customerName?: string;
   @IsOptional() @IsString() phone?: string;
 }
 
@@ -24,10 +28,11 @@ export class AdminLicensesController {
   list(
     @Query("status") status?: string,
     @Query("platform") platform?: string,
+    @Query("email") email?: string,
     @Query("page") page = "1",
     @Query("limit") limit = "20",
   ) {
-    return this.svc.list({ status, platform, page: +page, limit: +limit });
+    return this.svc.list({ status, platform, email, page: +page, limit: +limit });
   }
 
   @Get("expiring")

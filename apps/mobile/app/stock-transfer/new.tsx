@@ -50,11 +50,17 @@ export default function NewStockTransferScreen() {
     }
   }, [fromStoreId, toStoreId, stores]);
 
+  // itemsStore's cache is shared/unscoped across every company (other screens need the
+  // full list) — filter to this company here, otherwise a transfer could be created for
+  // an item that belongs to a different company entirely.
   const matches = useMemo(() => {
     if (!search.trim()) return [];
     const q = search.toLowerCase();
-    return items.filter((i) => i.name.toLowerCase().includes(q)).slice(0, 8);
-  }, [items, search]);
+    return items
+      .filter((i) => !selectedCompanyId || (i as any).companyId === selectedCompanyId)
+      .filter((i) => i.name.toLowerCase().includes(q))
+      .slice(0, 8);
+  }, [items, search, selectedCompanyId]);
 
   function availableAt(itemId: string, storeId: string): number {
     const item = items.find((i) => i.id === itemId);

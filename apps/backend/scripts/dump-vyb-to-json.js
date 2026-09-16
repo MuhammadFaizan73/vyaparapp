@@ -51,9 +51,17 @@ function main() {
   const dbPath = path.join(unzipDir, vyp);
   console.log(`Extracted ${vyp}`);
 
+  // name_type distinguishes a real party (1 — a customer/supplier/staff member) from a
+  // custom Expense Category the tenant created in Vyapar's Expense screen (3). Vyapar's
+  // built-in Expense Category master list (Petrol, Rent, Salary, ...) is name_type=2 but
+  // is never actually used as a txn_name_id in practice (confirmed: 0 transactions across
+  // every name_type=2 row in Safal Traders' backups) — only a custom name_type=3 row a
+  // tenant adds themselves shows up as a real expense-category transaction. This matters
+  // for import-vyapar-backup.js: a type-4 ("expense") row whose party is name_type=1 is a
+  // real party payment (misfiled through the Expense screen), not a genuine expense.
   writeJson('names.json', sqliteJson(dbPath, `
     SELECT name_id, full_name, phone_number, email, address, name_shipping_address,
-           name_state, name_gstin_number, pincode, name_shipping_pincode, credit_limit
+           name_state, name_gstin_number, pincode, name_shipping_pincode, credit_limit, name_type
     FROM kb_names;
   `));
 
@@ -83,9 +91,16 @@ function main() {
     SELECT unit_id, unit_name, unit_short_name FROM kb_item_units;
   `));
 
+  // txn_category_id matters: confirmed (Safal Traders, Shan Foods) that Vyapar's own
+  // category-based Expense entries (Bike Repairing, Petrol, Rent, Tea, ...) are stored via
+  // txn_category_id with txn_name_id NULL, while party-based transactions (Sale, Purchase,
+  // Payment-In, and — confirmed by cross-checking a real party like "BINESH" against the
+  // client's own Vyapar Expense-by-category screen — also this backup's txn_type=4) use
+  // txn_name_id with txn_category_id NULL. These are mutually exclusive per row, not two
+  // views of the same thing — see import-vyapar-backup.js's TYPE_MAP handling.
   writeJson('transactions.json', sqliteJson(dbPath, `
-    SELECT txn_id, txn_type, txn_sub_type, txn_name_id, txn_date, txn_cash_amount,
-           txn_balance_amount, txn_description
+    SELECT txn_id, txn_type, txn_sub_type, txn_name_id, txn_category_id, txn_date,
+           txn_cash_amount, txn_balance_amount, txn_description
     FROM kb_transactions;
   `));
 

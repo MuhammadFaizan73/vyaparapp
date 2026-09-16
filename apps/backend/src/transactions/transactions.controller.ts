@@ -23,7 +23,7 @@ export class TransactionsController {
     @Query("bookerId") bookerId?: string,
   ) {
     const scopedCompanyId = restrictCompanyIds(companyId, req.companyIds);
-    if (partyId) return this.transactionsService.listForParty(req.tenantId, partyId);
+    if (partyId) return this.transactionsService.listForParty(req.tenantId, partyId, take ? Number(take) : undefined);
     if (type) {
       return this.transactionsService.listByType(req.tenantId, type, {
         take: take ? Number(take) : undefined,

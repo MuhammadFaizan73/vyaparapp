@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import type { LicenseStatus, DeviceSession } from "@vyapar/api-client";
 import { loadTenant, loadRole, api } from "../lib/api";
+import { loadPermissions } from "../lib/permissions";
 import { CompanyProvider } from "../lib/CompanyContext";
 import { CompanyDropdown } from "./CompanyDropdown";
 
@@ -23,14 +24,14 @@ const ROLE_ALLOWED: Record<string, string[]> = {
     "sale", "sale-invoices", "sale-estimate", "sale-proforma",
     "sale-payment-in", "sale-order", "sale-delivery", "sale-return",
     "purchase", "purchase-expense",
-    "settings", "plans",
+    "plans",
   ],
   biller: [
     "home", "parties", "parties-all", "parties-customers",
     "sale", "sale-invoices", "sale-estimate", "sale-proforma",
     "sale-payment-in", "sale-order", "sale-delivery", "sale-return",
     "purchase", "purchase-expense",
-    "cash-bank", "settings", "plans",
+    "cash-bank", "plans",
   ],
   biller_salesman: [
     "home", "parties", "parties-all", "parties-customers",
@@ -38,14 +39,14 @@ const ROLE_ALLOWED: Record<string, string[]> = {
     "sale", "sale-invoices", "sale-estimate", "sale-proforma",
     "sale-payment-in", "sale-order", "sale-delivery", "sale-return",
     "purchase", "purchase-expense",
-    "cash-bank", "settings", "plans",
+    "cash-bank", "plans",
   ],
   stock_keeper: [
     "home", "items",
     "stores", "stores-manage", "stores-transfer",
     "purchase", "purchase-bills", "purchase-payment-out",
     "purchase-expense", "purchase-order", "purchase-return",
-    "settings", "plans",
+    "plans",
   ],
   ca_accountant: [
     "home", "parties", "parties-all", "parties-customers", "parties-suppliers",
@@ -54,7 +55,7 @@ const ROLE_ALLOWED: Record<string, string[]> = {
     "sale-payment-in", "sale-order", "sale-delivery", "sale-return",
     "purchase", "purchase-bills", "purchase-payment-out",
     "purchase-expense", "purchase-order", "purchase-return",
-    "cash-bank", "grow", "grow-reports", "reports", "settings",
+    "cash-bank", "grow", "grow-reports", "reports",
   ],
   ca_accountant_edit: [
     "home", "parties", "parties-all", "parties-customers", "parties-suppliers",
@@ -63,7 +64,7 @@ const ROLE_ALLOWED: Record<string, string[]> = {
     "sale-payment-in", "sale-order", "sale-delivery", "sale-return",
     "purchase", "purchase-bills", "purchase-payment-out",
     "purchase-expense", "purchase-order", "purchase-return",
-    "cash-bank", "grow", "grow-reports", "reports", "settings",
+    "cash-bank", "grow", "grow-reports", "reports",
   ],
   secondary_admin: [
     "home", "parties", "parties-all", "parties-customers", "parties-suppliers",
@@ -74,8 +75,48 @@ const ROLE_ALLOWED: Record<string, string[]> = {
     "purchase", "purchase-bills", "purchase-payment-out",
     "purchase-expense", "purchase-order", "purchase-return",
     "cash-bank", "grow", "grow-reports", "reports",
-    "utilities", "team", "settings", "plans",
+    "utilities", "team", "plans",
   ],
+};
+
+// Nav keys ROLE_ALLOWED doesn't grant by default for a given role can still be unlocked
+// per-person via the Team permission checklist (packages/shared-types ALL_PERMISSIONS) —
+// without this, a nav item missing from a role's ROLE_ALLOWED list had no way to ever be
+// granted to that person short of editing this file, even though the checklist looked
+// like it should cover it. "home"/"plans" are already in every role's list and need none.
+const NAV_PERMISSION: Record<string, string> = {
+  "settings": "settings_view",
+  "parties-suppliers": "parties_suppliers_view",
+  "stores": "stores_view",
+  "stores-manage": "stores_view",
+  "stores-transfer": "stores_view",
+  "sale-pos": "pos_view",
+  "purchase-bills": "purchase_view",
+  "purchase-payment-out": "payment_out_view",
+  "purchase-order": "purchase_order_view",
+  "purchase-return": "purchase_return_view",
+  "grow": "grow_view",
+  "grow-reports": "grow_view",
+  "grow-insights": "grow_view",
+  "cash": "cash_view",
+  "cash-bank": "cash_view",
+  "cash-in-hand": "cash_view",
+  "cash-cheques": "cash_view",
+  "cash-loans": "cash_view",
+  "reports": "reports_view",
+  "sync": "sync_view",
+  "sync-data": "sync_view",
+  "sync-share": "sync_view",
+  "sync-backup": "sync_view",
+  "sync-devices": "sync_view",
+  "utilities": "utilities_view",
+  "utilities-import-items": "utilities_view",
+  "utilities-import-sales": "utilities_view",
+  "utilities-import-purchases": "utilities_view",
+  "utilities-import-cash-flow": "utilities_view",
+  "utilities-import-expenses": "utilities_view",
+  "utilities-tools": "utilities_view",
+  "team": "team_view",
 };
 import { ActivateLicenseModal } from "./ActivateLicenseModal";
 import { ReviewOrderModal } from "./ReviewOrderModal";
@@ -310,16 +351,30 @@ export function Shell({ status, onLogout, onLicenseActivated }: Props) {
 
   const role = loadRole();
   const allowed = ROLE_ALLOWED[role]; // undefined = owner = full access
+  const permissions = loadPermissions(); // null = owner/unrestricted
+
+  // A nav key is visible if the role's static list grants it OR the signed-in person's
+  // own permission checklist has the matching grant — the latter is what lets an owner
+  // unlock a nav item for one specific salesman/biller/etc. without it being on by
+  // default for that whole role.
+  const navKeyVisible = useCallback(
+    (key: string) => {
+      if (!allowed || allowed.includes(key)) return true;
+      const permId = NAV_PERMISSION[key];
+      return !!permId && !!permissions?.includes(permId);
+    },
+    [allowed, permissions],
+  );
 
   const visibleNav = useMemo(() => {
     if (!allowed) return navStructure;
     return navStructure
-      .filter(item => allowed.includes(item.key))
+      .filter(item => navKeyVisible(item.key))
       .map(item => ({
         ...item,
-        children: item.children?.filter(sub => allowed.includes(sub.key)),
+        children: item.children?.filter(sub => navKeyVisible(sub.key)),
       }));
-  }, [allowed]);
+  }, [allowed, navKeyVisible]);
 
   const tenant     = loadTenant<{ phone?: string }>();
   const phoneLabel = tenant?.phone ?? "Rootocloud";

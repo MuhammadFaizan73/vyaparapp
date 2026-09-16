@@ -2706,6 +2706,51 @@ body,
   font-weight: 500;
 }
 
+/* License activation — email lookup result list (LicenseActivationForm) */
+.alm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+  margin-bottom: 10px;
+}
+.alm-license-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
+}
+.alm-license-row__info { min-width: 0; }
+.alm-license-row__key { font-family: monospace; font-size: 13px; font-weight: 600; color: #1e293b; }
+.alm-license-row__meta { font-size: 11.5px; color: #64748b; margin-top: 2px; }
+.alm-license-row__btn { padding: 7px 14px; font-size: 12.5px; flex-shrink: 0; }
+.alm-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 100px;
+  flex-shrink: 0;
+}
+.alm-badge--taken { background: #f1f5f9; color: #64748b; }
+.alm-badge--expired { background: #fee2e2; color: #b91c1c; }
+.alm-link {
+  display: block;
+  background: none;
+  border: none;
+  color: #3b82f6;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 8px 0 0;
+  text-align: left;
+}
+.alm-link:hover { text-decoration: underline; }
+
 .fine-print {
   font-size: 12px;
   color: #94a3b8;

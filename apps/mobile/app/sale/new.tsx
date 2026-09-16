@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import {
-  View, Text, TextInput, TouchableOpacity, ScrollView,
+  View, Text, TextInput, TouchableOpacity, ScrollView, FlatList,
   StyleSheet, KeyboardAvoidingView, Platform, Alert, Modal, BackHandler, ActivityIndicator,
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -122,6 +122,18 @@ export default function NewSaleScreen() {
   const [selectedCompanyFilters, setSelectedCompanyFilters] = useState<string[]>(
     () => (selectedCompanyId ? [selectedCompanyId] : []),
   );
+  // useSelectedCompany() resolves selectedCompanyId asynchronously (SecureStore + a company
+  // list fetch) — this screen can mount before it's ready, in which case the lazy initializer
+  // above locks in "[]" (All companies) forever, since useState only runs it once. That's what
+  // let a salesman adding a Sale under one company see every other company's items in the
+  // picker too. Sync once selectedCompanyId actually arrives, but only if the user hasn't
+  // touched the filter chips themselves yet.
+  const companyFilterTouched = useRef(false);
+  useEffect(() => {
+    if (!companyFilterTouched.current && selectedCompanyId) {
+      setSelectedCompanyFilters([selectedCompanyId]);
+    }
+  }, [selectedCompanyId]);
 
   // Which store this sale draws stock from — hidden entirely for single-store
   // companies, so a tenant that never added a second store sees no change at all.
@@ -176,6 +188,7 @@ export default function NewSaleScreen() {
   const [mode, setMode] = useState<"credit" | "cash">("credit");
   const [customer, setCustomer] = useState(params.prefillPartyName ?? "");
   const [showParties, setShowParties] = useState(false);
+  const [partySearch, setPartySearch] = useState("");
   const invoiceDate = invoiceDateStr();
 
   const prefillItems: LineItem[] = (() => {
@@ -271,10 +284,10 @@ export default function NewSaleScreen() {
       parties
         .filter((p) => p.partyType === "customer" || p.partyType === "both" || p.isSystem)
         .filter((p) =>
-          matchesAllWords(p.name, customer) ||
-          (p.phone && p.phone.includes(customer))
+          matchesAllWords(p.name, partySearch) ||
+          (p.phone && p.phone.includes(partySearch))
         ),
-    [parties, customer],
+    [parties, partySearch],
   );
   const itemSearchQuery = itemSearch.trim().toLowerCase();
   const filteredCatalog = useMemo(
@@ -391,6 +404,7 @@ export default function NewSaleScreen() {
       setCustomer(partyName);
       setInvoiceDateObj(new Date(txn.date));
       if (txn.companyId) {
+        companyFilterTouched.current = true;
         setSelectedCompanyFilters([txn.companyId]);
         setSelectedCompanyId(txn.companyId);
       }
@@ -803,63 +817,28 @@ export default function NewSaleScreen() {
           showsVerticalScrollIndicator={false}
         >
           {/* ── Customer ── */}
-          <View style={[styles.card, showParties && styles.cardAboveOverlay]}>
+          <View style={styles.card}>
             {selectedParty != null && (
               <Text style={styles.partyBalance}>
                 Party Balance:{" "}
                 <Text style={{ color: colors.primary }}>Rs {fmt4(selectedParty.balance)}</Text>
               </Text>
             )}
-            {/* position:relative anchors the dropdown below, so it floats over whatever
-                comes after (Billed Items etc.) instead of pushing it down the screen. */}
-            <View style={styles.customerFieldWrap}>
-              <View style={styles.outlinedField}>
-                <Text style={styles.outlinedLabel}>Customer *</Text>
-                <TextInput
-                  style={styles.outlinedInput}
-                  value={customer}
-                  onChangeText={(t) => { setCustomer(t); setShowParties(true); }}
-                  onFocus={() => setShowParties(true)}
-                  placeholder=""
-                  placeholderTextColor={colors.textLight}
-                />
-              </View>
-              {showParties && (
-                <View style={styles.partyDropdown}>
-                  <TouchableOpacity
-                    style={styles.pdRow}
-                    onPress={() => { setShowParties(false); router.push("/party/new" as never); }}
-                  >
-                    <View style={styles.pdAddIcon}>
-                      <Ionicons name="add" size={14} color={colors.primary} />
-                    </View>
-                    <Text style={[styles.pdName, { color: colors.primary }]}>Add Party</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.pdRow}
-                    onPress={() => { setCustomer("Cash Sale"); setShowParties(false); }}
-                  >
-                    <Text style={[styles.pdName, { flex: 1 }]}>Cash Sale</Text>
-                    <Text style={styles.pdBalance}>0</Text>
-                  </TouchableOpacity>
-                  {filteredParties.slice(0, 8).map((p) => (
-                    <TouchableOpacity
-                      key={p.id}
-                      style={styles.pdRow}
-                      onPress={() => { setCustomer(p.name); setShowParties(false); }}
-                    >
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.pdName}>{p.name}</Text>
-                        {p.phone ? <Text style={styles.pdPhone}>{p.phone}</Text> : null}
-                      </View>
-                      <Text style={[styles.pdBalance, { color: p.balance > 0 ? colors.red : colors.green }]}>
-                        Rs {Math.abs(p.balance).toLocaleString()}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-            </View>
+            {/* A plain ScrollView nested inside this screen's outer ScrollView can't
+                reliably scroll on Android — same-axis nested scrolling is a long-standing
+                RN/Android limitation that nestedScrollEnabled doesn't fully fix. The picker
+                is a bottom-sheet Modal instead (below, alongside Booker/Tax pickers), whose
+                content isn't part of the outer ScrollView's tree at all. */}
+            <TouchableOpacity
+              style={styles.outlinedField}
+              activeOpacity={0.7}
+              onPress={() => { setPartySearch(customer); setShowParties(true); }}
+            >
+              <Text style={styles.outlinedLabel}>Customer *</Text>
+              <Text style={[styles.outlinedInput, !customer && { color: colors.textLight }]}>
+                {customer || "Select customer"}
+              </Text>
+            </TouchableOpacity>
           </View>
 
           {/* ── Billed Items ── */}
@@ -1250,6 +1229,69 @@ export default function NewSaleScreen() {
         </View>
       </Modal>
 
+      {/* ── Customer Picker Modal ── */}
+      <Modal visible={showParties} transparent animationType="slide" onRequestClose={() => setShowParties(false)}>
+        <TouchableOpacity style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)" }} activeOpacity={1} onPress={() => setShowParties(false)} />
+        <View style={{ backgroundColor: "#fff", borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, gap: 4, maxHeight: "75%" }}>
+          <Text style={{ fontSize: 16, fontWeight: "700", color: colors.text, marginBottom: 8 }}>Select Customer</Text>
+          <View style={[styles.outlinedField, { marginBottom: 8 }]}>
+            <TextInput
+              style={styles.outlinedInput}
+              value={partySearch}
+              onChangeText={setPartySearch}
+              placeholder="Search or type customer name"
+              placeholderTextColor={colors.textLight}
+              autoFocus
+            />
+          </View>
+          {/* FlatList, not ScrollView — this tenant can have hundreds of parties, and a
+              ScrollView renders every row up front (all of them, off-screen included),
+              which is exactly what made opening this sheet visibly slow. FlatList only
+              renders what's near the visible window. */}
+          <FlatList
+            data={filteredParties}
+            keyExtractor={(p) => p.id}
+            keyboardShouldPersistTaps="handled"
+            initialNumToRender={16}
+            windowSize={5}
+            ListHeaderComponent={
+              <>
+                <TouchableOpacity
+                  style={styles.pdRow}
+                  onPress={() => { setShowParties(false); router.push("/party/new" as never); }}
+                >
+                  <View style={styles.pdAddIcon}>
+                    <Ionicons name="add" size={14} color={colors.primary} />
+                  </View>
+                  <Text style={[styles.pdName, { color: colors.primary }]}>Add Party</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.pdRow}
+                  onPress={() => { setCustomer("Cash Sale"); setShowParties(false); }}
+                >
+                  <Text style={[styles.pdName, { flex: 1 }]}>Cash Sale</Text>
+                  <Text style={styles.pdBalance}>0</Text>
+                </TouchableOpacity>
+              </>
+            }
+            renderItem={({ item: p }) => (
+              <TouchableOpacity
+                style={styles.pdRow}
+                onPress={() => { setCustomer(p.name); setShowParties(false); }}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.pdName}>{p.name}</Text>
+                  {p.phone ? <Text style={styles.pdPhone}>{p.phone}</Text> : null}
+                </View>
+                <Text style={[styles.pdBalance, { color: p.balance > 0 ? colors.red : colors.green }]}>
+                  Rs {Math.abs(p.balance).toLocaleString()}
+                </Text>
+              </TouchableOpacity>
+            )}
+          />
+        </View>
+      </Modal>
+
       {/* ── Tax Picker Modal ── */}
       <Modal visible={showTaxPicker} transparent animationType="slide" onRequestClose={() => setShowTaxPicker(false)}>
         <TouchableOpacity style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)" }} activeOpacity={1} onPress={() => setShowTaxPicker(false)} />
@@ -1320,7 +1362,7 @@ export default function NewSaleScreen() {
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
                   <TouchableOpacity
                     style={[styles.companyChip, selectedCompanyFilters.length === 0 && styles.companyChipActive]}
-                    onPress={() => setSelectedCompanyFilters([])}
+                    onPress={() => { companyFilterTouched.current = true; setSelectedCompanyFilters([]); }}
                   >
                     <Text style={[styles.companyChipTxt, selectedCompanyFilters.length === 0 && styles.companyChipTxtActive]}>All</Text>
                   </TouchableOpacity>
@@ -1330,9 +1372,10 @@ export default function NewSaleScreen() {
                       <TouchableOpacity
                         key={c.id}
                         style={[styles.companyChip, isActive && styles.companyChipActive]}
-                        onPress={() => setSelectedCompanyFilters((prev) =>
-                          isActive ? prev.filter((id) => id !== c.id) : [...prev, c.id]
-                        )}
+                        onPress={() => {
+                          companyFilterTouched.current = true;
+                          setSelectedCompanyFilters((prev) => isActive ? prev.filter((id) => id !== c.id) : [...prev, c.id]);
+                        }}
                       >
                         <Text style={[styles.companyChipTxt, isActive && styles.companyChipTxtActive]}>{c.name}</Text>
                       </TouchableOpacity>
@@ -1846,20 +1889,6 @@ const styles = StyleSheet.create({
   sheetRowDate: { fontSize: 13, color: colors.textMuted },
   sheetRowRate: { fontSize: 14, fontWeight: "700", color: colors.text },
 
-  // Anchors partyDropdown below the input via position:relative — the dropdown itself
-  // is position:absolute so it overlays whatever follows in the ScrollView (Billed Items
-  // etc.) instead of pushing it down the page.
-  customerFieldWrap: { position: "relative", zIndex: 30 },
-  partyDropdown: {
-    position: "absolute", top: "100%", left: 0, right: 0, zIndex: 30,
-    marginTop: 6, borderWidth: 1, borderColor: colors.border, borderRadius: 8,
-    backgroundColor: "#fff", maxHeight: 240, overflow: "hidden",
-    elevation: 6, shadowColor: "#000", shadowOpacity: 0.12, shadowRadius: 8,
-  },
-  // Android paints siblings in document order regardless of a child's own zIndex, so the
-  // Customer card itself needs lifting above the Billed Items card that follows it while
-  // its dropdown is open.
-  cardAboveOverlay: { zIndex: 30, elevation: 6 },
   pdRow: {
     flexDirection: "row", alignItems: "center", gap: 10,
     paddingHorizontal: 14, paddingVertical: 12,

@@ -1,9 +1,9 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet,
   ActivityIndicator, Modal, FlatList,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../src/theme";
@@ -69,6 +69,7 @@ function fmtAmt(n: number) {
 export default function PartyStatementScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { partyId: prefillPartyId } = useLocalSearchParams<{ partyId?: string }>();
   const { parties, loading: partiesLoading } = useParties();
 
   const [selectedPartyId, setSelectedPartyId] = useState<string | null>(null);
@@ -82,6 +83,15 @@ export default function PartyStatementScreen() {
 
   const selectedParty = parties.find(p => p.id === selectedPartyId);
   const range = getDateRange(dateRange);
+
+  // Coming from Party Details' "Send Statement" — auto-select that party once the list has
+  // loaded, instead of landing on the "no party selected" empty state.
+  useEffect(() => {
+    if (prefillPartyId && !selectedPartyId && !partiesLoading) {
+      void selectParty(prefillPartyId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefillPartyId, partiesLoading]);
 
   async function selectParty(id: string) {
     setShowPartyPicker(false);

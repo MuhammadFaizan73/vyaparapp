@@ -1,10 +1,15 @@
 import { Injectable } from "@nestjs/common";
+import { randomBytes } from "crypto";
 import { PrismaService } from "../../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 
+const DURATION_DAYS: Record<string, number> = { monthly: 30, yearly: 365 };
+
+// Crypto-random, not Math.random() (which is not a CSPRNG and was previously used here) —
+// a license key is a security credential, not a display id.
 function generateKey(platform: string) {
-  const prefix = platform === "mobile" ? "MOBI" : "DESK";
-  const rand = () => Math.random().toString(36).toUpperCase().slice(2, 6);
+  const prefix = platform === "mobile" ? "MOBI" : platform === "both" ? "UNIV" : "DESK";
+  const rand = () => randomBytes(3).toString("hex").toUpperCase();
   return `VYPR-${prefix}-${rand()}-${rand()}`;
 }
 
@@ -15,12 +20,13 @@ export class AdminLicensesService {
     private readonly audit: AuditService,
   ) {}
 
-  async list(opts: { status?: string; platform?: string; page: number; limit: number }) {
-    const { status, platform, page, limit } = opts;
+  async list(opts: { status?: string; platform?: string; email?: string; page: number; limit: number }) {
+    const { status, platform, email, page, limit } = opts;
     const now = new Date();
 
     const where: Record<string, unknown> = {};
     if (platform) where.platform = platform;
+    if (email) where.email = { equals: email.trim().toLowerCase() };
 
     const [licenses, total] = await Promise.all([
       this.prisma.license.findMany({
@@ -49,8 +55,16 @@ export class AdminLicensesService {
     return { data: enriched, total, page, limit };
   }
 
-  async generate(adminId: string, opts: { count: number; platform: string; plan: string; daysValid: number; phone?: string }) {
-    const { count, platform, plan, daysValid, phone } = opts;
+  async generate(adminId: string, opts: {
+    count: number; platform: string; plan: string;
+    durationType: string; customDays?: number;
+    email: string; customerName?: string; phone?: string;
+  }) {
+    const { count, platform, plan, durationType, customDays, phone } = opts;
+    const email = opts.email.trim().toLowerCase();
+    const customerName = opts.customerName?.trim() || null;
+
+    const daysValid = durationType === "custom" ? customDays! : DURATION_DAYS[durationType];
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + daysValid);
 
@@ -61,14 +75,16 @@ export class AdminLicensesService {
       while (await this.prisma.license.findUnique({ where: { key } })) {
         key = generateKey(platform);
       }
-      await this.prisma.license.create({ data: { key, plan, platform, expiresAt, phone: phone || null } });
+      await this.prisma.license.create({
+        data: { key, plan, platform, expiresAt, phone: phone || null, email, customerName, durationType },
+      });
       keys.push(key);
     }
 
     await this.audit.log({
       adminId,
       action: "generate_license",
-      meta: { count, platform, plan, daysValid, phone },
+      meta: { count, platform, plan, durationType, daysValid, email, customerName },
     });
 
     return { keys };

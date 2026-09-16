@@ -89,6 +89,17 @@ export type LocationPingPoint = {
   createdAt: string;
 };
 
+export type LicenseListingEntry = {
+  id: string;
+  maskedKey: string;
+  plan: string;
+  platform: string;
+  durationType: string;
+  customerName: string | null;
+  expiresAt: string;
+  status: "available" | "expired" | "taken";
+};
+
 export type DeviceSession = {
   id: string;
   tenantId: string;
@@ -149,8 +160,20 @@ export class VyaparApiClient {
     return data;
   }
 
-  async activateLicense(key: string, platform: "desktop" | "mobile" = "desktop"): Promise<LicenseStatus> {
-    const { data } = await this.http.post<LicenseStatus>("/license/activate", { key, platform });
+  // Email step of "Activate License" — every license bought under this email, so the
+  // user can pick one instead of needing the exact key already in hand. Keys come back
+  // masked (see backend's LicenseService.lookupByEmail).
+  async lookupLicenses(email: string): Promise<LicenseListingEntry[]> {
+    const { data } = await this.http.post<LicenseListingEntry[]>("/license/lookup", { email });
+    return data;
+  }
+
+  // Exactly one of key/licenseId — key for a customer who already has one (e.g. from a
+  // reseller), licenseId when they picked one out of lookupLicenses()'s list.
+  async activateLicense(
+    opts: { email: string; platform: "desktop" | "mobile" } & ({ key: string; licenseId?: never } | { licenseId: string; key?: never }),
+  ): Promise<LicenseStatus> {
+    const { data } = await this.http.post<LicenseStatus>("/license/activate", opts);
     return data;
   }
 
@@ -232,8 +255,10 @@ export class VyaparApiClient {
     return data;
   }
 
-  async getPartyTransactions(partyId: string): Promise<Transaction[]> {
-    const { data } = await this.http.get<Transaction[]>(`/transactions?partyId=${partyId}`);
+  async getPartyTransactions(partyId: string, opts?: { take?: number }): Promise<Transaction[]> {
+    const params = new URLSearchParams({ partyId });
+    if (opts?.take !== undefined) params.set("take", String(opts.take));
+    const { data } = await this.http.get<Transaction[]>(`/transactions?${params.toString()}`);
     return data;
   }
 

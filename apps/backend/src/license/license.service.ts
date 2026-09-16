@@ -4,6 +4,15 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import type { ActivateLicenseDto } from "./license.dto";
+
+// Shows only the last 4 characters — this module's lookupByEmail() is reachable by
+// anyone who knows the email (no ownership proof beyond that), so the response must
+// never hand back a directly-usable key. Duplicated from admin/licenses/licenses.service.ts
+// rather than imported, to keep this module independent of the admin module.
+function maskKey(key: string): string {
+  return key.length <= 4 ? key : `${"•".repeat(key.length - 4)}${key.slice(-4)}`;
+}
 
 export type Platform = "desktop" | "mobile";
 
@@ -19,6 +28,17 @@ export type LicenseStatus = {
     activatedAt: string | null;
     expiresAt: string;
   };
+};
+
+export type LicenseListingEntry = {
+  id: string;
+  maskedKey: string;
+  plan: string;
+  platform: string;
+  durationType: string;
+  customerName: string | null;
+  expiresAt: string;
+  status: "available" | "expired" | "taken";
 };
 
 @Injectable()
@@ -62,10 +82,41 @@ export class LicenseService {
     };
   }
 
-  async activate(tenantId: string, key: string, platform: Platform): Promise<LicenseStatus> {
-    const license = await this.prisma.license.findUnique({ where: { key } });
-    if (!license) throw new NotFoundException("License key not found");
-    if (license.platform !== platform) {
+  // Every license bought under this email — the "Activate License" screen's email step.
+  // Keys are masked: this is reachable by anyone who knows the email (no proof of
+  // ownership beyond that), so it must never hand back something directly usable.
+  async lookupByEmail(email: string): Promise<LicenseListingEntry[]> {
+    const licenses = await this.prisma.license.findMany({
+      where: { email: email.trim().toLowerCase() },
+      include: { desktopTenant: { select: { id: true } }, mobileTenant: { select: { id: true } } },
+      orderBy: { createdAt: "desc" },
+    });
+    const now = new Date();
+    return licenses.map((l) => {
+      const taken = !!(l.desktopTenant || l.mobileTenant);
+      const status: LicenseListingEntry["status"] =
+        l.expiresAt <= now ? "expired" : taken ? "taken" : "available";
+      return {
+        id: l.id,
+        maskedKey: maskKey(l.key),
+        plan: l.plan,
+        platform: l.platform,
+        durationType: l.durationType,
+        customerName: l.customerName,
+        expiresAt: l.expiresAt.toISOString(),
+        status,
+      };
+    });
+  }
+
+  async activate(tenantId: string, dto: ActivateLicenseDto, platform: Platform): Promise<LicenseStatus> {
+    const license = dto.licenseId
+      ? await this.prisma.license.findUnique({ where: { id: dto.licenseId } })
+      : await this.prisma.license.findUnique({ where: { key: dto.key! } });
+    if (!license) throw new NotFoundException("License not found");
+
+    // "both" was generated to cover either platform — everything else must match exactly.
+    if (license.platform !== platform && license.platform !== "both") {
       throw new BadRequestException(
         `This key is for ${license.platform}, not ${platform}`,
       );
@@ -74,7 +125,12 @@ export class LicenseService {
       throw new BadRequestException("License has expired");
     }
 
-    if (license.phone) {
+    if (license.email) {
+      if (license.email.toLowerCase() !== dto.email.trim().toLowerCase()) {
+        throw new BadRequestException("This license isn't registered to that email");
+      }
+    } else if (license.phone) {
+      // Legacy phone-locked license, never re-issued against an email.
       const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
       if (tenant?.phone !== license.phone) {
         throw new BadRequestException("This license key is assigned to a different mobile number");

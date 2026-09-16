@@ -43,6 +43,13 @@ async function migrateLegacyFile(): Promise<void> {
   } catch { /* file missing or malformed — ignore */ }
 }
 
+// Deliberately unscoped (every company, tenant-wide) — this is a single shared cache used
+// by several screens, some of which (the Items tab) need to see every company's items at
+// once to apply their own companyFilter (which can be a multi-id distributor/branch rollup,
+// not just one company). Callers that need only the current company's items (Add Sale,
+// Stock Transfer, Delivery Note — a new record belongs to exactly one company) must filter
+// getItems()/getCachedItems() by item.companyId themselves rather than narrowing this fetch,
+// or they'd fight over what the shared cache contains.
 export async function loadItems(): Promise<void> {
   try {
     await migrateLegacyFile();

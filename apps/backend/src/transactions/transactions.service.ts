@@ -92,10 +92,16 @@ export class TransactionsService {
     return toRow(row);
   }
 
-  async listForParty(tenantId: string, partyId: string): Promise<TransactionRow[]> {
+  // take stays optional (unbounded when omitted) — Party Statement needs every row to
+  // filter accurately across an arbitrary date range; Party Details (mobile) passes an
+  // explicit cap since it just shows recent activity and a party with years of history
+  // (found via Safal Traders: hundreds of rows for one supplier) made that screen hang
+  // fetching everything before rendering a single row.
+  async listForParty(tenantId: string, partyId: string, take?: number): Promise<TransactionRow[]> {
     const rows = await this.prisma.transaction.findMany({
       where: { tenantId, partyId },
       orderBy: { date: "desc" },
+      ...(take ? { take } : {}),
     });
     return rows.map(toRow);
   }

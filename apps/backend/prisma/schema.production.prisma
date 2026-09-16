@@ -197,12 +197,18 @@ model License {
   key           String    @unique
   plan          String    @default("pro")
   platform      String    @default("desktop")
+  // Legacy lock, kept for pre-email licenses — see schema.prisma's copy of this model.
   phone         String?
+  email         String?
+  customerName  String?
+  durationType  String    @default("custom")
   activatedAt   DateTime?
   expiresAt     DateTime
   desktopTenant Tenant?   @relation("DesktopLicense")
   mobileTenant  Tenant?   @relation("MobileLicense")
   createdAt     DateTime  @default(now())
+
+  @@index([email])
 }
 
 model Party {

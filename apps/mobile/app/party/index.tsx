@@ -183,7 +183,7 @@ export default function PartyListScreen() {
         <TouchableOpacity
           activeOpacity={0.7}
           style={s.cardInner}
-          onPress={() => router.push(`/party/statement?partyId=${p.id}` as never)}
+          onPress={() => router.push(`/party/${p.id}` as never)}
         >
           <View style={[s.avatar, { backgroundColor: hue.tint }]}>
             <Text style={[s.avatarTxt, { color: hue.fg }]}>{p.name[0]?.toUpperCase()}</Text>

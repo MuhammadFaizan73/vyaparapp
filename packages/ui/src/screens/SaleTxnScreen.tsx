@@ -1276,6 +1276,18 @@ function TxnForm({ cfg, parties, initialRow, existingCount, onClose, onSaved }: 
               )}
             </div>
 
+            {/* The dropdown above already shows each party's balance per-row while picking —
+                but that's only visible during selection; nothing showed it afterward once a
+                party was actually chosen. */}
+            {selectedParty != null && (
+              <div style={{ marginTop: 6, fontSize: 12, color: "#6b7280", textAlign: "right" }}>
+                Party Balance:{" "}
+                <span style={{ fontWeight: 600, color: selectedParty.balance > 0 ? "#dc2626" : selectedParty.balance < 0 ? "#16a34a" : "#111827" }}>
+                  Rs {Math.abs(selectedParty.balance ?? 0).toLocaleString()}
+                </span>
+              </div>
+            )}
+
             {cfg.showPhone && (
               <input
                 style={{ marginTop: 8, width: "100%", border: "1px solid #d1d5db", borderRadius: 6, padding: "7px 10px", fontSize: 13, boxSizing: "border-box" }}

@@ -13,15 +13,26 @@
 // inferred from line-item presence, cash-vs-balance shape, and transaction volume — flagged here
 // so it's easy to bulk-correct via `UPDATE "Transaction" SET type = ...` if the client says a
 // bucket looks wrong once they see it in the app.
+//
+// CORRECTED (previously had these backwards): type 4 is a party-based payment (txn_name_id
+// set, txn_category_id NULL) — functionally Payment-Out, not a generic expense. Type 7 is a
+// real category-based Expense (txn_category_id set, txn_name_id NULL — Bike Repairing,
+// Petrol, Rent, Tea, ...). Confirmed against the client's own Vyapar Expense-by-Category
+// screen for Safal Traders (Shan Foods): "Bike Repairing" showing 3 transactions totaling
+// Rs 6,680 matched exactly to 3 txn_type=7 rows keyed by txn_category_id. See
+// categoryNameById's comment below for the full column-based reasoning — this is driven by
+// which Vyapar schema column is populated, not by business-specific naming, so it should hold
+// across backups, but re-verify the txn_name_id/txn_category_id split per backup regardless.
 const fs = require('fs');
 const path = require('path');
 const { randomUUID } = require('crypto');
 const { PrismaClient } = require('@prisma/client');
 
 const TENANT_ID = process.argv[2];
-const JSON_DIR = process.argv[3];
-if (!TENANT_ID || !JSON_DIR) {
-  console.error('Usage: node scripts/import-vyapar-backup.js <tenantId> <jsonDumpDir>');
+const COMPANY_ID = process.argv[3];
+const JSON_DIR = process.argv[4];
+if (!TENANT_ID || !COMPANY_ID || !JSON_DIR) {
+  console.error('Usage: node scripts/import-vyapar-backup.js <tenantId> <companyId> <jsonDumpDir>');
   process.exit(1);
 }
 
@@ -52,8 +63,8 @@ const DEFAULT_TYPE_MAP = {
   21: { bucket: 'order', type: 'sale_order' },
   28: { bucket: 'order', type: 'purchase_order' },
   3: { bucket: 'cashflow', type: 'payment_in' },
-  4: { bucket: 'expense' },
-  7: { bucket: 'cashflow', type: 'payment_out' },
+  4: { bucket: 'cashflow', type: 'payment_out' },
+  7: { bucket: 'expense_by_category' },
 };
 const typeMapOverridePath = path.join(JSON_DIR, 'type-map.json');
 const TYPE_MAP = fs.existsSync(typeMapOverridePath) ? JSON.parse(fs.readFileSync(typeMapOverridePath, 'utf8')) : DEFAULT_TYPE_MAP;
@@ -83,13 +94,27 @@ async function main() {
     }
   }
 
-  // ---- 0. Company: reuse the tenant's existing company, just fill in the real business name
-  // — read from the backup's own kb_firms dump, never hardcoded (this script runs against
-  // multiple different businesses' backups).
+  // Optional — dump/items_conversion_rate.json. An item can have a secondaryUnit name
+  // (e.g. "Box") with NO conversionRate set — the app's own unit dropdown needs both to
+  // offer that unit at all, so without this an item imported with a secondary unit but no
+  // rate silently never shows it (found via Spencer: all 72 of its Carton->Box items).
+  const conversionRatePath = path.join(JSON_DIR, 'items_conversion_rate.json');
+  const conversionRateByItemName = new Map();
+  if (fs.existsSync(conversionRatePath)) {
+    for (const r of JSON.parse(fs.readFileSync(conversionRatePath, 'utf8'))) {
+      conversionRateByItemName.set((r.item_name || '').trim().toLowerCase(), r.conversion_rate);
+    }
+  }
+
+  // ---- 0. Company: the caller picks which existing Company this backup attaches to
+  // (required for multi-company tenants — importing two businesses' backups into the same
+  // tenant with no explicit target previously always fell back to "the oldest company",
+  // silently mixing a second business's data into the first's). Fill in the real business
+  // name from the backup's own kb_firms dump, never hardcoded.
   const firms = readJson('firms.json');
   const firm = firms[0];
-  const company = await prisma.company.findFirst({ where: { tenantId: TENANT_ID }, orderBy: { createdAt: 'asc' } });
-  if (!company) throw new Error('Tenant has no Company to attach imported data to');
+  const company = await prisma.company.findUnique({ where: { id: COMPANY_ID } });
+  if (!company || company.tenantId !== TENANT_ID) throw new Error(`Company ${COMPANY_ID} not found under tenant ${TENANT_ID}`);
   if (firm && company.name === 'My Business') {
     await prisma.company.update({ where: { id: company.id }, data: { name: firm.firm_name, phone: firm.firm_phone || null, email: firm.firm_email || null } });
     console.log(`Renamed placeholder company -> ${firm.firm_name} (${company.id})`);
@@ -117,7 +142,7 @@ async function main() {
           continue;
         }
         const number = `VY-OPENING-CASH-${adj.cash_adj_id}`;
-        const existing = await prisma.transaction.findFirst({ where: { tenantId: TENANT_ID, number } });
+        const existing = await prisma.transaction.findFirst({ where: { tenantId: TENANT_ID, companyId, number } });
         if (existing) { console.log(`Opening cash adjustment ${number} already imported`); continue; }
         await prisma.transaction.create({
           data: {
@@ -138,7 +163,10 @@ async function main() {
   }
 
   // ---- 1. Items (dedupe by lowercased name against what's already there, same as bulk-import).
-  const existingItems = await prisma.item.findMany({ where: { tenantId: TENANT_ID }, select: { name: true } });
+  // Scoped to this company, not the whole tenant — otherwise a second company's backup
+  // sharing an item name with the first (e.g. a generic SKU) would silently reuse the first
+  // company's row instead of creating its own.
+  const existingItems = await prisma.item.findMany({ where: { tenantId: TENANT_ID, companyId }, select: { name: true } });
   const existingItemNames = new Set(existingItems.map((i) => i.name.trim().toLowerCase()));
   const itemById = new Map(); // old item_id -> { name, unit }
   const seenItemNames = new Set();
@@ -147,7 +175,12 @@ async function main() {
     const name = (it.item_name || '').trim();
     if (!name) continue;
     const unit = unitById.get(it.base_unit_id) || null;
-    itemById.set(it.item_id, { name, unit });
+    itemById.set(it.item_id, {
+      name, unit,
+      baseUnitId: it.base_unit_id,
+      secondaryUnitId: it.secondary_unit_id,
+      conversionRate: conversionRateByItemName.get(key),
+    });
     const key = name.toLowerCase();
     if (existingItemNames.has(key) || seenItemNames.has(key)) continue;
     seenItemNames.add(key);
@@ -159,6 +192,7 @@ async function main() {
       category: categoryByItemName.get(key) || null,
       unit,
       secondaryUnit: unitById.get(it.secondary_unit_id) || null,
+      conversionRate: conversionRateByItemName.has(key) ? String(conversionRateByItemName.get(key)) : null,
       salePrice: it.item_sale_unit_price ?? null,
       purchasePrice: it.item_purchase_unit_price ?? null,
       mrp: it.item_mrp ?? null,
@@ -173,7 +207,9 @@ async function main() {
   console.log(`Items: ${newItems.length} created, ${items.length - newItems.length} skipped (blank name or already existed)`);
 
   // ---- 2. Parties (dedupe by lowercased name; carry opening balance: +receivable / -payable).
-  const existingParties = await prisma.party.findMany({ where: { tenantId: TENANT_ID }, select: { id: true, name: true } });
+  // Scoped to this company — same cross-company collision risk as items above, but worse:
+  // it would silently attach a second company's transactions to the FIRST company's party.
+  const existingParties = await prisma.party.findMany({ where: { tenantId: TENANT_ID, companyId }, select: { id: true, name: true } });
   const partyIdByName = new Map(existingParties.map((p) => [p.name.trim().toLowerCase(), p.id]));
   const partyOldIdToName = new Map(); // old name_id -> canonical trimmed name, for txn linking
   const seenPartyNames = new Set();
@@ -205,26 +241,41 @@ async function main() {
   for (let i = 0; i < newParties.length; i += CHUNK_SIZE) {
     await prisma.party.createMany({ data: newParties.slice(i, i + CHUNK_SIZE) });
   }
-  const refreshed = await prisma.party.findMany({ where: { tenantId: TENANT_ID }, select: { id: true, name: true } });
+  const refreshed = await prisma.party.findMany({ where: { tenantId: TENANT_ID, companyId }, select: { id: true, name: true } });
   for (const p of refreshed) partyIdByName.set(p.name.trim().toLowerCase(), p.id);
   console.log(`Parties: ${newParties.length} created, ${names.length - newParties.length} skipped (blank name or already existed)`);
 
   // ---- 3. Build lineitems-by-txn (name/qty/unit/rate), matching the notes JSON shape every
   // other transaction-creation path in this app already uses.
+  //
+  // unit is ALWAYS the item's own base unit here, never li.lineitem_unit_id's label —
+  // confirmed (by hand, against kb_lineitems) that Vyapar's own export already expresses
+  // every line item's quantity in the item's tracked/base unit, regardless of which unit
+  // label the line was actually entered in (e.g. a "1 Jar" sale on a Carton-tracked item,
+  // 1 Carton = 24 Jar, is stored as quantity 0.041667 = 1/24, not 1) — see
+  // fix-item-opening-stock.js's header comment for the original discovery. Storing the
+  // line's OWN unit label (e.g. "jar") here, with an already-base-unit qty, made
+  // reports.service.ts's computeStockMap() apply buildUnitConverter's secondary-unit
+  // division A SECOND TIME on every such line (0.041667 / 24 instead of leaving it alone)
+  // — confirmed against Spencer's real Vyapar Stock Value report: our Stock Value showed
+  // Rs 40,09,504 against Vyapar's real Rs 4,02,570, a ~10x inflation concentrated exactly
+  // on every item with a secondaryUnit/conversionRate set.
   const lineitemsByTxn = new Map();
   for (const li of lineitems) {
     const item = itemById.get(li.item_id);
     if (!item) continue;
     const arr = lineitemsByTxn.get(li.lineitem_txn_id) || [];
-    arr.push({ name: item.name, qty: li.quantity, unit: unitById.get(li.lineitem_unit_id) || item.unit, rate: li.priceperunit });
+    arr.push({ name: item.name, qty: li.quantity, unit: item.unit, rate: li.priceperunit });
     lineitemsByTxn.set(li.lineitem_txn_id, arr);
   }
 
-  // ---- 3b. Numbers already imported (this tenant's original number is `VY-<old txn_id>`,
-  // globally unique regardless of type) — makes a re-run after a crash resume cleanly instead
-  // of duplicating everything already committed.
+  // ---- 3b. Numbers already imported (`VY-<old txn_id>`, unique within the SOURCE backup —
+  // but txn_id is Vyapar's own per-business auto-increment, so two different companies'
+  // backups under this tenant can easily both have a "VY-1". Scoped to this company so
+  // company B's txn_id=1 isn't mistaken for already-imported just because company A's was.
+  // Makes a re-run after a crash resume cleanly instead of duplicating everything committed.
   const existingNumbers = new Set(
-    (await prisma.transaction.findMany({ where: { tenantId: TENANT_ID, number: { startsWith: 'VY-' } }, select: { number: true } })).map((t) => t.number)
+    (await prisma.transaction.findMany({ where: { tenantId: TENANT_ID, companyId, number: { startsWith: 'VY-' } }, select: { number: true } })).map((t) => t.number)
   );
 
   // ---- 4. Sale-side / purchase-side / order transactions — straight batched inserts.
@@ -239,26 +290,53 @@ async function main() {
 
   const cashflowEntries = [];
 
-  // Placeholder party for expense-bucket transactions with no real party at all — only
-  // created if this backup actually has any (checked below before the loop needs it).
-  const needsExpensePlaceholder = transactions.some((t) => {
-    const m = TYPE_MAP[t.txn_type];
-    return m && m.bucket === 'expense' && !partyOldIdToName.get(t.txn_name_id);
-  });
+  // Vyapar stores two structurally different things under what looked like one "expense"
+  // concept, distinguished by which column is set on the row (confirmed against the raw
+  // .vyb for Safal Traders, Shan Foods, by cross-checking the client's own Vyapar
+  // Expense-by-Category screen — e.g. "Bike Repairing" showing 3 transactions totaling
+  // Rs 6,680 matched exactly to 3 txn_type=7 rows with txn_category_id set):
+  //   - txn_category_id set, txn_name_id NULL (100% of this backup's type-7 rows): a real
+  //     category-based Expense (Bike Repairing, Petrol, Rent, Tea, ...) — genuinely a
+  //     business expense, no party involved at all.
+  //   - txn_name_id set, txn_category_id NULL (100% of this backup's type-4 rows,
+  //     including e.g. "BINESH", a supplier with a real Payable opening balance and no
+  //     type-2 Purchase row under this exact name): a payment to/from a real party,
+  //     functionally identical to Payment-Out.
+  // The earlier assumption (4=expense, 7=payment_out, from this file's original header
+  // comment) had these backwards — TYPE_MAP below is corrected accordingly. Category
+  // lookups use this map; `mapping.bucket === 'expense_by_category'` reads it below.
+  const categoryNameById = new Map(names.map((n) => [n.name_id, (n.full_name || '').trim()]));
+
+  // Placeholder party for expense_by_category rows — they have no real party at all
+  // (txn_name_id is NULL by definition), only created if this backup actually has any.
+  const needsExpensePlaceholder = transactions.some((t) => (TYPE_MAP[t.txn_type] || {}).bucket === 'expense_by_category');
   let expensePlaceholderPartyId;
   if (needsExpensePlaceholder) {
     const existing = await prisma.party.findFirst({ where: { tenantId: TENANT_ID, name: 'Business Expenses' } });
     expensePlaceholderPartyId = existing ? existing.id : (await prisma.party.create({ data: { tenantId: TENANT_ID, name: 'Business Expenses' } })).id;
   }
 
+  // REVERTED — a cashflow (payment-in/payment-out) entry with no party at all was initially
+  // assumed to be a personal cash withdrawal and given a "Cash Withdrawal" placeholder party,
+  // same as the expense placeholder above. Checked against the raw .vyb directly for Safal
+  // Traders (Shan Foods): all 983 of these payment-out rows have txn_payment_type_id = NULL
+  // (not Cash, not Cheque — Vyapar's own kb_paymentTypes only defines those two), no
+  // description, and amounts as small as Rs 3-90 — not real withdrawals, but Vyapar's own
+  // auto-generated round-off adjustment rows. Importing them as real cash-out transactions
+  // is what put Cash In Hand ~9.5M off after this business's usual correct import. Left
+  // unimported, matching the prior (correct) behavior — same as everything else with no
+  // real party and no sane fallback.
+
   for (const t of transactions) {
     const mapping = TYPE_MAP[t.txn_type];
     const partyName = partyOldIdToName.get(t.txn_name_id);
-    // Some backups (e.g. petrol/shortage/stationery petty-cash entries) carry no party at all —
-    // only 'expense' has a sane fallback (a placeholder "Business Expenses" party, same
-    // convention bulk-import.service.ts uses when its own Expense import has no "Paid To").
-    // Everything else genuinely needs its real party and gets skipped without one.
-    const partyId = partyName ? partyIdByName.get(partyName.toLowerCase()) : (mapping && mapping.bucket === 'expense' ? expensePlaceholderPartyId : undefined);
+    // expense_by_category rows have no party at all (txn_name_id is NULL by definition —
+    // see the categoryNameById comment above) — always the placeholder. Everything else
+    // genuinely needs its real party and gets skipped without one.
+    const partyId = partyName
+      ? partyIdByName.get(partyName.toLowerCase())
+      : mapping && mapping.bucket === 'expense_by_category' ? expensePlaceholderPartyId
+      : undefined;
     const date = t.txn_date ? new Date(t.txn_date) : null;
     if (!mapping || !partyId || !date || Number.isNaN(date.getTime())) {
       counts.skipped++;
@@ -301,11 +379,11 @@ async function main() {
         companyId,
       });
       if (orderBuf.length >= CHUNK_SIZE) await flush(orderBuf, 'order').then(() => (orderBuf = []));
-    } else if (mapping.bucket === 'expense') {
-      // Petty-cash entries with no real party often carry their category as a fake "item"
-      // line (e.g. "PERTOL MUJEEB", "shortage", "Stationery") instead of txn_description.
-      const lineItems = lineitemsByTxn.get(t.txn_id) || [];
-      const category = t.txn_description || lineItems[0]?.name || 'Expense';
+    } else if (mapping.bucket === 'expense_by_category') {
+      // Real category-based Expense (Bike Repairing, Petrol, Rent, Tea, ...) — see the
+      // categoryNameById comment above. txn_name_id is NULL for these; the category name
+      // lives on txn_category_id instead.
+      const category = categoryNameById.get(t.txn_category_id) || t.txn_description || 'Expense';
       expenseBuf.push({
         tenantId: TENANT_ID,
         partyId,
