@@ -198,17 +198,21 @@ export function SaleTxnScreen({ activeKey, isLocked = false, onLockedAction }: P
   const { selectedCompanyId, companyFilter } = useCompany();
 
   async function load() {
-    try {
-      const [txns, ps] = await Promise.all([
-        // Explicit take — the backend defaults to a 200-row cap even with a date range,
-        // which silently drops the oldest rows in any period with more than 200 entries.
-        api.getTransactionsByType(cfg.txnType, { from: filterFrom, to: filterTo, companyId: companyFilter ?? undefined, take: 10000 }),
-        api.getParties(),
-      ]);
+    // Settled independently — a slow/failing transactions fetch (large date range, huge
+    // tenant history) must never block the party list from loading, since Add Sale's
+    // party picker depends on `parties` regardless of whether the txn list loaded.
+    const [txnsResult, partiesResult] = await Promise.allSettled([
+      // Explicit take — the backend defaults to a 200-row cap even with a date range,
+      // which silently drops the oldest rows in any period with more than 200 entries.
+      api.getTransactionsByType(cfg.txnType, { from: filterFrom, to: filterTo, companyId: companyFilter ?? undefined, take: 10000 }),
+      api.getParties({ companyId: companyFilter ?? undefined }),
+    ]);
+    const ps = partiesResult.status === "fulfilled" ? partiesResult.value : [];
+    setParties(ps);
+    if (txnsResult.status === "fulfilled") {
       const map = Object.fromEntries(ps.map((p: Party) => [p.id, p]));
-      setRows(txns.map((t) => ({ ...t, partyName: map[t.partyId]?.name ?? "Unknown" })));
-      setParties(ps);
-    } catch { /* offline */ }
+      setRows(txnsResult.value.map((t) => ({ ...t, partyName: map[t.partyId]?.name ?? "Unknown" })));
+    }
   }
 
   useEffect(() => {
@@ -247,6 +251,14 @@ export function SaleTxnScreen({ activeKey, isLocked = false, onLockedAction }: P
 
   function handleAdd() {
     if (isLocked) { onLockedAction?.(); return; }
+    // A new transaction can only belong to exactly one Company (see CompanyContext), but
+    // the topbar filter defaults to "All Companies" (selectedCompanyId = null) on every
+    // fresh session. Without this guard, the item/party pickers below silently fall back
+    // to an unscoped `companyId: undefined` query and leak every company's data together.
+    if (!selectedCompanyId) {
+      alert("Select a specific company from the top bar before adding a new entry.");
+      return;
+    }
     setEditRow(null);
     setShowForm(true);
   }
@@ -1016,6 +1028,90 @@ function TxnForm({ cfg, parties, initialRow, existingCount, onClose, onSaved }: 
     return [emptyRow(), emptyRow()];
   });
 
+  // Imported historical invoices store qty in the item's BASE unit always, even when the
+  // original sale was in its secondaryUnit (e.g. "1 Box" of a Carton-tracked item is
+  // stored as qty=0.0277=1/36) — this is deliberate (see import-vyapar-backup.js), needed
+  // so reports.service.ts's Stock Value calculation stays correct. Left as-is, this shows
+  // as an unreadable fraction here. Convert for DISPLAY ONLY: look up each row's catalog
+  // item to get secondaryUnit/conversionRate, and if the stored qty looks like a whole
+  // secondaryUnit count expressed as a base-unit fraction, show it that way — qty/rate
+  // stay in base-unit terms in `lineItems` itself the whole time; only the rendered
+  // input values and the parsing of what the user types are converted, at the boundary.
+  const [catalogByName, setCatalogByName] = useState<Record<string, Item>>({});
+  const [secondaryDisplay, setSecondaryDisplay] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    const names = Array.from(new Set(lineItems.map((i) => i.name.trim().toLowerCase()).filter(Boolean)));
+    const missing = names.filter((n) => !(n in catalogByName));
+    if (!missing.length) return;
+    let cancelled = false;
+    Promise.all(missing.map((n) =>
+      api.searchItems({ companyId: selectedCompanyId ?? undefined, q: n, take: 5 })
+        .then((r) => r.items.find((it) => it.name.trim().toLowerCase() === n))
+        .catch(() => undefined)
+    )).then((results) => {
+      if (cancelled) return;
+      setCatalogByName((prev) => {
+        const next = { ...prev };
+        missing.forEach((n, i) => { next[n] = results[i] as any; });
+        return next;
+      });
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lineItems.map((i) => i.name).join("|")]);
+
+  function unitConversion(item: LineItem): { catalogItem: Item; rate: number } | null {
+    const c = catalogByName[item.name.trim().toLowerCase()];
+    if (!c || !c.secondaryUnit || !c.conversionRate) return null;
+    const rate = Number(c.conversionRate);
+    if (!rate || Number.isNaN(rate)) return null;
+    return { catalogItem: c, rate };
+  }
+
+  // Default a row to secondary-unit display the first time its catalog info arrives, if
+  // the stored qty looks like exactly N secondaryUnits expressed as a base-unit fraction
+  // (e.g. 0.0277 * 36 = 0.997 ≈ 1) — never overrides a choice the user already made.
+  useEffect(() => {
+    setSecondaryDisplay((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const item of lineItems) {
+        if (item.id in next) continue;
+        const conv = unitConversion(item);
+        if (!conv) continue;
+        const asSecondary = item.qty * conv.rate;
+        const looksWhole = item.qty > 0 && item.qty < 1 && Math.abs(asSecondary - Math.round(asSecondary)) < 0.01;
+        if (looksWhole) { next[item.id] = true; changed = true; }
+      }
+      return changed ? next : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lineItems, catalogByName]);
+
+  // Read: base-unit-stored qty/rate -> whatever unit this row currently displays.
+  // Rounded to 4dp for display only — item.qty * conv.rate on a value like 1/36 lands on
+  // 0.9999999999999998 in floating point, not a clean 1, which would look wrong on screen
+  // even though the underlying stored value (and every amount computed from it) is exact.
+  function displayQty(item: LineItem): number {
+    const conv = secondaryDisplay[item.id] ? unitConversion(item) : null;
+    return conv ? Math.round(item.qty * conv.rate * 10000) / 10000 : item.qty;
+  }
+  function displayRate(item: LineItem): number {
+    const conv = secondaryDisplay[item.id] ? unitConversion(item) : null;
+    return conv ? Math.round((item.rate / conv.rate) * 10000) / 10000 : item.rate;
+  }
+  // Write: whatever the user typed in the currently-displayed unit -> base-unit terms,
+  // before it ever reaches `lineItems`/updateItem.
+  function setDisplayQty(item: LineItem, value: number) {
+    const conv = secondaryDisplay[item.id] ? unitConversion(item) : null;
+    updateItem(item.id, "qty", conv ? value / conv.rate : value);
+  }
+  function setDisplayRate(item: LineItem, value: number) {
+    const conv = secondaryDisplay[item.id] ? unitConversion(item) : null;
+    updateItem(item.id, "rate", conv ? value * conv.rate : value);
+  }
+
   /* Auto-number */
   useEffect(() => {
     if (!initialRow) {
@@ -1416,15 +1512,34 @@ function TxnForm({ cfg, parties, initialRow, existingCount, onClose, onSaved }: 
                     })()}
                   </td>
                   <td style={tdStyle}><input style={cellInputStyle} type="number" value={item.mrp || ""} placeholder="0" onChange={(e) => updateItem(item.id, "mrp", parseFloat(e.target.value) || 0)} /></td>
-                  <td style={tdStyle}><input style={cellInputStyle} type="number" value={item.qty || ""} placeholder="0" onChange={(e) => updateItem(item.id, "qty", parseFloat(e.target.value) || 0)} /></td>
+                  <td style={tdStyle}><input style={cellInputStyle} type="number" value={displayQty(item) || ""} placeholder="0" onChange={(e) => setDisplayQty(item, parseFloat(e.target.value) || 0)} /></td>
                   <td style={tdStyle}>
-                    <select style={cellInputStyle} value={item.unit} onChange={(e) => updateItem(item.id, "unit", e.target.value)}>
-                      {UNITS.map((u) => <option key={u}>{u}</option>)}
-                    </select>
+                    {(() => {
+                      const conv = unitConversion(item);
+                      if (!conv) {
+                        return (
+                          <select style={cellInputStyle} value={item.unit} onChange={(e) => updateItem(item.id, "unit", e.target.value)}>
+                            {UNITS.map((u) => <option key={u}>{u}</option>)}
+                          </select>
+                        );
+                      }
+                      // Toggles which unit this row is displayed/edited in, not what's
+                      // stored — qty/rate stay in base-unit terms regardless.
+                      return (
+                        <select
+                          style={cellInputStyle}
+                          value={secondaryDisplay[item.id] ? conv.catalogItem.secondaryUnit! : item.unit}
+                          onChange={(e) => setSecondaryDisplay((prev) => ({ ...prev, [item.id]: e.target.value === conv.catalogItem.secondaryUnit }))}
+                        >
+                          <option value={item.unit}>{item.unit}</option>
+                          <option value={conv.catalogItem.secondaryUnit!}>{conv.catalogItem.secondaryUnit}</option>
+                        </select>
+                      );
+                    })()}
                   </td>
                   <td style={{ ...tdStyle, position: "relative" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
-                      <input style={cellInputStyle} type="number" value={item.rate || ""} placeholder="0" onChange={(e) => updateItem(item.id, "rate", parseFloat(e.target.value) || 0)} />
+                      <input style={cellInputStyle} type="number" value={displayRate(item) || ""} placeholder="0" onChange={(e) => setDisplayRate(item, parseFloat(e.target.value) || 0)} />
                       {showLast5 && selectedPartyId && item.name.trim() && (
                         <button type="button" data-price-btn title="Last 5 Sale Prices" style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, padding: 2, flexShrink: 0 }}
                           onClick={(e) => openLastPrices(item, e.currentTarget)}

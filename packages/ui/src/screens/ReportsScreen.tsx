@@ -1208,14 +1208,29 @@ function ItemReportByPartyReport() {
 
   function handleExport() {
     if (!data?.items?.length) return;
-    exportToExcel(
-      data.items.map((r: any) => ({
-        "Item Name": r.itemName,
-        "Sale Qty (Larger Unit)": r.saleQtyLarger, "Sale Qty (Smaller Unit)": r.saleQtySmaller, "Sale Amount": r.saleAmount,
-        "Purchase Qty (Larger Unit)": r.purchaseQtyLarger, "Purchase Qty (Smaller Unit)": r.purchaseQtySmaller, "Purchase Amount": r.purchaseAmount,
-      })),
-      "Item Report By Party", "Details",
-    );
+    // Matches the client's reference export exactly: plain "Sale Quantity"/"Purchase
+    // Quantity" numeric columns (no unit text, no separate larger/smaller split) plus a
+    // Total row. saleQtyLarger/purchaseQtyLarger arrive as formatted "N Unit" strings
+    // (e.g. "43 Bag") — take just the leading number.
+    const parseQtyNumber = (s: unknown): number | "" => {
+      const m = /^(-?[\d.]+)\s+/.exec(String(s ?? "").trim());
+      return m ? parseFloat(m[1]) : "";
+    };
+    const rows = data.items.map((r: any) => ({
+      "Item Name": r.itemName,
+      "Sale Quantity": parseQtyNumber(r.saleQtyLarger),
+      "Sale Amount": r.saleAmount,
+      "Purchase Quantity": parseQtyNumber(r.purchaseQtyLarger),
+      "Purchase Amount": r.purchaseAmount,
+    }));
+    const totalRow = {
+      "Item Name": "Total",
+      "Sale Quantity": rows.reduce((s: number, row: any) => s + (Number(row["Sale Quantity"]) || 0), 0),
+      "Sale Amount": data.items.reduce((s: number, r: any) => s + (r.saleAmount ?? 0), 0),
+      "Purchase Quantity": rows.reduce((s: number, row: any) => s + (Number(row["Purchase Quantity"]) || 0), 0),
+      "Purchase Amount": data.items.reduce((s: number, r: any) => s + (r.purchaseAmount ?? 0), 0),
+    };
+    exportToExcel([...rows, totalRow], "Item Report By Party", "Details");
   }
 
   return (
@@ -2264,7 +2279,10 @@ function PremiumGate() {
 // ─── Small shared UI ──────────────────────────────────────────────────────────
 
 // Builds and downloads an .xlsx file from plain row objects — sheetName kept short since
-// Excel rejects sheet names over 31 chars.
+// Excel rejects sheet names over 31 chars. Electron shows its native "Save As" dialog on
+// this download by default (no will-download handler overrides it) — that dialog, letting
+// the user pick the folder/filename each time, matches the reference Vyapar desktop app's
+// own export behavior and is itself the export's confirmation.
 function exportToExcel(rows: Record<string, unknown>[], filename: string, sheetName = "Report") {
   const sheet = XLSX.utils.json_to_sheet(rows);
   const book = XLSX.utils.book_new();

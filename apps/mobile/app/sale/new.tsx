@@ -135,6 +135,21 @@ export default function NewSaleScreen() {
     }
   }, [selectedCompanyId]);
 
+  // A tenant with more than one company but nothing picked yet (companies.length > 1,
+  // selectedCompanyId still null) leaves the item/party pickers below unscoped for as
+  // long as the user is filling out the form — the save-time guard further down catches
+  // it before it's written, but by then the user has already been browsing every
+  // company's items and parties mixed together. Warn immediately on open instead, same
+  // as desktop's equivalent guard.
+  const companyGuardShown = useRef(false);
+  useEffect(() => {
+    if (isEdit || companyGuardShown.current) return;
+    if (!selectedCompanyId && companies.length > 1) {
+      companyGuardShown.current = true;
+      Alert.alert("Select a Company", "Pick a specific Company from the company switcher before adding a new sale — items and parties can't be scoped correctly under \"All Companies\".");
+    }
+  }, [isEdit, selectedCompanyId, companies.length]);
+
   // Which store this sale draws stock from — hidden entirely for single-store
   // companies, so a tenant that never added a second store sees no change at all.
   const { stores } = useStores(selectedCompanyId);

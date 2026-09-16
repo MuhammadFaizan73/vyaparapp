@@ -3,8 +3,10 @@ import { useFocusEffect } from "expo-router";
 import type { Party } from "@vyapar/api-client";
 import { api, getRole } from "./auth";
 import { registerShopGeoFences } from "./geoFenceTask";
+import { useSelectedCompany } from "./useSelectedCompany";
 
 export function useParties() {
+  const { companyFilter } = useSelectedCompany();
   const [parties, setParties] = useState<Party[]>([]);
   const [loading, setLoading] = useState(true);
   const [todayPartyIds, setTodayPartyIds] = useState<Set<string>>(new Set());
@@ -21,7 +23,7 @@ export function useParties() {
       if (userIsSalesman) {
         // Salesman: load only their assigned parties
         const [allParties, assignments] = await Promise.all([
-          api.getParties(),
+          api.getParties({ companyId: companyFilter ?? undefined }),
           api.getMyAssignments(),
         ]);
 
@@ -47,8 +49,9 @@ export function useParties() {
         const ok = await registerShopGeoFences(geoParties);
         console.log("[GeoFence] Registration result:", ok);
       } else {
-        // Owner/admin: load all parties
-        const data = await api.getParties();
+        // Owner/admin: load parties for the active company filter ("All Companies" = null
+        // still returns everyone, same as desktop's PartiesScreen).
+        const data = await api.getParties({ companyId: companyFilter ?? undefined });
         setParties(data);
         setTodayPartyIds(new Set());
       }
@@ -58,7 +61,7 @@ export function useParties() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [companyFilter]);
 
   useFocusEffect(useCallback(() => { void load(); }, [load]));
 
