@@ -1355,7 +1355,7 @@ function StockSummaryReport({ onDataLoaded }: { onDataLoaded?: (rows: ExportRow[
       </View>
       {data?.total && (
         <View style={{ flexDirection: "row", gap: 8, marginHorizontal: 16, marginVertical: 12 }}>
-          <SummaryCard label="Total Qty"   value={String(data.total.stockQty ?? 0)} />
+          <SummaryCard label="Total Qty"   value={String(Math.round((data.total.stockQty ?? 0) * 100) / 100)} />
           <SummaryCard label="Total Value" value={rs(data.total.stockValue ?? 0)} />
         </View>
       )}

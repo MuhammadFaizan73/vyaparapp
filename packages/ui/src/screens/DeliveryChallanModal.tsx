@@ -118,7 +118,7 @@ export function DeliveryChallanModal({ sale, invoiceNumber, party, onClose }: Pr
                 <tr className="dc-tr dc-tr--total">
                   <td className="dc-td dc-td--num" />
                   <td className="dc-td"><strong>Total</strong></td>
-                  <td className="dc-td dc-td--num"><strong>{lineItems.length > 0 ? totalQty : 1}</strong></td>
+                  <td className="dc-td dc-td--num"><strong>{lineItems.length > 0 ? (Math.round(totalQty * 100) / 100) : 1}</strong></td>
                   <td className="dc-td" />
                 </tr>
               </tbody>

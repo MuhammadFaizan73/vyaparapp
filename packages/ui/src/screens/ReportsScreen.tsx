@@ -1179,7 +1179,7 @@ function StockSummaryReport() {
                 {data.total && (
                   <tfoot><tr>
                     <td colSpan={4}>Total</td>
-                    <td className={`rpt-num ${(data.total.stockQty ?? 0) < 0 ? "rpt-red" : ""}`}>{data.total.stockQty}</td>
+                    <td className={`rpt-num ${(data.total.stockQty ?? 0) < 0 ? "rpt-red" : ""}`}>{Math.round((data.total.stockQty ?? 0) * 100) / 100}</td>
                     <td className="rpt-num">{rs(data.total.stockValue ?? 0)}</td>
                   </tr></tfoot>
                 )}
@@ -1225,10 +1225,10 @@ function ItemReportByPartyReport() {
     }));
     const totalRow = {
       "Item Name": "Total",
-      "Sale Quantity": rows.reduce((s: number, row: any) => s + (Number(row["Sale Quantity"]) || 0), 0),
-      "Sale Amount": data.items.reduce((s: number, r: any) => s + (r.saleAmount ?? 0), 0),
-      "Purchase Quantity": rows.reduce((s: number, row: any) => s + (Number(row["Purchase Quantity"]) || 0), 0),
-      "Purchase Amount": data.items.reduce((s: number, r: any) => s + (r.purchaseAmount ?? 0), 0),
+      "Sale Quantity": Math.round(rows.reduce((s: number, row: any) => s + (Number(row["Sale Quantity"]) || 0), 0) * 100) / 100,
+      "Sale Amount": Math.round(data.items.reduce((s: number, r: any) => s + (r.saleAmount ?? 0), 0) * 100) / 100,
+      "Purchase Quantity": Math.round(rows.reduce((s: number, row: any) => s + (Number(row["Purchase Quantity"]) || 0), 0) * 100) / 100,
+      "Purchase Amount": Math.round(data.items.reduce((s: number, r: any) => s + (r.purchaseAmount ?? 0), 0) * 100) / 100,
     };
     exportToExcel([...rows, totalRow], "Item Report By Party", "Details");
   }
@@ -1528,12 +1528,12 @@ function StockDetailReport() {
                 {data.total && (
                   <tfoot><tr>
                     <td>Total</td>
-                    <td className="rpt-num">{data.total.beginningQty}</td>
-                    <td className="rpt-num">{data.total.qtyIn}</td>
+                    <td className="rpt-num">{Math.round((data.total.beginningQty ?? 0) * 100) / 100}</td>
+                    <td className="rpt-num">{Math.round((data.total.qtyIn ?? 0) * 100) / 100}</td>
                     <td className="rpt-num">{rs(data.total.purchaseAmount)}</td>
-                    <td className="rpt-num">{data.total.qtyOut}</td>
+                    <td className="rpt-num">{Math.round((data.total.qtyOut ?? 0) * 100) / 100}</td>
                     <td className="rpt-num">{rs(data.total.saleAmount)}</td>
-                    <td className="rpt-num">{data.total.closingQty}</td>
+                    <td className="rpt-num">{Math.round((data.total.closingQty ?? 0) * 100) / 100}</td>
                   </tr></tfoot>
                 )}
               </table>
@@ -2090,7 +2090,7 @@ function ExpenseItemReport() {
               </table>
             )}
             <div className="rpt-footer-bar">
-              <span>Total Quantity: {data.totalQty ?? 0}</span>
+              <span>Total Quantity: {Math.round((data.totalQty ?? 0) * 100) / 100}</span>
               <span className="rpt-red">Total Amount: {rs(data.totalAmount ?? 0)}</span>
             </div>
           </>
@@ -2218,7 +2218,7 @@ function SalePurchaseOrderItemsReport() {
                 {data.total && (
                   <tfoot><tr>
                     <td>Total</td>
-                    <td className="rpt-num">{data.total.qty}</td>
+                    <td className="rpt-num">{Math.round((data.total.qty ?? 0) * 100) / 100}</td>
                     <td className="rpt-num">{rs(data.total.amount)}</td>
                   </tr></tfoot>
                 )}

@@ -1961,7 +1961,7 @@ export function NewSaleForm({
               <div className="lsf-table-footer">
                 <button type="button" className="lsf-add-row-btn" onClick={addRow}>+ Add Row</button>
                 <span className="lsf-subtotal-lbl">Sub Total</span>
-                <span className="lsf-subtotal-val">{subtotal > 0 ? subtotal : ""}</span>
+                <span className="lsf-subtotal-val">{subtotal > 0 ? fmt(subtotal) : ""}</span>
               </div>
             </div>
 
@@ -2085,7 +2085,7 @@ export function NewSaleForm({
             {/* Total bar */}
             <div className="lsf-total-bar">
               <span className="lsf-total-bar__lbl">Total Amount (Rs)</span>
-              <span className="lsf-total-bar__val">{total}</span>
+              <span className="lsf-total-bar__val">{fmt(total)}</span>
             </div>
           </div>
 
@@ -2144,7 +2144,7 @@ export function NewSaleForm({
                   ))}
                   <tr className="inv-tr-total">
                     <td className="inv-td" colSpan={3}><strong>Total</strong></td>
-                    <td className="inv-td inv-td--num"><strong>{totalQty}</strong></td>
+                    <td className="inv-td inv-td--num"><strong>{Math.round(totalQty * 100) / 100}</strong></td>
                     <td className="inv-td" colSpan={3} />
                   </tr>
                 </tbody>
@@ -2539,7 +2539,7 @@ export function NewSaleForm({
               <tr className="nsf-total-row">
                 <td className="nsf-total-lbl" colSpan={2}>TOTAL</td>
                 <td />
-                <td className="nsf-total-qty">{totalQty > 0 ? totalQty : "0"}</td>
+                <td className="nsf-total-qty">{totalQty > 0 ? (Math.round(totalQty * 100) / 100) : "0"}</td>
                 <td /><td /><td />
                 <td className="nsf-total-amt">{fmt(subtotal)}</td>
               </tr>

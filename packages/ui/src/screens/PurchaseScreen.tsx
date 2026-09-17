@@ -1146,7 +1146,7 @@ function PurchaseBillForm({
               <tr className="nsf-total-row">
                 <td className="nsf-total-lbl" colSpan={2}>TOTAL</td>
                 <td />
-                <td className="nsf-total-qty">{totalQty > 0 ? totalQty : "0"}</td>
+                <td className="nsf-total-qty">{totalQty > 0 ? (Math.round(totalQty * 100) / 100) : "0"}</td>
                 <td /><td />
                 <td className="nsf-total-amt">{fmt(subtotal)}</td>
               </tr>
@@ -1554,7 +1554,7 @@ function InvoicePreview({
                   <td className="prev-doc__td" colSpan={2} style={{ fontWeight: 700 }}>Total</td>
                   <td className="prev-doc__td" />
                   <td className="prev-doc__td" style={{ fontWeight: 700 }}>
-                    {validRows.reduce((s, i) => s + i.qty, 0)}
+                    {Math.round(validRows.reduce((s, i) => s + i.qty, 0) * 100) / 100}
                   </td>
                   <td className="prev-doc__td" />
                   <td className="prev-doc__td prev-doc__td--amt" style={{ fontWeight: 800 }}>
@@ -3129,7 +3129,7 @@ function DebitNoteForm({
             <tfoot>
               <tr className="nsf-total-row">
                 <td className="nsf-total-lbl" colSpan={2}>TOTAL</td>
-                <td /><td className="nsf-total-qty">{totalQty > 0 ? totalQty : "0"}</td>
+                <td /><td className="nsf-total-qty">{totalQty > 0 ? (Math.round(totalQty * 100) / 100) : "0"}</td>
                 <td /><td />
                 <td className="nsf-total-amt">{fmt(subtotal)}</td>
               </tr>
@@ -3434,7 +3434,7 @@ function PurchasePreviewModal({
                 <tr className="prev-total-row">
                   <td /><td><strong>Total</strong></td>
                   <td />
-                  <td style={{ textAlign: "right" }}><strong>{items.reduce((s, i) => s + i.qty, 0)}</strong></td>
+                  <td style={{ textAlign: "right" }}><strong>{Math.round(items.reduce((s, i) => s + i.qty, 0) * 100) / 100}</strong></td>
                   <td />
                   <td style={{ textAlign: "right" }}><strong>Rs {fmt(purchase.total)}</strong></td>
                 </tr>
@@ -4311,7 +4311,7 @@ function ExpenseForm({
             <tfoot>
               <tr className="nsf-total-row">
                 <td className="nsf-total-lbl" colSpan={2}>TOTAL</td>
-                <td className="nsf-total-qty">{lineItems.reduce((s, i) => s + (i.qty || 0), 0) || "0"}</td>
+                <td className="nsf-total-qty">{(Math.round(lineItems.reduce((s, i) => s + (i.qty || 0), 0) * 100) / 100) || "0"}</td>
                 <td />
                 <td className="nsf-total-amt">{fmt(subtotal)}</td>
               </tr>

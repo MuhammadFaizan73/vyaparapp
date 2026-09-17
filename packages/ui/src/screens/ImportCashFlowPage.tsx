@@ -294,8 +294,8 @@ export function ImportCashFlowPage({ onGoToParties }: Props) {
             <span className="impg-fields-hint__chip">{summary.ignoredNonPartyRows.toLocaleString()} non-party rows ignored</span>
             <span className="impg-fields-hint__chip">{summary.parties.length.toLocaleString()} unique parties</span>
             <span className="impg-fields-hint__chip">{summary.entries.length.toLocaleString()} entries</span>
-            <span className="impg-fields-hint__chip">Cash In: Rs {summary.cashInTotal.toLocaleString()}</span>
-            <span className="impg-fields-hint__chip">Cash Out: Rs {summary.cashOutTotal.toLocaleString()}</span>
+            <span className="impg-fields-hint__chip">Cash In: Rs {summary.cashInTotal.toFixed(2)}</span>
+            <span className="impg-fields-hint__chip">Cash Out: Rs {summary.cashOutTotal.toFixed(2)}</span>
             {summary.minDate && summary.maxDate && (
               <span className="impg-fields-hint__chip">
                 {new Date(summary.minDate).toLocaleDateString()} – {new Date(summary.maxDate).toLocaleDateString()}
@@ -320,10 +320,10 @@ export function ImportCashFlowPage({ onGoToParties }: Props) {
                   <tr key={p.partyName}>
                     <td>{p.partyName}</td>
                     <td>{p.cashInCount}</td>
-                    <td>{p.cashInTotal.toLocaleString()}</td>
+                    <td>{p.cashInTotal.toFixed(2)}</td>
                     <td>{p.cashOutCount}</td>
-                    <td>{p.cashOutTotal.toLocaleString()}</td>
-                    <td>{(p.cashInTotal - p.cashOutTotal).toLocaleString()}</td>
+                    <td>{p.cashOutTotal.toFixed(2)}</td>
+                    <td>{(p.cashInTotal - p.cashOutTotal).toFixed(2)}</td>
                   </tr>
                 ))}
               </tbody>

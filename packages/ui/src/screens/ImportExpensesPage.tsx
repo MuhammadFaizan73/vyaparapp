@@ -249,7 +249,7 @@ export function ImportExpensesPage({ onGoToExpenses }: Props) {
             <span className="impg-fields-hint__chip">{summary.totalRows.toLocaleString()} rows read</span>
             <span className="impg-fields-hint__chip">{summary.entries.length.toLocaleString()} expenses</span>
             <span className="impg-fields-hint__chip">{summary.perCategory.length.toLocaleString()} categories</span>
-            <span className="impg-fields-hint__chip">Total: Rs {summary.totalAmount.toLocaleString()}</span>
+            <span className="impg-fields-hint__chip">Total: Rs {summary.totalAmount.toFixed(2)}</span>
             {summary.minDate && summary.maxDate && (
               <span className="impg-fields-hint__chip">
                 {new Date(summary.minDate).toLocaleDateString()} – {new Date(summary.maxDate).toLocaleDateString()}
@@ -274,7 +274,7 @@ export function ImportExpensesPage({ onGoToExpenses }: Props) {
                   <tr key={c.category}>
                     <td>{c.category}</td>
                     <td>{c.count}</td>
-                    <td>{c.total.toLocaleString()}</td>
+                    <td>{c.total.toFixed(2)}</td>
                   </tr>
                 ))}
               </tbody>

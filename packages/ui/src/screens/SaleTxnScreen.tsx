@@ -1080,8 +1080,15 @@ function TxnForm({ cfg, parties, initialRow, existingCount, onClose, onSaved }: 
         if (item.id in next) continue;
         const conv = unitConversion(item);
         if (!conv) continue;
+        // Imported qty was rounded to a handful of decimals during import (e.g. 0.041
+        // instead of the exact 1/24 = 0.041666...), so scaling by a large conversionRate
+        // (24, 36, 50, 100...) can land up to ~0.05 away from the nearest whole secondary
+        // unit — a tight 0.01 tolerance missed real whole-unit sales entirely. Also drop
+        // the "qty < 1" restriction: a multi-carton sale (e.g. 2.041) is just as valid a
+        // whole-secondary-unit count (49 Bag) as a sub-1 one.
         const asSecondary = item.qty * conv.rate;
-        const looksWhole = item.qty > 0 && item.qty < 1 && Math.abs(asSecondary - Math.round(asSecondary)) < 0.01;
+        const rounded = Math.round(asSecondary);
+        const looksWhole = rounded > 0 && Math.abs(asSecondary - rounded) < 0.05;
         if (looksWhole) { next[item.id] = true; changed = true; }
       }
       return changed ? next : prev;
@@ -1095,7 +1102,14 @@ function TxnForm({ cfg, parties, initialRow, existingCount, onClose, onSaved }: 
   // even though the underlying stored value (and every amount computed from it) is exact.
   function displayQty(item: LineItem): number {
     const conv = secondaryDisplay[item.id] ? unitConversion(item) : null;
-    return conv ? Math.round(item.qty * conv.rate * 10000) / 10000 : item.qty;
+    if (!conv) return item.qty;
+    const asSecondary = item.qty * conv.rate;
+    const rounded = Math.round(asSecondary);
+    // Same "close enough to whole" tolerance as the auto-detect effect above — an
+    // imported qty rounded to a few decimals (0.041 instead of the exact 1/24) lands on
+    // 0.984 here, not a clean 1, unless snapped the same way that effect already decided
+    // this row really is a whole-secondary-unit sale.
+    return Math.abs(asSecondary - rounded) < 0.05 ? rounded : Math.round(asSecondary * 10000) / 10000;
   }
   function displayRate(item: LineItem): number {
     const conv = secondaryDisplay[item.id] ? unitConversion(item) : null;
@@ -1579,10 +1593,10 @@ function TxnForm({ cfg, parties, initialRow, existingCount, onClose, onSaved }: 
                     onClick={() => setLineItems((p) => [...p, emptyRow()])}>ADD ROW</button>
                 </td>
                 <td style={{ padding: "8px 10px", fontSize: 13, fontWeight: 600 }}>TOTAL</td>
-                <td style={{ padding: "8px 10px", fontSize: 13, fontWeight: 600 }}>{totalQty || 0}</td>
+                <td style={{ padding: "8px 10px", fontSize: 13, fontWeight: 600 }}>{(Math.round(totalQty * 100) / 100) || 0}</td>
                 <td />
                 <td />
-                <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: 600, color: "#374151" }}>{subtotal || 0}</td>
+                <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: 600, color: "#374151" }}>{(Math.round(subtotal * 100) / 100) || 0}</td>
                 <td />
               </tr>
             </tfoot>
@@ -1618,7 +1632,7 @@ function TxnForm({ cfg, parties, initialRow, existingCount, onClose, onSaved }: 
             </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <span style={{ fontSize: 14, fontWeight: 600 }}>Total</span>
-              <input style={{ width: 140, border: "1px solid #d1d5db", borderRadius: 4, padding: "6px 8px", fontSize: 14, fontWeight: 600, textAlign: "right" }} value={total || ""} readOnly />
+              <input style={{ width: 140, border: "1px solid #d1d5db", borderRadius: 4, padding: "6px 8px", fontSize: 14, fontWeight: 600, textAlign: "right" }} value={total ? total.toFixed(2) : ""} readOnly />
             </div>
           </div>
         </div>

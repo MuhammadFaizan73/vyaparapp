@@ -265,7 +265,7 @@ export function StockTransferScreen() {
                         >
                           <span style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>{i.name}</span>
                           <span style={{ fontSize: 12.5, fontWeight: 700, color: available > 0 ? "#16a34a" : available < 0 ? "#ef4444" : "#374151" }}>
-                            Available: {available}
+                            Available: {Math.round(available * 100) / 100}
                           </span>
                         </button>
                       );

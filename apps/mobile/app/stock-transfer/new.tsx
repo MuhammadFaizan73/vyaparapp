@@ -183,7 +183,7 @@ export default function NewStockTransferScreen() {
               {matches.map((it) => (
                 <TouchableOpacity key={it.id} style={styles.resultRow} onPress={() => addItem(it)}>
                   <Text style={styles.resultName}>{it.name}</Text>
-                  <Text style={styles.resultStock}>Avail: {availableAt(it.id, fromStoreId) - pendingQtyFor(it.id)}</Text>
+                  <Text style={styles.resultStock}>Avail: {Math.round((availableAt(it.id, fromStoreId) - pendingQtyFor(it.id)) * 100) / 100}</Text>
                 </TouchableOpacity>
               ))}
             </View>

@@ -583,7 +583,7 @@ export function InvoicePaper({
             <tr className="sinv__tr sinv__tr--total">
               <td className="sinv__td" colSpan={2}><strong>Total</strong></td>
               <td className="sinv__td" />
-              <td className="sinv__td sinv__td--r"><strong>{totalQty || 1}</strong></td>
+              <td className="sinv__td sinv__td--r"><strong>{(Math.round(totalQty * 100) / 100) || 1}</strong></td>
             </tr>
           </tbody>
         </table>
@@ -679,7 +679,7 @@ export function InvoicePaper({
             <tr className="sinv__tr sinv__tr--total">
               <td className="sinv__td" colSpan={2}><strong>Total</strong></td>
               <td className="sinv__td" />
-              <td className="sinv__td sinv__td--r"><strong>{totalQty || 1}</strong></td>
+              <td className="sinv__td sinv__td--r"><strong>{(Math.round(totalQty * 100) / 100) || 1}</strong></td>
               <td className="sinv__td" />
               <td className="sinv__td sinv__td--r"><strong>Rs {fmt(totalAmt)}</strong></td>
             </tr>
@@ -779,7 +779,7 @@ export function InvoicePaper({
             <tr className="sinv__tr sinv__tr--total">
               <td className="sinv__td" colSpan={2}><strong>Total</strong></td>
               <td className="sinv__td" />
-              <td className="sinv__td sinv__td--r"><strong>{totalQty || 1}</strong></td>
+              <td className="sinv__td sinv__td--r"><strong>{(Math.round(totalQty * 100) / 100) || 1}</strong></td>
               <td className="sinv__td" />
               <td className="sinv__td sinv__td--r"><strong>Rs {fmt(totalAmt)}</strong></td>
             </tr>
@@ -927,7 +927,7 @@ export function InvoicePaper({
             <tr className="sinv__tr sinv__tr--total" style={tc.colorTableHead ? { background: color, color: fg } : {}}>
               <td className="sinv__td" colSpan={2}><strong>Total</strong></td>
               <td className="sinv__td" />
-              <td className="sinv__td sinv__td--r"><strong>{lineItems.reduce((s, i) => s + i.qty, 0) || 1}</strong></td>
+              <td className="sinv__td sinv__td--r"><strong>{(Math.round(lineItems.reduce((s, i) => s + i.qty, 0) * 100) / 100) || 1}</strong></td>
               <td className="sinv__td" colSpan={3} />
             </tr>
           </tbody>
@@ -1028,7 +1028,7 @@ export function InvoicePaper({
           <tr className="sinv__tr sinv__tr--total">
             <td className="sinv__td" colSpan={2}><strong>Total</strong></td>
             <td className="sinv__td" />
-            <td className="sinv__td sinv__td--r"><strong>{lineItems.reduce((s, i) => s + i.qty, 0) || 1}</strong></td>
+            <td className="sinv__td sinv__td--r"><strong>{(Math.round(lineItems.reduce((s, i) => s + i.qty, 0) * 100) / 100) || 1}</strong></td>
             <td className="sinv__td" colSpan={3} />
           </tr>
         </tbody>
