@@ -99,7 +99,7 @@ function todayString() {
 export default function NewSaleScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { parties, loading: partiesLoading } = useParties();
+  const { parties, loading: partiesLoading, reload: reloadParties } = useParties();
   const params = useLocalSearchParams<{
     fromDeliveryNoteId?: string;
     prefillPartyName?: string;
@@ -847,7 +847,11 @@ export default function NewSaleScreen() {
             <TouchableOpacity
               style={styles.outlinedField}
               activeOpacity={0.7}
-              onPress={() => { setPartySearch(customer); setShowParties(true); }}
+              // useParties()'s useFocusEffect is meant to refetch whenever this screen
+              // regains focus (e.g. coming back from "Add Party"), but a party created
+              // there and saved moments ago still didn't show up here — force a fresh
+              // fetch right when the picker opens instead of trusting that refetch alone.
+              onPress={() => { setPartySearch(customer); setShowParties(true); void reloadParties(); }}
             >
               <Text style={styles.outlinedLabel}>Customer *</Text>
               <Text style={[styles.outlinedInput, !customer && { color: colors.textLight }]}>
