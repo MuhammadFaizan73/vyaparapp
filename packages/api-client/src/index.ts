@@ -122,6 +122,15 @@ export class VyaparApiClient {
       timeout: 10000,
       headers: {
         "bypass-tunnel-reminder": "true",
+        // Without this, iOS's URLSession (which RN's networking sits on top of) can
+        // serve a stale cached GET response for a URL it already fetched — a party
+        // created via POST /parties, then immediately re-fetched via GET /parties?
+        // companyId=..., could come back from the on-device cache without the new row,
+        // with no way to tell from the client that it happened. Every request here is
+        // either a live business record or an auth-scoped read, never something safe to
+        // cache silently.
+        "Cache-Control": "no-cache",
+        Pragma: "no-cache",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
     });
