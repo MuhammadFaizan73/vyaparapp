@@ -99,7 +99,7 @@ function todayString() {
 export default function NewSaleScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { parties, loading: partiesLoading, reload: reloadParties } = useParties();
+  const { parties, loading: partiesLoading, error: partiesError, reload: reloadParties } = useParties();
   const params = useLocalSearchParams<{
     fromDeliveryNoteId?: string;
     prefillPartyName?: string;
@@ -1259,6 +1259,13 @@ export default function NewSaleScreen() {
             entirely, making it look like the picker had crashed or closed. */}
         <View style={{ backgroundColor: "#fff", borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, gap: 4, height: "75%" }}>
           <Text style={{ fontSize: 16, fontWeight: "700", color: colors.text, marginBottom: 8 }}>Select Customer</Text>
+          {/* A refresh failing (e.g. the party list timing out on a slow connection) used
+              to leave whatever was already loaded in place with no indication anything
+              went wrong — a party added moments ago just looked "missing" with no clue
+              why. This makes that failure visible instead of silent. */}
+          {partiesError && (
+            <Text style={{ fontSize: 12, color: "#dc2626", marginBottom: 4 }}>{partiesError}</Text>
+          )}
           <View style={[styles.outlinedField, { marginBottom: 8 }]}>
             <TextInput
               style={styles.outlinedInput}

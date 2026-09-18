@@ -11,6 +11,9 @@ export function useParties() {
   const [loading, setLoading] = useState(true);
   const [todayPartyIds, setTodayPartyIds] = useState<Set<string>>(new Set());
   const [isSalesman, setIsSalesman] = useState(false);
+  // Surfaced so a screen can show "couldn't refresh" instead of silently keeping a stale
+  // list with no indication anything went wrong — see the catch block below.
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -55,14 +58,23 @@ export function useParties() {
         setParties(data);
         setTodayPartyIds(new Set());
       }
-    } catch {
+      setError(null);
+    } catch (err: any) {
       // A transient network hiccup on a re-fetch (e.g. re-focusing the screen, or
       // companyFilter resolving to a new value moments after the party list already
       // loaded once) used to wipe an already-good `parties` list down to empty — making
       // the picker look like every customer had vanished, when really just this one
       // re-fetch failed. Keep whatever was already loaded; only a genuinely empty first
-      // load ever shows as empty.
+      // load ever shows as empty. But don't stay silent about it either — on a slow
+      // connection this request can time out well after the payload's grown past a
+      // couple hundred parties, and a party added moments ago then looked "missing" with
+      // no indication the refresh itself had failed. Surface it instead.
       setTodayPartyIds(new Set());
+      setError(
+        err?.code === "ECONNABORTED" || err?.message?.includes("timeout")
+          ? "Couldn't refresh — connection too slow. Showing the last loaded list."
+          : "Couldn't refresh customer list. Showing the last loaded list."
+      );
     } finally {
       setLoading(false);
     }
@@ -70,5 +82,5 @@ export function useParties() {
 
   useFocusEffect(useCallback(() => { void load(); }, [load]));
 
-  return { parties, loading, reload: load, todayPartyIds, isSalesman };
+  return { parties, loading, error, reload: load, todayPartyIds, isSalesman };
 }

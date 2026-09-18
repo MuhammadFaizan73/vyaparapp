@@ -119,7 +119,12 @@ export class VyaparApiClient {
   constructor(baseURL: string, token?: string) {
     this.http = axios.create({
       baseURL,
-      timeout: 10000,
+      // A tenant's full party/item list can be a genuinely large JSON payload (900+ rows),
+      // and on a slow mobile connection (observed as low as ~1 KB/s in the field) that alone
+      // can take well past 10s to download — the request would time out and reject before
+      // finishing, silently leaving whatever data was already loaded in place with no visible
+      // error, which looked identical to "the new record never showed up."
+      timeout: 30000,
       headers: {
         "bypass-tunnel-reminder": "true",
         // Without this, iOS's URLSession (which RN's networking sits on top of) can
