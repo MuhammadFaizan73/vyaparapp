@@ -27,10 +27,13 @@ export class PartyAssignmentsController {
     return this.service.findAll(req.tenantId);
   }
 
-  /** Admin/owner only — create (or upsert) an assignment */
+  /** Admin/owner — assign any member to any party. A salesman may also self-assign a
+   *  party they just created (mobile's Add Party flow does this immediately after
+   *  saving, so a party a salesman creates shows up in their own picker right away) —
+   *  but never on another member's behalf. */
   @Post()
   create(@Req() req: AuthedRequest, @Body() dto: CreateAssignmentDto) {
-    if (req.memberId) throw new ForbiddenException("Admin only");
+    if (req.memberId && req.memberId !== dto.memberId) throw new ForbiddenException("Admin only");
     return this.service.create(req.tenantId, dto);
   }
 
