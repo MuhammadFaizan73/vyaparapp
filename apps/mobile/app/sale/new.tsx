@@ -1247,7 +1247,13 @@ export default function NewSaleScreen() {
       {/* ── Customer Picker Modal ── */}
       <Modal visible={showParties} transparent animationType="slide" onRequestClose={() => setShowParties(false)}>
         <TouchableOpacity style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)" }} activeOpacity={1} onPress={() => setShowParties(false)} />
-        <View style={{ backgroundColor: "#fff", borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, gap: 4, maxHeight: "75%" }}>
+        {/* A fixed `height` here (not `maxHeight`) keeps the sheet occupying the same screen
+            real estate whether the search matches 900 parties or zero — with `maxHeight`,
+            typing a query with no matches shrank the sheet's content down to almost nothing
+            (just the title/search box), and on iOS that sudden height change combined with
+            the keyboard already being up pushed the whole sheet out of the visible area
+            entirely, making it look like the picker had crashed or closed. */}
+        <View style={{ backgroundColor: "#fff", borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, gap: 4, height: "75%" }}>
           <Text style={{ fontSize: 16, fontWeight: "700", color: colors.text, marginBottom: 8 }}>Select Customer</Text>
           <View style={[styles.outlinedField, { marginBottom: 8 }]}>
             <TextInput
@@ -1264,6 +1270,7 @@ export default function NewSaleScreen() {
               which is exactly what made opening this sheet visibly slow. FlatList only
               renders what's near the visible window. */}
           <FlatList
+            style={{ flex: 1 }}
             data={filteredParties}
             keyExtractor={(p) => p.id}
             keyboardShouldPersistTaps="handled"
