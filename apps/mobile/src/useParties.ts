@@ -56,7 +56,12 @@ export function useParties() {
         setTodayPartyIds(new Set());
       }
     } catch {
-      setParties([]);
+      // A transient network hiccup on a re-fetch (e.g. re-focusing the screen, or
+      // companyFilter resolving to a new value moments after the party list already
+      // loaded once) used to wipe an already-good `parties` list down to empty — making
+      // the picker look like every customer had vanished, when really just this one
+      // re-fetch failed. Keep whatever was already loaded; only a genuinely empty first
+      // load ever shows as empty.
       setTodayPartyIds(new Set());
     } finally {
       setLoading(false);

@@ -99,7 +99,7 @@ function todayString() {
 export default function NewSaleScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { parties } = useParties();
+  const { parties, loading: partiesLoading } = useParties();
   const params = useLocalSearchParams<{
     fromDeliveryNoteId?: string;
     prefillPartyName?: string;
@@ -1269,6 +1269,19 @@ export default function NewSaleScreen() {
             keyboardShouldPersistTaps="handled"
             initialNumToRender={16}
             windowSize={5}
+            // Without this, a party list that's still fetching (large tenants can take a
+            // few seconds) rendered as a blank, empty-looking sheet — indistinguishable
+            // from "no customers exist" and easy to mistake for a broken picker.
+            ListEmptyComponent={
+              partiesLoading ? (
+                <View style={{ paddingVertical: 24, alignItems: "center" }}>
+                  <ActivityIndicator color={colors.primary} />
+                  <Text style={{ marginTop: 8, color: colors.textLight, fontSize: 13 }}>Loading customers…</Text>
+                </View>
+              ) : (
+                <Text style={{ textAlign: "center", color: colors.textLight, fontSize: 13, paddingVertical: 24 }}>No customers found</Text>
+              )
+            }
             ListHeaderComponent={
               <>
                 <TouchableOpacity
