@@ -29,6 +29,17 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.setGlobalPrefix("api");
   app.enableCors();
+  // Whether a client's HTTP cache is allowed to store/reuse a response is decided by
+  // THIS server's response headers, not by anything the request sends — without an
+  // explicit "no-store" here, Android's OkHttp (the networking stack React Native sits
+  // on by default) can cache a GET response using its own heuristics regardless of any
+  // Cache-Control the client sent, so a party created via POST then re-fetched via GET
+  // kept coming back from the on-device cache without the new row. Every route here is
+  // either a live business record or an auth-scoped read — never something safe to cache.
+  app.use((_req: any, res: any, next: any) => {
+    res.setHeader("Cache-Control", "no-store");
+    next();
+  });
   app.use(json({ limit: "25mb" }));
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.useGlobalFilters(new AllExceptionsFilter());

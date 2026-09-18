@@ -127,14 +127,15 @@ export class VyaparApiClient {
       timeout: 30000,
       headers: {
         "bypass-tunnel-reminder": "true",
-        // Without this, iOS's URLSession (which RN's networking sits on top of) can
-        // serve a stale cached GET response for a URL it already fetched — a party
-        // created via POST /parties, then immediately re-fetched via GET /parties?
-        // companyId=..., could come back from the on-device cache without the new row,
-        // with no way to tell from the client that it happened. Every request here is
-        // either a live business record or an auth-scoped read, never something safe to
-        // cache silently.
-        "Cache-Control": "no-cache",
+        // "no-cache" (despite the name) still permits a cache to serve a stored response
+        // once it's revalidated with the origin — it just forces that revalidation first.
+        // If the origin answers that revalidation with a 304 (or the on-device HTTP cache
+        // short-circuits it), the client still renders the OLD cached body. That's exactly
+        // what was happening: a party created via POST /parties, then re-fetched via GET
+        // /parties?companyId=..., kept coming back without the new row. "no-store" is the
+        // directive that actually forbids storing/reusing the response at all, on iOS's
+        // URLSession and Android's OkHttp alike.
+        "Cache-Control": "no-store",
         Pragma: "no-cache",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },

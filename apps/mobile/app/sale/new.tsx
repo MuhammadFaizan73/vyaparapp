@@ -1266,6 +1266,12 @@ export default function NewSaleScreen() {
           {partiesError && (
             <Text style={{ fontSize: 12, color: "#dc2626", marginBottom: 4 }}>{partiesError}</Text>
           )}
+          {/* Temporary diagnostic (2nd pass) — pins down whether the record is even in
+              `parties` (the raw fetch) at all, vs. present there but excluded by the
+              partyType/search filter. Remove once the real cause is confirmed. */}
+          <Text style={{ fontSize: 10, color: "#ef4444" }}>
+            DEBUG — loaded: {parties.length} | has "Aaaa" raw: {String(parties.some((p) => p.name === "Aaaa"))} | partyType: {parties.find((p) => p.name === "Aaaa")?.partyType ?? "not found"}
+          </Text>
           <View style={[styles.outlinedField, { marginBottom: 8 }]}>
             <TextInput
               style={styles.outlinedInput}
