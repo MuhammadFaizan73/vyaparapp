@@ -9,7 +9,9 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import { colors } from "../../src/theme";
-import { api } from "../../src/auth";
+import { api, getPermissions, getMemberId } from "../../src/auth";
+import { canEditSale } from "../../src/permissions";
+import { setHandoffTxn } from "../../src/txnHandoff";
 import { DateRangeFilterBar, type DateRange, getRange, isWithinRange } from "../../src/components/DateRangeFilter";
 import { SalesmanFilter } from "../../src/components/SalesmanFilter";
 import type { Transaction, Party } from "@vyapar/api-client";
@@ -56,6 +58,8 @@ export default function PurchaseListScreen() {
   const [searchText, setSearchText] = useState("");
   const [shareTarget, setShareTarget] = useState<{ row: PurchaseRow; idx: number } | null>(null);
   const [menuTarget, setMenuTarget] = useState<{ row: PurchaseRow; idx: number } | null>(null);
+  const [permissions, setPermissions] = useState<string[] | null>(null);
+  const [memberId, setMemberId] = useState<string | null>(null);
 
   async function load() {
     try {
@@ -76,9 +80,16 @@ export default function PurchaseListScreen() {
   useFocusEffect(useCallback(() => {
     setLoading(true);
     load().finally(() => setLoading(false));
+    getPermissions().then(setPermissions);
+    getMemberId().then(setMemberId);
   }, []));
 
   async function onRefresh() { setRefreshing(true); await load(); setRefreshing(false); }
+
+  function handleEdit(row: PurchaseRow) {
+    setHandoffTxn(row);
+    router.push({ pathname: "/purchase/new", params: { editId: row.id } } as never);
+  }
 
   async function handlePrint(row: PurchaseRow, idx: number) {
     try { await Print.printAsync({ html: buildHtml(row, idx) }); }
@@ -256,16 +267,18 @@ export default function PurchaseListScreen() {
           <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setMenuTarget(null)} />
           <View style={[s.sheet, { paddingBottom: insets.bottom + 8 }]}>
             {[
-              { label: "Duplicate", icon: "copy-outline" as const },
-              { label: "Make Payment", icon: "cash-outline" as const },
-              { label: "Return / Debit Note", icon: "return-down-back-outline" as const },
-              { label: "Share as PDF", icon: "share-outline" as const },
-            ].map(({ label, icon }, i, arr) => (
+              { label: "Edit", icon: "create-outline" as const, show: !!menuTarget && canEditSale(menuTarget.row, permissions, memberId) },
+              { label: "Duplicate", icon: "copy-outline" as const, show: true },
+              { label: "Make Payment", icon: "cash-outline" as const, show: true },
+              { label: "Return / Debit Note", icon: "return-down-back-outline" as const, show: true },
+              { label: "Share as PDF", icon: "share-outline" as const, show: true },
+            ].filter((item) => item.show).map(({ label, icon }, i, arr) => (
               <TouchableOpacity key={label}
                 style={[s.menuRow, i === arr.length - 1 && { borderBottomWidth: 0 }]}
                 onPress={async () => {
                   const t = menuTarget; setMenuTarget(null);
-                  if (label === "Share as PDF" && t) await handleSharePdf(t.row, t.idx);
+                  if (label === "Edit" && t) handleEdit(t.row);
+                  else if (label === "Share as PDF" && t) await handleSharePdf(t.row, t.idx);
                   else Alert.alert(label, "Coming soon.");
                 }}>
                 <Ionicons name={icon} size={20} color={colors.text} />
