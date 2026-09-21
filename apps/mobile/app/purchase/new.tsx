@@ -3,7 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
   StyleSheet, KeyboardAvoidingView, Platform, Alert, Modal,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../src/theme";
@@ -13,6 +13,7 @@ import { useItems } from "../../src/useItems";
 import { useSelectedCompany } from "../../src/useSelectedCompany";
 import { useStores } from "../../src/useStores";
 import { CompanySwitcherBar } from "../../src/components/CompanySwitcher";
+import { takeHandoffTxn } from "../../src/txnHandoff";
 import type { TaxRate } from "@vyapar/api-client";
 
 // itemId: the real catalog Item.id, captured when picked from the catalog suggestion
@@ -159,6 +160,8 @@ function AddItemScreen({
 export default function NewPurchaseScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams<{ editId?: string }>();
+  const isEdit = Boolean(params.editId);
   const { parties } = useParties();
   const { items: catalog } = useItems();
   const { selectedCompanyId } = useSelectedCompany();
@@ -175,8 +178,9 @@ export default function NewPurchaseScreen() {
     api.listTaxRates().then(setTaxRates).catch(() => {});
   }, []);
 
-  const [billNo] = useState("1");
-  const [dateDisplay] = useState(todayStr());
+  const [billNo, setBillNo] = useState("1");
+  const [dateDisplay, setDateDisplay] = useState(todayStr());
+  const [dateIso, setDateIso] = useState<string | null>(null);
 
   const [supplier, setSupplier] = useState("");
   const [supplierId, setSupplierId] = useState<string | null>(null);
@@ -196,6 +200,62 @@ export default function NewPurchaseScreen() {
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [showAddItem, setShowAddItem] = useState(false);
+  const [loadingEdit, setLoadingEdit] = useState(isEdit);
+
+  // Load the existing purchase when opened via txn/[id].tsx's Edit action — mirrors
+  // sale/new.tsx's own editId handling. Deliberately not depending on `parties`/`catalog`
+  // so this only ever runs once per editId; a re-run when those finish loading later
+  // would wipe out edits the user already made.
+  useEffect(() => {
+    if (!params.editId) return;
+    const handed = takeHandoffTxn(params.editId);
+    const load = handed
+      ? Promise.resolve(handed)
+      : api.getTransaction(params.editId).catch(() => null);
+
+    load.then(async (txn) => {
+      if (!txn) { Alert.alert("Not found", "Could not load this purchase."); router.back(); return; }
+
+      let party = parties.find((p) => p.id === txn.partyId) ?? null;
+      if (!party) {
+        try { party = (await api.getParties()).find((p) => p.id === txn.partyId) ?? null; }
+        catch { /* fall through with whatever the handoff/notes already gave us */ }
+      }
+      setSupplier(party?.name ?? "");
+      setSupplierId(txn.partyId);
+      setSelectedParty(party);
+
+      setBillNo(txn.number ?? "1");
+      setDateIso(txn.date);
+      const d = new Date(txn.date);
+      setDateDisplay(`${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`);
+      if (txn.storeId) setStoreId(txn.storeId);
+
+      let parsedNotes: any = {};
+      try { parsedNotes = JSON.parse(txn.notes ?? "{}"); } catch { parsedNotes = {}; }
+      const loadedItems: ItemRow[] = Array.isArray(parsedNotes.items) ? parsedNotes.items.map((it: any) => ({
+        name: it.name ?? "",
+        itemId: it.itemId ?? undefined,
+        qty: Number(it.qty) || 0,
+        unit: it.unit ?? "Pcs",
+        mrp: it.mrp != null ? String(it.mrp) : "",
+        rate: Number(it.rate) || 0,
+      })) : [];
+      setItems(loadedItems);
+      setDiscountPct(parsedNotes.discountPct ?? "");
+      setDiscountRs(parsedNotes.discountRs ?? "");
+      setNote(typeof parsedNotes.note === "string" ? parsedNotes.note : "");
+
+      const paidNow = txn.total - txn.balance;
+      if (paidNow > 0) { setIsPaid(true); setPaidAmt(parsedNotes.paidAmt ?? String(paidNow)); }
+
+      setLoadingEdit(false);
+    }).catch(() => {
+      Alert.alert("Error", "Could not load this purchase.");
+      router.back();
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.editId]);
 
   const subtotal = items.reduce((s, i) => s + i.qty * i.rate, 0);
   const totalQty = items.reduce((s, i) => s + i.qty, 0);
@@ -234,20 +294,33 @@ export default function NewPurchaseScreen() {
     try {
       const party = parties.find((p) => p.id === supplierId) ?? parties.find((p) => p.name === supplier);
       if (!party) { Alert.alert("Select a valid supplier from the list"); setSaving(false); return; }
-      await api.createTransaction({
-        partyId: party.id,
-        type: "purchase",
-        number: billNo,
-        date: new Date().toISOString(),
-        total,
-        balance,
-        notes: JSON.stringify({ items, discountPct, discountRs, paidAmt, note }),
-        companyId: selectedCompanyId ?? undefined,
-        storeId: storeId || undefined,
-      });
-      if (saveAndNew) { router.replace("/purchase/new"); }
-      else { router.back(); }
-    } catch { Alert.alert("Error", "Could not save. Check your connection."); }
+      const notes = JSON.stringify({ items, discountPct, discountRs, paidAmt, note });
+      if (params.editId) {
+        await api.updateTransaction(params.editId, {
+          partyId: party.id,
+          date: dateIso ?? new Date().toISOString(),
+          total,
+          balance,
+          notes,
+          storeId: storeId || undefined,
+        });
+        router.back();
+      } else {
+        await api.createTransaction({
+          partyId: party.id,
+          type: "purchase",
+          number: billNo,
+          date: new Date().toISOString(),
+          total,
+          balance,
+          notes,
+          companyId: selectedCompanyId ?? undefined,
+          storeId: storeId || undefined,
+        });
+        if (saveAndNew) { router.replace("/purchase/new"); }
+        else { router.back(); }
+      }
+    } catch { Alert.alert("Error", `Could not ${params.editId ? "update" : "save"}. Check your connection.`); }
     finally { setSaving(false); }
   }
 
@@ -273,7 +346,7 @@ export default function NewPurchaseScreen() {
           <TouchableOpacity onPress={() => router.back()} hitSlop={8}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
-          <Text style={s.appBarTitle}>Purchase</Text>
+          <Text style={s.appBarTitle}>{isEdit ? "Edit Purchase" : "Purchase"}</Text>
           <TouchableOpacity hitSlop={8}>
             <Ionicons name="settings-outline" size={22} color={colors.textMuted} />
           </TouchableOpacity>
@@ -490,11 +563,13 @@ export default function NewPurchaseScreen() {
 
         {/* Footer */}
         <View style={[s.footer, { paddingBottom: insets.bottom + 8 }]}>
-          <TouchableOpacity style={s.saveNewBtn} onPress={() => handleSave(true)} disabled={saving}>
-            <Text style={s.saveNewTxt}>Save &amp; New</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={s.saveBtn} onPress={() => handleSave(false)} disabled={saving}>
-            <Text style={s.saveTxt}>{saving ? "Saving…" : "Save"}</Text>
+          {!isEdit && (
+            <TouchableOpacity style={s.saveNewBtn} onPress={() => handleSave(true)} disabled={saving || loadingEdit}>
+              <Text style={s.saveNewTxt}>Save &amp; New</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity style={s.saveBtn} onPress={() => handleSave(false)} disabled={saving || loadingEdit}>
+            <Text style={s.saveTxt}>{saving ? "Saving…" : isEdit ? "Update" : "Save"}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={s.moreBtn}>
             <Ionicons name="ellipsis-vertical" size={20} color={colors.textMuted} />
