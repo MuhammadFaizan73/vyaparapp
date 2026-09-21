@@ -124,7 +124,16 @@ export function CompanySwitcherBar({ skipTopInset = false }: { skipTopInset?: bo
                     <TouchableOpacity
                       key={d.id}
                       style={s.sheetRow}
-                      onPress={() => setView({ level: "distributor", distributor: d })}
+                      onPress={() => {
+                        // A Branch only exists as a required pass-through the schema
+                        // needs between Distributor and Company — when a distributor has
+                        // exactly one, skip straight to its companies instead of making
+                        // the user tap through a "Main"-style branch name that carries no
+                        // real grouping meaning for them.
+                        const bs = branchesOf(d.id);
+                        if (bs.length === 1) setView({ level: "branch", distributor: d, branch: bs[0] });
+                        else setView({ level: "distributor", distributor: d });
+                      }}
                     >
                       <Text style={s.sheetRowText}>{d.name}</Text>
                       <Ionicons name="chevron-forward" size={16} color="#94a3b8" />
@@ -171,20 +180,24 @@ export function CompanySwitcherBar({ skipTopInset = false }: { skipTopInset?: bo
                 </>
               )}
 
-              {view.level === "branch" && (
+              {view.level === "branch" && (() => {
+                // Same single-branch case as the root tap-through above: present as the
+                // distributor's own company list, no "Main"-style branch name anywhere.
+                const isOnlyBranch = branchesOf(view.distributor.id).length === 1;
+                return (
                 <>
                   <TouchableOpacity
                     style={s.sheetBack}
-                    onPress={() => setView({ level: "distributor", distributor: view.distributor })}
+                    onPress={() => setView(isOnlyBranch ? { level: "root" } : { level: "distributor", distributor: view.distributor })}
                   >
                     <Ionicons name="chevron-back" size={16} color="#64748b" />
-                    <Text style={s.sheetBackText}>{view.distributor.name}</Text>
+                    <Text style={s.sheetBackText}>{isOnlyBranch ? "All Distributors" : view.distributor.name}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={s.sheetRow}
                     onPress={() => pick(() => setSelectedBranchId(view.branch.id))}
                   >
-                    <Text style={s.sheetRowText}>All of {view.branch.name}</Text>
+                    <Text style={s.sheetRowText}>All of {isOnlyBranch ? view.distributor.name : view.branch.name}</Text>
                     {selectedBranchId === view.branch.id && !selectedCompanyId && (
                       <Ionicons name="checkmark" size={18} color={colors.primary} />
                     )}
@@ -200,7 +213,8 @@ export function CompanySwitcherBar({ skipTopInset = false }: { skipTopInset?: bo
                     </TouchableOpacity>
                   ))}
                 </>
-              )}
+                );
+              })()}
             </ScrollView>
           </View>
         </TouchableOpacity>

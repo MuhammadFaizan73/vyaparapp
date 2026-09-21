@@ -83,7 +83,16 @@ export function CompanyDropdown() {
                   key={d.id}
                   type="button"
                   className={`company-dropdown__item${selectedDistributorId === d.id && !selectedBranchId && !selectedCompanyId ? " company-dropdown__item--active" : ""}`}
-                  onClick={() => setView({ level: "distributor", distributor: d })}
+                  onClick={() => {
+                    // A Branch only exists as a required pass-through the schema needs
+                    // between Distributor and Company — when a distributor has exactly
+                    // one, skip straight to its companies instead of making the user
+                    // click through a "Main"-style branch name that carries no real
+                    // grouping meaning for them.
+                    const bs = branchesOf(d.id);
+                    if (bs.length === 1) setView({ level: "branch", distributor: d, branch: bs[0] });
+                    else setView({ level: "distributor", distributor: d });
+                  }}
                 >
                   <span>{d.name}</span>
                   <span className="company-dropdown__chevron">›</span>
@@ -161,17 +170,26 @@ export function CompanyDropdown() {
             </>
           )}
 
-          {view.level === "branch" && (
+          {view.level === "branch" && (() => {
+            // Same single-branch case as the root click-through above: when this is the
+            // only branch this distributor has, present it as the distributor's own
+            // company list — no "Main"-style branch name anywhere, back goes to root.
+            const isOnlyBranch = branchesOf(view.distributor.id).length === 1;
+            return (
             <>
-              <button type="button" className="company-dropdown__back" onClick={() => setView({ level: "distributor", distributor: view.distributor })}>
-                ‹ {view.distributor.name}
+              <button
+                type="button"
+                className="company-dropdown__back"
+                onClick={() => setView(isOnlyBranch ? { level: "root" } : { level: "distributor", distributor: view.distributor })}
+              >
+                ‹ {isOnlyBranch ? "All Distributors" : view.distributor.name}
               </button>
               <button
                 type="button"
                 className={`company-dropdown__item${selectedBranchId === view.branch.id && !selectedCompanyId ? " company-dropdown__item--active" : ""}`}
                 onClick={() => pick(() => setSelectedBranchId(view.branch.id))}
               >
-                All of {view.branch.name}
+                All of {isOnlyBranch ? view.distributor.name : view.branch.name}
               </button>
               <div className="company-dropdown__divider" />
 
@@ -198,16 +216,19 @@ export function CompanyDropdown() {
               >
                 + Add Company
               </button>
-              <button
-                type="button"
-                className="company-dropdown__edit"
-                style={{ padding: "6px 10px" }}
-                onClick={() => { setOpen(false); setEditingBranch({ branch: view.branch, distributorId: view.distributor.id }); }}
-              >
-                Edit {view.branch.name}
-              </button>
+              {!isOnlyBranch && (
+                <button
+                  type="button"
+                  className="company-dropdown__edit"
+                  style={{ padding: "6px 10px" }}
+                  onClick={() => { setOpen(false); setEditingBranch({ branch: view.branch, distributorId: view.distributor.id }); }}
+                >
+                  Edit {view.branch.name}
+                </button>
+              )}
             </>
-          )}
+            );
+          })()}
         </div>
       )}
 
