@@ -762,11 +762,20 @@ export class ReportsService {
   }
 
   // ── Item Report By Party ────────────────────────────────────────────────────
-  // Same shape as Party Report By Item, grouped the other way: per item, sale/purchase
-  // qty and amount attributed from each transaction's own line items (not the whole
-  // transaction total, since one invoice can cover several items).
+  // Per item, total sale/purchase qty and amount across every transaction's own line
+  // items (not the whole transaction total, since one invoice can cover several items).
+  // "By Party" here means an optional partyId narrows which party's transactions feed
+  // the totals — matching the reference app's own report exactly — not that each row is
+  // broken down by party; the output stays one row per item either way.
 
-  async getItemReportByParty(tenantId: string, from?: string, to?: string, companyId?: string, bookerId?: string) {
+  async getItemReportByParty(
+    tenantId: string,
+    from?: string,
+    to?: string,
+    companyId?: string,
+    bookerId?: string,
+    partyId?: string,
+  ) {
     const dateFilter = buildDateFilter(from, to);
 
     const [txns, items] = await Promise.all([
@@ -776,9 +785,9 @@ export class ReportsService {
           type: { in: ['sale', 'purchase', 'credit_note', 'debit_note'] },
           ...(dateFilter ? { date: dateFilter } : {}),
           ...(bookerId ? { bookerId } : {}),
+          ...(partyId ? { partyId } : {}),
           ...companyIdWhere(companyId),
         },
-        include: { party: true },
       }),
       this.prisma.item.findMany({ where: { tenantId, ...companyIdWhere(companyId) } }),
     ]);
@@ -786,15 +795,13 @@ export class ReportsService {
     const itemByName = new Map<string, ItemUnitInfo>();
     for (const it of items) itemByName.set(it.name.trim().toLowerCase(), it);
 
-    type PartyBucket = {
-      partyName: string; unitLabel: string; matchedItem?: ItemUnitInfo;
+    type ItemBucket = {
+      itemName: string; matchedItem?: ItemUnitInfo;
       saleQty: number; saleAmount: number; purchaseQty: number; purchaseAmount: number;
     };
-    type ItemEntry = { itemName: string; matchedItem?: ItemUnitInfo; parties: Map<string, PartyBucket> };
-    const itemMap = new Map<string, ItemEntry>();
+    const itemMap = new Map<string, ItemBucket>();
 
     for (const t of txns) {
-      const partyName = t.party.name;
       for (const li of parseItems(t.notes)) {
         const itemName = (li.name ?? '').trim();
         if (!itemName) continue;
@@ -804,16 +811,9 @@ export class ReportsService {
         const itemKey = matched ? itemName.toLowerCase() : `${itemName.toLowerCase()}__${(li.unit ?? '').trim().toLowerCase()}`;
 
         if (!itemMap.has(itemKey)) {
-          itemMap.set(itemKey, { itemName, matchedItem: matched, parties: new Map() });
+          itemMap.set(itemKey, { itemName, matchedItem: matched, saleQty: 0, saleAmount: 0, purchaseQty: 0, purchaseAmount: 0 });
         }
-        const itemEntry = itemMap.get(itemKey)!;
-        if (!itemEntry.parties.has(partyName)) {
-          itemEntry.parties.set(partyName, {
-            partyName, unitLabel: li.unit ?? '', matchedItem: matched,
-            saleQty: 0, saleAmount: 0, purchaseQty: 0, purchaseAmount: 0,
-          });
-        }
-        const bucket = itemEntry.parties.get(partyName)!;
+        const bucket = itemMap.get(itemKey)!;
         const qty = li.qty ?? 0;
         const baseQty = matched ? toBaseQty(qty, li.unit, matched) : qty;
         const amount = qty * (li.rate ?? 0);
@@ -825,38 +825,25 @@ export class ReportsService {
       }
     }
 
-    const itemRows = Array.from(itemMap.values()).map((entry) => {
-      const partyRows = Array.from(entry.parties.values()).map((b) => {
-        const sale = b.matchedItem
-          ? formatQtySplit(b.saleQty, b.matchedItem)
-          : { qtyLarger: `${Math.round(b.saleQty * 100) / 100} ${b.unitLabel || 'pcs'}`, qtySmaller: '' };
-        const purchase = b.matchedItem
-          ? formatQtySplit(b.purchaseQty, b.matchedItem)
-          : { qtyLarger: `${Math.round(b.purchaseQty * 100) / 100} ${b.unitLabel || 'pcs'}`, qtySmaller: '' };
-        return {
-          partyName: b.partyName,
-          saleQtyLarger: sale.qtyLarger,
-          saleQtySmaller: sale.qtySmaller,
-          saleAmount: b.saleAmount,
-          purchaseQtyLarger: purchase.qtyLarger,
-          purchaseQtySmaller: purchase.qtySmaller,
-          purchaseAmount: b.purchaseAmount,
-        };
-      });
-      return {
-        itemName: entry.itemName,
-        parties: partyRows,
-        saleAmount: partyRows.reduce((s, r) => s + r.saleAmount, 0),
-        purchaseAmount: partyRows.reduce((s, r) => s + r.purchaseAmount, 0),
-      };
-    });
+    // Quantity is shown as a plain base-unit decimal (matching the reference app's own
+    // export exactly), not split into larger/smaller unit parts — a mix of items with
+    // different units in one column has no single unit label to show anyway.
+    const itemRows = Array.from(itemMap.values()).map((b) => ({
+      itemName: b.itemName,
+      saleQty: Math.round(b.saleQty * 100) / 100,
+      saleAmount: b.saleAmount,
+      purchaseQty: Math.round(b.purchaseQty * 100) / 100,
+      purchaseAmount: b.purchaseAmount,
+    }));
 
     const total = itemRows.reduce(
       (acc, i) => ({
+        saleQty: acc.saleQty + i.saleQty,
         saleAmount: acc.saleAmount + i.saleAmount,
+        purchaseQty: acc.purchaseQty + i.purchaseQty,
         purchaseAmount: acc.purchaseAmount + i.purchaseAmount,
       }),
-      { saleAmount: 0, purchaseAmount: 0 },
+      { saleQty: 0, saleAmount: 0, purchaseQty: 0, purchaseAmount: 0 },
     );
 
     return { items: itemRows, total };

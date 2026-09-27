@@ -1199,47 +1199,39 @@ function ItemReportByPartyReport() {
   const [to,   setTo]   = useState(todayStr);
   const [bookerId, setBookerId] = useState("");
   const [teamMembers, setTeamMembers] = useState<{ id: string; name: string }[]>([]);
+  const [parties, setParties] = useState<{ id: string; name: string }[]>([]);
+  const [partyQuery, setPartyQuery] = useState("");
+  const [partyId, setPartyId] = useState("");
   const { companyFilter } = useCompany();
-  const { data, loading, error } = useReport("item-report-by-party", { from, to, companyId: companyFilter ?? undefined, bookerId: bookerId || undefined });
+  const { data, loading, error } = useReport("item-report-by-party", {
+    from, to, companyId: companyFilter ?? undefined, bookerId: bookerId || undefined, partyId: partyId || undefined,
+  });
 
   useEffect(() => {
     api.listTeamMembers().then(setTeamMembers).catch(() => {});
   }, []);
 
+  useEffect(() => {
+    api.getParties({ companyId: companyFilter ?? undefined }).then(setParties).catch(() => {});
+  }, [companyFilter]);
+
+  function handlePartyQueryChange(value: string) {
+    setPartyQuery(value);
+    const match = parties.find((p) => p.name === value);
+    setPartyId(match ? match.id : "");
+  }
+
   function handleExport() {
     if (!data?.items?.length) return;
-    // saleQtyLarger/purchaseQtyLarger arrive as formatted "N Unit" strings (e.g. "43 Bag")
-    // — take just the leading number for the plain numeric export column.
-    const parseQtyNumber = (s: unknown): number | "" => {
-      const m = /^(-?[\d.]+)\s+/.exec(String(s ?? "").trim());
-      return m ? parseFloat(m[1]) : "";
-    };
-    const rows: Record<string, unknown>[] = [];
-    data.items.forEach((r: any, i: number) => {
-      if (!r.parties?.length) {
-        rows.push({
-          "#": i + 1, "Item Name": r.itemName, "Party": "",
-          "Sale Quantity": "", "Sale Amount": r.saleAmount,
-          "Purchase Quantity": "", "Purchase Amount": r.purchaseAmount,
-        });
-        return;
-      }
-      r.parties.forEach((p: any, j: number) => {
-        rows.push({
-          "#": j === 0 ? i + 1 : "",
-          "Item Name": j === 0 ? r.itemName : "",
-          "Party": p.partyName,
-          "Sale Quantity": parseQtyNumber(p.saleQtyLarger), "Sale Amount": p.saleAmount,
-          "Purchase Quantity": parseQtyNumber(p.purchaseQtyLarger), "Purchase Amount": p.purchaseAmount,
-        });
-      });
-    });
+    const rows = data.items.map((r: any, i: number) => ({
+      "#": i + 1, "Item Name": r.itemName,
+      "Sale Quantity": r.saleQty, "Sale Amount": r.saleAmount,
+      "Purchase Quantity": r.purchaseQty, "Purchase Amount": r.purchaseAmount,
+    }));
     const totalRow = {
-      "#": "", "Item Name": "Total", "Party": "",
-      "Sale Quantity": "",
-      "Sale Amount": Math.round(data.items.reduce((s: number, r: any) => s + (r.saleAmount ?? 0), 0) * 100) / 100,
-      "Purchase Quantity": "",
-      "Purchase Amount": Math.round(data.items.reduce((s: number, r: any) => s + (r.purchaseAmount ?? 0), 0) * 100) / 100,
+      "#": "", "Item Name": "Total",
+      "Sale Quantity": data.total?.saleQty ?? 0, "Sale Amount": data.total?.saleAmount ?? 0,
+      "Purchase Quantity": data.total?.purchaseQty ?? 0, "Purchase Amount": data.total?.purchaseAmount ?? 0,
     };
     exportToExcel([...rows, totalRow], "Item Report By Party", "Details");
   }
@@ -1254,6 +1246,16 @@ function ItemReportByPartyReport() {
             <option key={m.id} value={m.id}>{m.name}</option>
           ))}
         </select>
+        <input
+          className="rpt-select"
+          list="item-report-by-party-parties"
+          placeholder="Party filter"
+          value={partyQuery}
+          onChange={(e) => handlePartyQueryChange(e.target.value)}
+        />
+        <datalist id="item-report-by-party-parties">
+          {parties.map((p) => (<option key={p.id} value={p.name} />))}
+        </datalist>
         <ExcelPrint onExport={handleExport} />
       </div>
       <h3 className="rpt-section-title">DETAILS</h3>
@@ -1264,34 +1266,16 @@ function ItemReportByPartyReport() {
               <table className="rpt-table">
                 <thead><tr>
                   <th>Item Name</th>
-                  <th className="rpt-num">Sale Qty (Larger Unit)</th><th className="rpt-num">Sale Qty (Smaller Unit)</th><th className="rpt-num">Sale Amount</th>
-                  <th className="rpt-num">Purchase Qty (Larger Unit)</th><th className="rpt-num">Purchase Qty (Smaller Unit)</th><th className="rpt-num">Purchase Amount</th>
+                  <th className="rpt-num">Sale Quantity</th><th className="rpt-num">Sale Amount</th>
+                  <th className="rpt-num">Purchase Quantity</th><th className="rpt-num">Purchase Amount</th>
                 </tr></thead>
                 <tbody>
                   {data.items.map((r: any, i: number) => (
                     <tr key={i}>
                       <td>{r.itemName}</td>
-                      <td className="rpt-num">
-                        {(r.parties ?? []).filter((p: any) => p.saleAmount !== 0).map((p: any, k: number) => (
-                          <div key={k}>{p.partyName}: {p.saleQtyLarger}</div>
-                        ))}
-                      </td>
-                      <td className="rpt-num">
-                        {(r.parties ?? []).filter((p: any) => p.saleAmount !== 0).map((p: any, k: number) => (
-                          <div key={k}>{p.saleQtySmaller}</div>
-                        ))}
-                      </td>
+                      <td className="rpt-num">{r.saleQty}</td>
                       <td className="rpt-num">{rs(r.saleAmount)}</td>
-                      <td className="rpt-num">
-                        {(r.parties ?? []).filter((p: any) => p.purchaseAmount !== 0).map((p: any, k: number) => (
-                          <div key={k}>{p.partyName}: {p.purchaseQtyLarger}</div>
-                        ))}
-                      </td>
-                      <td className="rpt-num">
-                        {(r.parties ?? []).filter((p: any) => p.purchaseAmount !== 0).map((p: any, k: number) => (
-                          <div key={k}>{p.purchaseQtySmaller}</div>
-                        ))}
-                      </td>
+                      <td className="rpt-num">{r.purchaseQty}</td>
                       <td className="rpt-num">{rs(r.purchaseAmount)}</td>
                     </tr>
                   ))}
@@ -1299,11 +1283,9 @@ function ItemReportByPartyReport() {
                 {data.total && (
                   <tfoot><tr>
                     <td>Total</td>
-                    <td className="rpt-num" />
-                    <td className="rpt-num" />
+                    <td className="rpt-num">{data.total.saleQty}</td>
                     <td className="rpt-num">{rs(data.total.saleAmount)}</td>
-                    <td className="rpt-num" />
-                    <td className="rpt-num" />
+                    <td className="rpt-num">{data.total.purchaseQty}</td>
                     <td className="rpt-num">{rs(data.total.purchaseAmount)}</td>
                   </tr></tfoot>
                 )}

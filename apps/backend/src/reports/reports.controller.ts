@@ -115,8 +115,9 @@ export class ReportsController {
     @Query('to') to?: string,
     @Query('companyId') companyId?: string,
     @Query('bookerId') bookerId?: string,
+    @Query('partyId') partyId?: string,
   ) {
-    return this.reports.getItemReportByParty(req.tenantId, from, to, restrictCompanyIds(companyId, req.companyIds), bookerId);
+    return this.reports.getItemReportByParty(req.tenantId, from, to, restrictCompanyIds(companyId, req.companyIds), bookerId, partyId);
   }
 
   @Get('sale-purchase-by-party')
