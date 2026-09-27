@@ -89,6 +89,7 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
   const [txnSearch, setTxnSearch] = useState("");
   const [itemTxns, setItemTxns] = useState<Array<{ id: string; type: string; number: string | null; date: string; partyName: string; qty: number; unit: string; rate: number; total: number; balance: number }>>([]);
   const [itemTxnsLoading, setItemTxnsLoading] = useState(false);
+  const [itemTxnsError, setItemTxnsError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [total, setTotal] = useState(0);
@@ -203,12 +204,17 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
   // items only live inside each transaction's notes JSON), so the backend matches by
   // item name across the tenant's sale/purchase/credit-note/debit-note rows.
   useEffect(() => {
-    if (!selectedItem) { setItemTxns([]); return; }
+    if (!selectedItem) { setItemTxns([]); setItemTxnsError(null); return; }
     let cancelled = false;
     setItemTxnsLoading(true);
+    setItemTxnsError(null);
     api.getItemTransactions(selectedItem.name, { companyId: companyFilter ?? undefined })
       .then((rows) => { if (!cancelled) setItemTxns(rows); })
-      .catch(() => { if (!cancelled) setItemTxns([]); })
+      .catch((err) => {
+        if (cancelled) return;
+        setItemTxns([]);
+        setItemTxnsError(err?.response?.data?.message ?? err?.message ?? "Could not load transactions");
+      })
       .finally(() => { if (!cancelled) setItemTxnsLoading(false); });
     return () => { cancelled = true; };
   }, [selectedItem, companyFilter]);
@@ -1193,7 +1199,10 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
                       );
                     })
                 )}
-                {!itemTxnsLoading && itemTxns.length === 0 && (
+                {!itemTxnsLoading && itemTxnsError && (
+                  <div style={{ padding: "16px", textAlign: "center", color: "#dc2626", fontSize: 12 }}>{itemTxnsError}</div>
+                )}
+                {!itemTxnsLoading && !itemTxnsError && itemTxns.length === 0 && (
                   <div style={{ padding: "16px", textAlign: "center", color: "#94a3b8", fontSize: 12 }}>No transactions yet</div>
                 )}
               </div>

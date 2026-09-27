@@ -199,6 +199,12 @@ export class TransactionsService {
   // FK on the transaction (line items only live inside the JSON `notes` blob), so this
   // scans candidate transactions the same way reports.service.ts's item reports do:
   // fetch by tenant/company/date, then match `parseNoteItems` against the target name.
+  // Deliberately NOT capped at MAX_TRANSACTIONS_PER_PAGE before filtering — that cap
+  // exists to bound an unfiltered list's page size, but here it would apply to the
+  // *pre-filter* set of every transaction type, silently missing this item's own
+  // transaction whenever it wasn't among the tenant's 200 most recent of any kind
+  // (any tenant with real transaction volume). `take` only trims the final, already
+  // item-matched result.
   async listForItem(
     tenantId: string,
     itemName: string,
@@ -216,13 +222,13 @@ export class TransactionsService {
       },
       include: { party: true },
       orderBy: { date: "desc" },
-      take: opts?.take ?? MAX_TRANSACTIONS_PER_PAGE,
     });
     const out: Array<TransactionRow & { partyName: string; qty: number; rate: number; unit: string }> = [];
     for (const row of rows) {
       const match = this.parseNoteItems(row.notes).find((i) => (i.name ?? "").trim().toLowerCase() === target);
       if (!match) continue;
       out.push({ ...toRow(row), partyName: row.party.name, qty: match.qty ?? 0, rate: match.rate ?? 0, unit: match.unit ?? "" });
+      if (opts?.take && out.length >= opts.take) break;
     }
     return out;
   }
