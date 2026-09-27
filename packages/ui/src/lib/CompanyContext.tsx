@@ -6,6 +6,13 @@ const SELECTED_DISTRIBUTOR_KEY = "vyapar.selectedDistributorId";
 const SELECTED_BRANCH_KEY = "vyapar.selectedBranchId";
 const SELECTED_COMPANY_KEY = "vyapar.selectedCompanyId";
 
+// Never a real Company.id (always a uuid) — a safe "matches nothing" value for a
+// Distributor/Branch rollup with no Companies under it yet. Mirrors the backend's own
+// NO_COMPANY_ACCESS constant (apps/backend/src/common/company-filter.util.ts); any
+// non-uuid string works equally well here, but using the identical literal keeps the
+// intent obvious when the two are read side by side.
+const NO_COMPANY_ACCESS = "__no_company_access__";
+
 type CompanyContextValue = {
   distributors: Distributor[];
   branches: Branch[];
@@ -125,12 +132,16 @@ export function CompanyProvider({ children }: { children: ReactNode }) {
     if (selectedCompanyId) return selectedCompanyId;
     if (selectedBranchId) {
       const ids = companies.filter((c) => c.branchId === selectedBranchId).map((c) => c.id);
-      return ids.length ? ids.join(",") : null;
+      // A Branch with no Companies under it yet returning `null` here reads as "no
+      // filter" everywhere this value is passed as `companyId` — every read silently
+      // fell back to showing every company's data instead of this branch's genuinely
+      // empty rollup, which looked identical to the filter not being applied at all.
+      return ids.length ? ids.join(",") : NO_COMPANY_ACCESS;
     }
     if (selectedDistributorId) {
       const branchIds = new Set(branches.filter((b) => b.distributorId === selectedDistributorId).map((b) => b.id));
       const ids = companies.filter((c) => c.branchId && branchIds.has(c.branchId)).map((c) => c.id);
-      return ids.length ? ids.join(",") : null;
+      return ids.length ? ids.join(",") : NO_COMPANY_ACCESS;
     }
     return null;
   }, [selectedCompanyId, selectedBranchId, selectedDistributorId, companies, branches]);
