@@ -2309,7 +2309,10 @@ function exportToExcel(rows: Record<string, unknown>[], filename: string, sheetN
   const headers = Object.keys(rows[0] ?? {});
   sheet["!cols"] = headers.map((h) => {
     const longest = rows.reduce((max, r) => Math.max(max, String(r[h] ?? "").trim().length), h.length);
-    return { wch: Math.min(Math.max(longest + 2, 8), 60) };
+    // No hardcoded minimum beyond `longest` itself — a "#"/serial-number column is
+    // only ever 1-3 chars wide, and flooring it at 8 (a past bug here) padded it with
+    // exactly the kind of dead space this sizing exists to avoid.
+    return { wch: Math.min(longest + 2, 60) };
   });
   if (sheet["!ref"]) sheet["!autofilter"] = { ref: sheet["!ref"] };
   const book = XLSX.utils.book_new();
