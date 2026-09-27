@@ -87,7 +87,7 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
   const [showSecondaryPicker, setShowSecondaryPicker] = useState(false);
   const [showTertiaryPicker, setShowTertiaryPicker] = useState(false);
   const [txnSearch, setTxnSearch] = useState("");
-  const [itemTxns, setItemTxns] = useState<Array<{ id: string; type: string; number: string | null; date: string; partyName: string; qty: number; unit: string; rate: number; total: number; balance: number }>>([]);
+  const [itemTxns, setItemTxns] = useState<Array<{ id: string; type: string; number: string | null; date: string; partyName: string; qtyDisplay: string; rate: number; total: number; balance: number }>>([]);
   const [itemTxnsLoading, setItemTxnsLoading] = useState(false);
   const [itemTxnsError, setItemTxnsError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -1178,6 +1178,7 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
                       if (!q) return true;
                       return tx.partyName.toLowerCase().includes(q) || (tx.number ?? "").toLowerCase().includes(q);
                     })
+                    .sort((a, b) => a.partyName.localeCompare(b.partyName))
                     .map((tx) => {
                       const isSale = tx.type === "sale" || tx.type === "credit_note";
                       const typeLabel = { sale: "Sale", purchase: "Purchase", credit_note: "Credit Note", debit_note: "Debit Note" }[tx.type] ?? tx.type;
@@ -1192,7 +1193,7 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
                           <span>{tx.number ? `#${tx.number}` : "—"}</span>
                           <span>{tx.partyName}</span>
                           <span>{new Date(tx.date).toLocaleDateString("en-GB")}</span>
-                          <span>{tx.qty}{tx.unit ? ` ${tx.unit}` : ""}</span>
+                          <span>{tx.qtyDisplay}</span>
                           <span>{tx.rate.toLocaleString("en-PK", { minimumFractionDigits: 2 })}</span>
                           <span className={`items-txn-status ${statusClass}`}>{status}</span>
                         </div>

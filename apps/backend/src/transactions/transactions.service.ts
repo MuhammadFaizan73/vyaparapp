@@ -4,8 +4,43 @@ import { PrismaService } from "../prisma/prisma.service";
 import { StockService, STOCK_MOVING_TYPES } from "../stores/stock.service";
 import { CreateTransactionDto, UpdateTransactionDto, PaymentAllocationInputDto } from "./transactions.dto";
 import { companyIdWhere } from "../common/company-filter.util";
+import { toBaseQty, type ItemUnitInfo } from "../common/unit-qty.util";
 
 const MAX_TRANSACTIONS_PER_PAGE = 200;
+
+// Mirrors reports.service.ts's formatQtyParts exactly (kept as its own small copy rather
+// than a cross-module import, matching this file's existing parseNoteItems convention) —
+// a line item's recorded qty is in whatever unit it was actually sold/bought in (a
+// fraction of a Carton, say), and rendering that raw number ("0.0208333... Ctn") is
+// meaningless to a user; this converts it to the item's base unit first, then splits it
+// back into whole larger-unit + smaller-unit counts the same way the rest of the app does.
+function formatQtyDisplay(rawQty: number, rawUnit: string, item?: ItemUnitInfo): string {
+  if (!item) return `${Math.round(rawQty * 100) / 100}${rawUnit ? ` ${rawUnit}` : ""}`;
+  const baseQty = toBaseQty(rawQty, rawUnit, item);
+  const unit = item.unit || rawUnit || "pcs";
+  let remaining = baseQty;
+  const parts: string[] = [];
+
+  const tertiaryRate = parseFloat(item.tertiaryConversionRate ?? "") || 0;
+  if (item.tertiaryUnit && tertiaryRate > 0) {
+    const count = Math.floor(remaining / tertiaryRate + 1e-9);
+    if (count > 0) { parts.push(`${count} ${item.tertiaryUnit}`); remaining -= count * tertiaryRate; }
+  }
+
+  const wholeBase = Math.floor(remaining + 1e-9);
+  const fracBase = remaining - wholeBase;
+  const secondaryRate = parseFloat(item.conversionRate ?? "") || 0;
+
+  if (item.secondaryUnit && secondaryRate > 0) {
+    if (wholeBase > 0) parts.push(`${wholeBase} ${unit}`);
+    const secCount = Math.round(fracBase * secondaryRate);
+    if (secCount > 0) parts.push(`${secCount} ${item.secondaryUnit}`);
+  } else if (remaining !== 0 || parts.length === 0) {
+    parts.push(`${Math.round(remaining * 100) / 100} ${unit}`);
+  }
+
+  return parts.length ? parts.join(" ") : `0 ${unit}`;
+}
 
 export type TransactionRow = {
   id: string;
@@ -209,9 +244,16 @@ export class TransactionsService {
     tenantId: string,
     itemName: string,
     opts?: { companyId?: string; from?: string; to?: string; take?: number },
-  ): Promise<Array<TransactionRow & { partyName: string; qty: number; rate: number; unit: string }>> {
+  ): Promise<Array<TransactionRow & { partyName: string; qtyDisplay: string; rate: number }>> {
     const target = itemName.trim().toLowerCase();
     if (!target) return [];
+    // Line items are only ever recorded in whatever unit they were sold/bought in (e.g.
+    // a fractional Carton) — without the item's own conversion info, a raw quantity like
+    // 0.0208333... reads as a formatting bug rather than "1/48 of a Carton". Matched by
+    // name the same way parseNoteItems entries are, since transactions have no item FK.
+    const matchedItem = await this.prisma.item.findFirst({
+      where: { tenantId, name: { equals: itemName.trim(), mode: "insensitive" }, ...companyIdWhere(opts?.companyId) },
+    });
     const dateFilter = this.dateFilter(opts?.from, opts?.to);
     const rows = await this.prisma.transaction.findMany({
       where: {
@@ -223,11 +265,12 @@ export class TransactionsService {
       include: { party: true },
       orderBy: { date: "desc" },
     });
-    const out: Array<TransactionRow & { partyName: string; qty: number; rate: number; unit: string }> = [];
+    const out: Array<TransactionRow & { partyName: string; qtyDisplay: string; rate: number }> = [];
     for (const row of rows) {
       const match = this.parseNoteItems(row.notes).find((i) => (i.name ?? "").trim().toLowerCase() === target);
       if (!match) continue;
-      out.push({ ...toRow(row), partyName: row.party.name, qty: match.qty ?? 0, rate: match.rate ?? 0, unit: match.unit ?? "" });
+      const qtyDisplay = formatQtyDisplay(match.qty ?? 0, match.unit ?? "", matchedItem ?? undefined);
+      out.push({ ...toRow(row), partyName: row.party.name, qtyDisplay, rate: match.rate ?? 0 });
       if (opts?.take && out.length >= opts.take) break;
     }
     return out;

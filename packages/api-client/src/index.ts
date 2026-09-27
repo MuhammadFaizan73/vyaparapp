@@ -285,13 +285,13 @@ export class VyaparApiClient {
   async getItemTransactions(
     itemName: string,
     opts?: { companyId?: string; from?: string; to?: string; take?: number },
-  ): Promise<Array<Transaction & { partyName: string; qty: number; rate: number; unit: string }>> {
+  ): Promise<Array<Transaction & { partyName: string; qtyDisplay: string; rate: number }>> {
     const params = new URLSearchParams({ itemName });
     if (opts?.companyId) params.set("companyId", opts.companyId);
     if (opts?.from) params.set("from", opts.from);
     if (opts?.to) params.set("to", opts.to);
     if (opts?.take !== undefined) params.set("take", String(opts.take));
-    const { data } = await this.http.get<Array<Transaction & { partyName: string; qty: number; rate: number; unit: string }>>(
+    const { data } = await this.http.get<Array<Transaction & { partyName: string; qtyDisplay: string; rate: number }>>(
       `/transactions?${params.toString()}`,
     );
     return data;
