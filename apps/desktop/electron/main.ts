@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import path from "node:path";
 import { autoUpdater } from "electron-updater";
 
@@ -76,6 +76,18 @@ function createWindow() {
     },
   });
   mainWindow = win;
+
+  // Report exports (Excel Report button) go through XLSX.writeFile in the renderer, which
+  // triggers a plain Chromium download — Electron's native "Save As" dialog handles the
+  // save, but nothing then opens the file, so a user exporting a report saw no visible
+  // result unless they went and found it in their downloads folder themselves. Reveals
+  // the saved file in Finder/Explorer rather than opening it directly in Excel, matching
+  // what the client asked for.
+  win.webContents.session.on("will-download", (_event, item) => {
+    item.once("done", (_doneEvent, state) => {
+      if (state === "completed") shell.showItemInFolder(item.getSavePath());
+    });
+  });
 
   win.maximize();
   win.show();

@@ -3292,6 +3292,7 @@ body,
 .items-txn-status { font-size: 11px; font-weight: 600; }
 .items-txn-status--paid { color: #16a34a; }
 .items-txn-status--unpaid { color: #dc2626; }
+.items-txn-status--partial { color: #d97706; }
 
 /* ── Add Item Form Panel ── */
 .items-form-panel {

@@ -778,6 +778,7 @@ export class ReportsService {
           ...(bookerId ? { bookerId } : {}),
           ...companyIdWhere(companyId),
         },
+        include: { party: true },
       }),
       this.prisma.item.findMany({ where: { tenantId, ...companyIdWhere(companyId) } }),
     ]);
@@ -785,28 +786,34 @@ export class ReportsService {
     const itemByName = new Map<string, ItemUnitInfo>();
     for (const it of items) itemByName.set(it.name.trim().toLowerCase(), it);
 
-    type ItemBucket = {
-      itemName: string; unitLabel: string; matchedItem?: ItemUnitInfo;
+    type PartyBucket = {
+      partyName: string; unitLabel: string; matchedItem?: ItemUnitInfo;
       saleQty: number; saleAmount: number; purchaseQty: number; purchaseAmount: number;
     };
-    const itemMap = new Map<string, ItemBucket>();
+    type ItemEntry = { itemName: string; matchedItem?: ItemUnitInfo; parties: Map<string, PartyBucket> };
+    const itemMap = new Map<string, ItemEntry>();
 
     for (const t of txns) {
+      const partyName = t.party.name;
       for (const li of parseItems(t.notes)) {
         const itemName = (li.name ?? '').trim();
         if (!itemName) continue;
         const matched = itemByName.get(itemName.toLowerCase());
         // Unmatched items (no catalog entry) can't be unit-converted, so they're kept
         // separate per raw unit rather than silently summed across incompatible units.
-        const bucketKey = matched ? itemName.toLowerCase() : `${itemName.toLowerCase()}__${(li.unit ?? '').trim().toLowerCase()}`;
+        const itemKey = matched ? itemName.toLowerCase() : `${itemName.toLowerCase()}__${(li.unit ?? '').trim().toLowerCase()}`;
 
-        if (!itemMap.has(bucketKey)) {
-          itemMap.set(bucketKey, {
-            itemName, unitLabel: li.unit ?? '', matchedItem: matched,
+        if (!itemMap.has(itemKey)) {
+          itemMap.set(itemKey, { itemName, matchedItem: matched, parties: new Map() });
+        }
+        const itemEntry = itemMap.get(itemKey)!;
+        if (!itemEntry.parties.has(partyName)) {
+          itemEntry.parties.set(partyName, {
+            partyName, unitLabel: li.unit ?? '', matchedItem: matched,
             saleQty: 0, saleAmount: 0, purchaseQty: 0, purchaseAmount: 0,
           });
         }
-        const bucket = itemMap.get(bucketKey)!;
+        const bucket = itemEntry.parties.get(partyName)!;
         const qty = li.qty ?? 0;
         const baseQty = matched ? toBaseQty(qty, li.unit, matched) : qty;
         const amount = qty * (li.rate ?? 0);
@@ -818,21 +825,29 @@ export class ReportsService {
       }
     }
 
-    const itemRows = Array.from(itemMap.values()).map((b) => {
-      const sale = b.matchedItem
-        ? formatQtySplit(b.saleQty, b.matchedItem)
-        : { qtyLarger: `${Math.round(b.saleQty * 100) / 100} ${b.unitLabel || 'pcs'}`, qtySmaller: '' };
-      const purchase = b.matchedItem
-        ? formatQtySplit(b.purchaseQty, b.matchedItem)
-        : { qtyLarger: `${Math.round(b.purchaseQty * 100) / 100} ${b.unitLabel || 'pcs'}`, qtySmaller: '' };
+    const itemRows = Array.from(itemMap.values()).map((entry) => {
+      const partyRows = Array.from(entry.parties.values()).map((b) => {
+        const sale = b.matchedItem
+          ? formatQtySplit(b.saleQty, b.matchedItem)
+          : { qtyLarger: `${Math.round(b.saleQty * 100) / 100} ${b.unitLabel || 'pcs'}`, qtySmaller: '' };
+        const purchase = b.matchedItem
+          ? formatQtySplit(b.purchaseQty, b.matchedItem)
+          : { qtyLarger: `${Math.round(b.purchaseQty * 100) / 100} ${b.unitLabel || 'pcs'}`, qtySmaller: '' };
+        return {
+          partyName: b.partyName,
+          saleQtyLarger: sale.qtyLarger,
+          saleQtySmaller: sale.qtySmaller,
+          saleAmount: b.saleAmount,
+          purchaseQtyLarger: purchase.qtyLarger,
+          purchaseQtySmaller: purchase.qtySmaller,
+          purchaseAmount: b.purchaseAmount,
+        };
+      });
       return {
-        itemName: b.itemName,
-        saleQtyLarger: sale.qtyLarger,
-        saleQtySmaller: sale.qtySmaller,
-        saleAmount: b.saleAmount,
-        purchaseQtyLarger: purchase.qtyLarger,
-        purchaseQtySmaller: purchase.qtySmaller,
-        purchaseAmount: b.purchaseAmount,
+        itemName: entry.itemName,
+        parties: partyRows,
+        saleAmount: partyRows.reduce((s, r) => s + r.saleAmount, 0),
+        purchaseAmount: partyRows.reduce((s, r) => s + r.purchaseAmount, 0),
       };
     });
 

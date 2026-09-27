@@ -183,7 +183,7 @@ export class TransactionsService {
   // Notes stores line items as JSON — either `{ items: [...] }` or a bare array, each
   // item shaped `{ name, qty, rate, unit }` (same shape mobile's parseNoteItems reads).
   // A malformed row shouldn't fail the whole request, so parse failures just yield [].
-  private parseNoteItems(notes: string | null): Array<{ name?: string; rate?: number }> {
+  private parseNoteItems(notes: string | null): Array<{ name?: string; rate?: number; qty?: number; unit?: string }> {
     if (!notes) return [];
     try {
       const parsed = JSON.parse(notes);
@@ -192,6 +192,39 @@ export class TransactionsService {
     } catch {
       return [];
     }
+  }
+
+  // Backs the Items screen's per-item "Transactions" panel — every sale/purchase/credit
+  // note/debit note that has a line item matching this name, newest first. Items have no
+  // FK on the transaction (line items only live inside the JSON `notes` blob), so this
+  // scans candidate transactions the same way reports.service.ts's item reports do:
+  // fetch by tenant/company/date, then match `parseNoteItems` against the target name.
+  async listForItem(
+    tenantId: string,
+    itemName: string,
+    opts?: { companyId?: string; from?: string; to?: string; take?: number },
+  ): Promise<Array<TransactionRow & { partyName: string; qty: number; rate: number; unit: string }>> {
+    const target = itemName.trim().toLowerCase();
+    if (!target) return [];
+    const dateFilter = this.dateFilter(opts?.from, opts?.to);
+    const rows = await this.prisma.transaction.findMany({
+      where: {
+        tenantId,
+        type: { in: ["sale", "purchase", "credit_note", "debit_note"] },
+        ...(dateFilter && { date: dateFilter }),
+        ...companyIdWhere(opts?.companyId),
+      },
+      include: { party: true },
+      orderBy: { date: "desc" },
+      take: opts?.take ?? MAX_TRANSACTIONS_PER_PAGE,
+    });
+    const out: Array<TransactionRow & { partyName: string; qty: number; rate: number; unit: string }> = [];
+    for (const row of rows) {
+      const match = this.parseNoteItems(row.notes).find((i) => (i.name ?? "").trim().toLowerCase() === target);
+      if (!match) continue;
+      out.push({ ...toRow(row), partyName: row.party.name, qty: match.qty ?? 0, rate: match.rate ?? 0, unit: match.unit ?? "" });
+    }
+    return out;
   }
 
   // Last N prices a specific customer paid for a specific item, most recent first —

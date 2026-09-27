@@ -87,6 +87,8 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
   const [showSecondaryPicker, setShowSecondaryPicker] = useState(false);
   const [showTertiaryPicker, setShowTertiaryPicker] = useState(false);
   const [txnSearch, setTxnSearch] = useState("");
+  const [itemTxns, setItemTxns] = useState<Array<{ id: string; type: string; number: string | null; date: string; partyName: string; qty: number; unit: string; rate: number; total: number; balance: number }>>([]);
+  const [itemTxnsLoading, setItemTxnsLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [total, setTotal] = useState(0);
@@ -196,6 +198,20 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
     void loadPage(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch, companyFilter]);
+
+  // Selected item's own transaction history — items have no FK on transactions (line
+  // items only live inside each transaction's notes JSON), so the backend matches by
+  // item name across the tenant's sale/purchase/credit-note/debit-note rows.
+  useEffect(() => {
+    if (!selectedItem) { setItemTxns([]); return; }
+    let cancelled = false;
+    setItemTxnsLoading(true);
+    api.getItemTransactions(selectedItem.name, { companyId: companyFilter ?? undefined })
+      .then((rows) => { if (!cancelled) setItemTxns(rows); })
+      .catch(() => { if (!cancelled) setItemTxns([]); })
+      .finally(() => { if (!cancelled) setItemTxnsLoading(false); });
+    return () => { cancelled = true; };
+  }, [selectedItem, companyFilter]);
 
   function handleItemsScroll(e: React.UIEvent<HTMLDivElement>) {
     const el = e.currentTarget;
@@ -1147,26 +1163,39 @@ export function ItemsScreen({ isLocked = false, onLockedAction, onOpenImportItem
                   <span>PRICE/UNIT <FilterIcon /></span>
                   <span>STATUS <FilterIcon /></span>
                 </div>
-                {([] as Array<{ invoice: string; dot: string; type: string; name: string; date: string; qty: number; price: number; status: string }>).map((tx) => (
-                  <div key={tx.invoice} className="items-txn-table__row">
-                    <span>
-                      <span
-                        className={`items-txn-dot items-txn-dot--${tx.dot}`}
-                      />
-                    </span>
-                    <span>{tx.type}</span>
-                    <span>#{tx.invoice}</span>
-                    <span>{tx.name}</span>
-                    <span>{tx.date}</span>
-                    <span>{tx.qty}</span>
-                    <span>{tx.price}</span>
-                    <span
-                      className={`items-txn-status${tx.status === "Paid" ? " items-txn-status--paid" : " items-txn-status--unpaid"}`}
-                    >
-                      {tx.status}
-                    </span>
-                  </div>
-                ))}
+                {itemTxnsLoading ? (
+                  <div style={{ padding: "16px", textAlign: "center", color: "#94a3b8", fontSize: 12 }}>Loading…</div>
+                ) : (
+                  itemTxns
+                    .filter((tx) => {
+                      const q = txnSearch.trim().toLowerCase();
+                      if (!q) return true;
+                      return tx.partyName.toLowerCase().includes(q) || (tx.number ?? "").toLowerCase().includes(q);
+                    })
+                    .map((tx) => {
+                      const isSale = tx.type === "sale" || tx.type === "credit_note";
+                      const typeLabel = { sale: "Sale", purchase: "Purchase", credit_note: "Credit Note", debit_note: "Debit Note" }[tx.type] ?? tx.type;
+                      const status = tx.balance === 0 ? "Paid" : tx.balance === tx.total ? "Unpaid" : "Partial";
+                      const statusClass = status === "Paid" ? "items-txn-status--paid" : status === "Unpaid" ? "items-txn-status--unpaid" : "items-txn-status--partial";
+                      return (
+                        <div key={tx.id} className="items-txn-table__row">
+                          <span>
+                            <span className={`items-txn-dot items-txn-dot--${isSale ? "green" : "orange"}`} />
+                          </span>
+                          <span>{typeLabel}</span>
+                          <span>{tx.number ? `#${tx.number}` : "—"}</span>
+                          <span>{tx.partyName}</span>
+                          <span>{new Date(tx.date).toLocaleDateString("en-GB")}</span>
+                          <span>{tx.qty}{tx.unit ? ` ${tx.unit}` : ""}</span>
+                          <span>{tx.rate.toLocaleString("en-PK", { minimumFractionDigits: 2 })}</span>
+                          <span className={`items-txn-status ${statusClass}`}>{status}</span>
+                        </div>
+                      );
+                    })
+                )}
+                {!itemTxnsLoading && itemTxns.length === 0 && (
+                  <div style={{ padding: "16px", textAlign: "center", color: "#94a3b8", fontSize: 12 }}>No transactions yet</div>
+                )}
               </div>
             </div>
           </>
