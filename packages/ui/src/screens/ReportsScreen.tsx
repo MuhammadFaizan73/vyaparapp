@@ -2294,6 +2294,17 @@ function PremiumGate() {
 // own export behavior and is itself the export's confirmation.
 function exportToExcel(rows: Record<string, unknown>[], filename: string, sheetName = "Report") {
   const sheet = XLSX.utils.json_to_sheet(rows);
+  // Every column defaulted to Excel's ~8.43-char width regardless of content — long
+  // item/party names got truncated behind the next column instead of just wrapping,
+  // which is what made the export unreadable rather than merely narrow. Width each
+  // column to its longest cell (header included), capped so one huge outlier value
+  // doesn't blow out the whole sheet.
+  const headers = Object.keys(rows[0] ?? {});
+  sheet["!cols"] = headers.map((h) => {
+    const longest = rows.reduce((max, r) => Math.max(max, String(r[h] ?? "").length), h.length);
+    return { wch: Math.min(Math.max(longest + 2, 8), 60) };
+  });
+  if (sheet["!ref"]) sheet["!autofilter"] = { ref: sheet["!ref"] };
   const book = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(book, sheet, sheetName.slice(0, 31));
   XLSX.writeFile(book, `${filename}.xlsx`);
