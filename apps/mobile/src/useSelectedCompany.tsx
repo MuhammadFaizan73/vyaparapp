@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback, useMemo, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef, type ReactNode } from "react";
 import * as SecureStore from "expo-secure-store";
 import type { Company, Distributor, Branch } from "@vyapar/api-client";
 import { api, loadToken, getToken, onAuthChange } from "./auth";
@@ -59,6 +59,14 @@ export function SelectedCompanyProvider({ children }: { children: ReactNode }) {
   const [selectedDistributorId, setSelectedDistributorIdState] = useState<string | null>(null);
   const [selectedBranchId, setSelectedBranchIdState] = useState<string | null>(null);
   const [selectedCompanyId, setSelectedCompanyIdState] = useState<string | null>(null);
+  // refreshCompanies() fires from more than one place in quick succession — the initial
+  // token-bootstrap effect below, and onAuthChange after a login/logout — and neither
+  // call is cancelled if a newer one starts first. A team member logging in right after
+  // an owner session (or vice versa) could have the OLDER call's response — fetched with
+  // the PREVIOUS account's token, and thus an unrestricted or differently-restricted
+  // company list — resolve after the newer, correct one and silently overwrite it. Only
+  // ever commit the result belonging to the most recently started call.
+  const requestId = useRef(0);
 
   useEffect(() => {
     Promise.all([
@@ -73,6 +81,7 @@ export function SelectedCompanyProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshCompanies = useCallback(async () => {
+    const myRequestId = ++requestId.current;
     setLoading(true);
     try {
       // This provider mounts alongside app/index.tsx's own token bootstrap, and both
@@ -87,11 +96,13 @@ export function SelectedCompanyProvider({ children }: { children: ReactNode }) {
         api.getBranches().catch(() => []),
         api.getCompanies(),
       ]);
+      if (myRequestId !== requestId.current) return;
       setDistributors(d);
       setBranches(b);
       setCompanies(c);
       setCompaniesError(null);
     } catch (err: any) {
+      if (myRequestId !== requestId.current) return;
       setCompanies([]);
       const status = err?.response?.status;
       const serverMsg = err?.response?.data?.message;
@@ -99,7 +110,7 @@ export function SelectedCompanyProvider({ children }: { children: ReactNode }) {
         status ? `HTTP ${status}${serverMsg ? `: ${String(serverMsg)}` : ""}` : (err?.message ?? "Unknown error"),
       );
     } finally {
-      setLoading(false);
+      if (myRequestId === requestId.current) setLoading(false);
     }
   }, []);
 
