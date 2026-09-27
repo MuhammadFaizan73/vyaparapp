@@ -1221,9 +1221,14 @@ function ItemReportByPartyReport() {
     setPartyId(match ? match.id : "");
   }
 
+  const sortedItems = useMemo(
+    () => [...(data?.items ?? [])].sort((a: any, b: any) => a.itemName.localeCompare(b.itemName)),
+    [data?.items],
+  );
+
   function handleExport() {
-    if (!data?.items?.length) return;
-    const rows = data.items.map((r: any, i: number) => ({
+    if (!sortedItems.length) return;
+    const rows = sortedItems.map((r: any, i: number) => ({
       "#": i + 1, "Item Name": r.itemName,
       "Sale Quantity": r.saleQty, "Sale Amount": r.saleAmount,
       "Purchase Quantity": r.purchaseQty, "Purchase Amount": r.purchaseAmount,
@@ -1262,7 +1267,7 @@ function ItemReportByPartyReport() {
       <ReportWrap loading={loading} error={error}>
         {data && (
           <>
-            {(!data.items?.length) ? <NoData /> : (
+            {(!sortedItems.length) ? <NoData /> : (
               <table className="rpt-table">
                 <thead><tr>
                   <th>Item Name</th>
@@ -1270,7 +1275,7 @@ function ItemReportByPartyReport() {
                   <th className="rpt-num">Purchase Quantity</th><th className="rpt-num">Purchase Amount</th>
                 </tr></thead>
                 <tbody>
-                  {data.items.map((r: any, i: number) => (
+                  {sortedItems.map((r: any, i: number) => (
                     <tr key={i}>
                       <td>{r.itemName}</td>
                       <td className="rpt-num">{r.saleQty}</td>
@@ -2298,15 +2303,31 @@ function exportToExcel(rows: Record<string, unknown>[], filename: string, sheetN
   // item/party names got truncated behind the next column instead of just wrapping,
   // which is what made the export unreadable rather than merely narrow. Width each
   // column to its longest cell (header included), capped so one huge outlier value
-  // doesn't blow out the whole sheet.
+  // doesn't blow out the whole sheet. `.trim()` matters here — a data-entry item name
+  // with trailing whitespace (common in this app's imported catalogs) would otherwise
+  // inflate that column's width with blank space nobody can see, past its visible text.
   const headers = Object.keys(rows[0] ?? {});
   sheet["!cols"] = headers.map((h) => {
-    const longest = rows.reduce((max, r) => Math.max(max, String(r[h] ?? "").length), h.length);
+    const longest = rows.reduce((max, r) => Math.max(max, String(r[h] ?? "").trim().length), h.length);
     return { wch: Math.min(Math.max(longest + 2, 8), 60) };
   });
   if (sheet["!ref"]) sheet["!autofilter"] = { ref: sheet["!ref"] };
   const book = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(book, sheet, sheetName.slice(0, 31));
+
+  // A plain XLSX.writeFile() triggers a browser-style Blob download in the Chromium
+  // renderer — Windows tags whatever lands through its download manager with the
+  // internet "Mark of the Web" regardless of the file's actual origin, and that's what
+  // forces Excel to open it in Protected View ("Enable Editing" before you can touch
+  // it). Saving through the main process's own fs (no download manager involved) never
+  // gets that tag. Falls back to the browser download when not running inside Electron
+  // (e.g. this same screen opened in a plain browser tab during development).
+  const vyapar = (window as any).vyapar;
+  if (vyapar?.saveBinaryFile) {
+    const bytes = XLSX.write(book, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
+    void vyapar.saveBinaryFile(`${filename}.xlsx`, new Uint8Array(bytes));
+    return;
+  }
   XLSX.writeFile(book, `${filename}.xlsx`);
 }
 

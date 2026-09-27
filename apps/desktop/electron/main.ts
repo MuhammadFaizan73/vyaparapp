@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import path from "node:path";
+import fs from "node:fs/promises";
 import { autoUpdater } from "electron-updater";
 
 const isDev = !app.isPackaged;
@@ -108,6 +109,18 @@ ipcMain.handle("app:check-for-updates", () => {
     return;
   }
   autoUpdater.checkForUpdates();
+});
+
+// Writing here (Node fs) rather than letting the renderer trigger a Blob download keeps
+// the saved file free of Windows' internet "Mark of the Web" — a browser-style download
+// gets tagged with it regardless of the actual source, which is what was forcing Excel
+// into Protected View ("Enable Editing") on every exported report.
+ipcMain.handle("file:save-binary", async (_event, suggestedName: string, data: Uint8Array) => {
+  const { canceled, filePath } = await dialog.showSaveDialog({ defaultPath: suggestedName });
+  if (canceled || !filePath) return null;
+  await fs.writeFile(filePath, Buffer.from(data));
+  shell.showItemInFolder(filePath);
+  return filePath;
 });
 
 app.whenReady().then(() => {
