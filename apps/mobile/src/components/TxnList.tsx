@@ -10,6 +10,7 @@ import { colors } from "../theme";
 import { api } from "../auth";
 import { DateRangeFilterBar, type DateRange, getRange, isWithinRange } from "./DateRangeFilter";
 import { SalesmanFilter } from "./SalesmanFilter";
+import { setHandoffTxn } from "../txnHandoff";
 import type { Transaction, Party } from "@vyapar/api-client";
 
 type TxnRow = Transaction & { partyName: string };
@@ -23,6 +24,10 @@ interface Props {
   fabLabel: string;
   fabRoute: string;
   headerRight?: React.ReactNode;
+  // When given, tapping a row opens this route in edit mode (same screen the FAB uses to
+  // create one) instead of doing nothing — rows had no interaction at all before this,
+  // since no caller of TxnList had an edit screen wired up to send them to.
+  editRoute?: string;
 }
 
 function fmt(n: number) {
@@ -32,7 +37,7 @@ function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-PK", { day: "2-digit", month: "short", year: "2-digit" });
 }
 
-export function TxnList({ title, txnType, chips, dateRange, emptyMessage, fabLabel, fabRoute, headerRight }: Props) {
+export function TxnList({ title, txnType, chips, dateRange, emptyMessage, fabLabel, fabRoute, headerRight, editRoute }: Props) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [activeChip, setActiveChip] = useState(0);
@@ -171,7 +176,13 @@ export function TxnList({ title, txnType, chips, dateRange, emptyMessage, fabLab
             renderItem={({ item: row }) => {
               const status = getStatus(row);
               return (
-                <TouchableOpacity style={s.row} activeOpacity={0.7}>
+                <TouchableOpacity style={s.row} activeOpacity={0.7}
+                  disabled={!editRoute}
+                  onPress={() => {
+                    if (!editRoute) return;
+                    setHandoffTxn(row);
+                    router.push({ pathname: editRoute, params: { editId: row.id } } as never);
+                  }}>
                   <View style={s.rowLeft}>
                     <View style={s.avatar}>
                       <Text style={s.avatarTxt}>{row.partyName[0]?.toUpperCase() ?? "?"}</Text>

@@ -1,18 +1,20 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
   StyleSheet, KeyboardAvoidingView, Platform, Alert,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../src/theme";
 import { api } from "../../src/auth";
 import { useParties } from "../../src/useParties";
 import { useItems } from "../../src/useItems";
+import { takeHandoffTxn } from "../../src/txnHandoff";
+import { parseNoteItems } from "../../src/invoiceHtml";
 
 /* ── types ── */
-type ItemRow = { name: string; qty: number; unit: string; mrp: string; rate: number };
+type ItemRow = { name: string; itemId?: string; qty: number; unit: string; mrp: string; rate: number };
 const UNITS = ["Pcs", "Kg", "Gm", "L", "ML", "Box", "Pack", "Bag", "Mtr", "Ft", "NONE"];
 const PAYMENT_TYPES = ["Cash", "UPI", "Bank Transfer", "Cheque", "Card"];
 
@@ -25,20 +27,24 @@ function todayStr() {
    ADD ITEM SUB-SCREEN
 ══════════════════════════════════════════════════════ */
 function AddItemScreen({
-  title, catalog, onSave, onSaveNew, onBack,
+  title, catalog, initial, onSave, onSaveNew, onDelete, onBack,
 }: {
   title: string;
   catalog: any[];
+  initial?: ItemRow;
   onSave: (item: ItemRow) => void;
   onSaveNew: (item: ItemRow) => void;
+  onDelete?: () => void;
   onBack: () => void;
 }) {
   const insets = useSafeAreaInsets();
-  const [name, setName] = useState("");
-  const [qty, setQty] = useState("");
-  const [unit, setUnit] = useState("Pcs");
-  const [mrp, setMrp] = useState("");
-  const [rate, setRate] = useState("");
+  const isEditingItem = !!initial;
+  const [name, setName] = useState(initial?.name ?? "");
+  const [itemId, setItemId] = useState(initial?.itemId ?? "");
+  const [qty, setQty] = useState(initial ? String(initial.qty) : "");
+  const [unit, setUnit] = useState(initial?.unit ?? "Pcs");
+  const [mrp, setMrp] = useState(initial?.mrp ?? "");
+  const [rate, setRate] = useState(initial ? String(initial.rate) : "");
   const [showUnitDrop, setShowUnitDrop] = useState(false);
   const [showCatalog, setShowCatalog] = useState(false);
   const [nameFocused, setNameFocused] = useState(false);
@@ -49,7 +55,7 @@ function AddItemScreen({
 
   function buildItem(): ItemRow | null {
     if (!name.trim()) { Alert.alert("Enter item name"); return null; }
-    return { name: name.trim(), qty: parseFloat(qty) || 1, unit, mrp, rate: parseFloat(rate) || 0 };
+    return { name: name.trim(), itemId: itemId || undefined, qty: parseFloat(qty) || 1, unit, mrp, rate: parseFloat(rate) || 0 };
   }
 
   return (
@@ -58,10 +64,19 @@ function AddItemScreen({
         <TouchableOpacity onPress={onBack} hitSlop={8}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={sf.appBarTitle}>Add Items to {title}</Text>
-        <TouchableOpacity hitSlop={8}>
-          <Ionicons name="settings-outline" size={22} color={colors.textLight} />
-        </TouchableOpacity>
+        <Text style={sf.appBarTitle}>{isEditingItem ? `Edit Item` : `Add Items to ${title}`}</Text>
+        {isEditingItem && onDelete ? (
+          <TouchableOpacity hitSlop={8} onPress={() => Alert.alert("Remove item", "Remove this item from the order?", [
+            { text: "Cancel", style: "cancel" },
+            { text: "Remove", style: "destructive", onPress: onDelete },
+          ])}>
+            <Ionicons name="trash-outline" size={22} color={colors.textLight} />
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity hitSlop={8}>
+            <Ionicons name="settings-outline" size={22} color={colors.textLight} />
+          </TouchableOpacity>
+        )}
       </View>
 
       <ScrollView keyboardShouldPersistTaps="always" contentContainerStyle={sf.scroll}>
@@ -71,7 +86,7 @@ function AddItemScreen({
           <TextInput
             style={sf.fieldInput}
             value={name}
-            onChangeText={(t) => { setName(t); setShowCatalog(true); }}
+            onChangeText={(t) => { setName(t); setItemId(""); setShowCatalog(true); }}
             onFocus={() => { setNameFocused(true); setShowCatalog(true); }}
             onBlur={() => { setNameFocused(false); setTimeout(() => setShowCatalog(false), 150); }}
             placeholder="e.g. Chocolate Cake"
@@ -84,7 +99,7 @@ function AddItemScreen({
           <View style={sf.catalog}>
             {catMatches.slice(0, 6).map((c) => (
               <TouchableOpacity key={c.id} style={sf.catalogRow}
-                onPress={() => { setName(c.name); setRate(String(c.salePrice ?? 0)); setMrp(String(c.mrp ?? "")); setShowCatalog(false); }}>
+                onPress={() => { setName(c.name); setItemId(c.id); setRate(String(c.salePrice ?? 0)); setMrp(String(c.mrp ?? "")); setShowCatalog(false); }}>
                 <Text style={sf.catalogName}>{c.name}</Text>
                 <Text style={sf.catalogPrice}>Rs {c.salePrice ?? 0}</Text>
               </TouchableOpacity>
@@ -135,11 +150,13 @@ function AddItemScreen({
       </ScrollView>
 
       <View style={[sf.footer, { paddingBottom: insets.bottom + 8 }]}>
-        <TouchableOpacity style={sf.saveNewBtn} onPress={() => { const item = buildItem(); if (item) onSaveNew(item); }}>
-          <Text style={sf.saveNewTxt}>Save & New</Text>
-        </TouchableOpacity>
+        {!isEditingItem && (
+          <TouchableOpacity style={sf.saveNewBtn} onPress={() => { const item = buildItem(); if (item) onSaveNew(item); }}>
+            <Text style={sf.saveNewTxt}>Save & New</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity style={sf.saveBtn} onPress={() => { const item = buildItem(); if (item) onSave(item); }}>
-          <Text style={sf.saveTxt}>Save</Text>
+          <Text style={sf.saveTxt}>{isEditingItem ? "Update" : "Save"}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -152,11 +169,15 @@ function AddItemScreen({
 export default function NewSaleOrderScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams<{ editId?: string }>();
+  const isEdit = Boolean(params.editId);
   const { parties } = useParties();
   const { items: catalog } = useItems();
 
-  const [orderNo] = useState("1");
-  const [dateDisplay] = useState(todayStr());
+  const [orderNo, setOrderNo] = useState("1");
+  const [dateDisplay, setDateDisplay] = useState(todayStr());
+  const [dateIso, setDateIso] = useState<string | null>(null);
+  const [loadingEdit, setLoadingEdit] = useState(isEdit);
 
   /* form fields */
   const [customer, setCustomer] = useState("");
@@ -177,6 +198,52 @@ export default function NewSaleOrderScreen() {
 
   /* add-item sub-screen */
   const [showAddItem, setShowAddItem] = useState(false);
+  const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null);
+
+  /* Load existing order when opened in edit mode — handoff from the list avoids a
+     redundant fetch; falls back to a real GET when opened without it (deep link, or the
+     handoff was already consumed by another screen). */
+  useEffect(() => {
+    if (!params.editId) return;
+    let cancelled = false;
+    (async () => {
+      const handoff = takeHandoffTxn(params.editId!);
+      const txn = handoff ?? await api.getTransaction(params.editId!);
+      if (cancelled || !txn) return;
+
+      const party = parties.find((p) => p.id === txn.partyId);
+      if (party) { setCustomer(party.name); setCustomerId(party.id); }
+
+      setOrderNo(txn.number ?? "1");
+      setDateIso(txn.date);
+      const d = new Date(txn.date);
+      setDateDisplay(`${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`);
+
+      let parsedNotes: any = {};
+      try { parsedNotes = JSON.parse(txn.notes ?? "{}"); } catch { parsedNotes = {}; }
+      const loadedItems: ItemRow[] = parseNoteItems(txn.notes).map((it: any) => ({
+        name: it.name ?? "",
+        itemId: it.itemId ?? undefined,
+        qty: Number(it.qty) || 0,
+        unit: it.unit ?? "Pcs",
+        mrp: it.mrp != null ? String(it.mrp) : "",
+        rate: Number(it.rate) || 0,
+      }));
+      setItems(loadedItems);
+      setDiscountPct(parsedNotes.discountPct ?? "");
+      setDiscountRs(parsedNotes.discountRs ?? "");
+      setAdvanceAmt(parsedNotes.advanceAmt ?? String(txn.total - txn.balance) ?? "");
+      setPaymentType(parsedNotes.paymentType ?? "Cash");
+      setNote(typeof parsedNotes.note === "string" ? parsedNotes.note : "");
+      setDueDate(parsedNotes.dueDate ?? todayStr());
+
+      setLoadingEdit(false);
+    })().catch(() => {
+      if (!cancelled) { Alert.alert("Error", "Could not load this sale order."); setLoadingEdit(false); }
+    });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.editId]);
 
   /* calculations */
   const subtotal = items.reduce((s, i) => s + i.qty * i.rate, 0);
@@ -187,6 +254,19 @@ export default function NewSaleOrderScreen() {
   const total     = afterDisc + roundOffAmt;
   const advance   = parseFloat(advanceAmt) || 0;
   const balanceDue = Math.max(0, total - advance);
+
+  // Estimated profit (matches what Vyapar itself shows on a Sale Order) — sale rate minus
+  // the item's current catalog cost (purchasePrice), summed across every line that still
+  // matches a real catalog item. A line with no catalog match (manually typed name, or the
+  // item was since deleted) is left out of the total rather than silently costed at Rs 0,
+  // which would understate a real cost as pure profit.
+  const catalogById = new Map(catalog.map((c: any) => [c.id, c]));
+  let profitKnownForAll = items.length > 0;
+  const totalProfit = items.reduce((s, i) => {
+    const cat = i.itemId ? catalogById.get(i.itemId) : undefined;
+    if (!cat || cat.purchasePrice == null) { profitKnownForAll = false; return s; }
+    return s + (i.rate - cat.purchasePrice) * i.qty;
+  }, 0);
 
   const filteredParties = parties.filter((p) =>
     !customer.trim() || p.name.toLowerCase().includes(customer.toLowerCase())
@@ -209,6 +289,18 @@ export default function NewSaleOrderScreen() {
     try {
       const party = parties.find((p) => p.id === customerId) ?? parties.find((p) => p.name === customer);
       if (!party) { Alert.alert("Select a valid customer from the list"); setSaving(false); return; }
+      const notes = JSON.stringify({ items, discountPct, discountRs, advanceAmt, paymentType, note, dueDate });
+      if (params.editId) {
+        await api.updateTransaction(params.editId, {
+          partyId: party.id,
+          date: dateIso ?? new Date().toISOString(),
+          total,
+          balance: balanceDue,
+          notes,
+        });
+        router.back();
+        return;
+      }
       await api.createTransaction({
         partyId: party.id,
         type: "sale_order",
@@ -216,11 +308,11 @@ export default function NewSaleOrderScreen() {
         date: new Date().toISOString(),
         total,
         balance: balanceDue,
-        notes: JSON.stringify({ items, discountPct, discountRs, advanceAmt, paymentType, note, dueDate }),
+        notes,
       });
       if (saveAndNew) { router.replace("/sale-order/new"); }
       else { router.back(); }
-    } catch { Alert.alert("Error", "Could not save. Check your connection."); }
+    } catch { Alert.alert("Error", `Could not ${params.editId ? "update" : "save"}. Check your connection.`); }
     finally { setSaving(false); }
   }
 
@@ -229,10 +321,22 @@ export default function NewSaleOrderScreen() {
     return (
       <AddItemScreen
         title="Sale Order"
+        initial={editingItemIndex !== null ? items[editingItemIndex] : undefined}
         catalog={catalog}
-        onSave={(item) => { setItems((prev) => [...prev, item]); setShowAddItem(false); }}
+        onSave={(item) => {
+          setItems((prev) => editingItemIndex !== null
+            ? prev.map((it, i) => (i === editingItemIndex ? item : it))
+            : [...prev, item]);
+          setEditingItemIndex(null);
+          setShowAddItem(false);
+        }}
         onSaveNew={(item) => { setItems((prev) => [...prev, item]); }}
-        onBack={() => setShowAddItem(false)}
+        onDelete={editingItemIndex !== null ? () => {
+          setItems((prev) => prev.filter((_, i) => i !== editingItemIndex));
+          setEditingItemIndex(null);
+          setShowAddItem(false);
+        } : undefined}
+        onBack={() => { setEditingItemIndex(null); setShowAddItem(false); }}
       />
     );
   }
@@ -246,7 +350,7 @@ export default function NewSaleOrderScreen() {
           <TouchableOpacity onPress={() => router.back()} hitSlop={8}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
-          <Text style={s.appBarTitle}>Sale Order</Text>
+          <Text style={s.appBarTitle}>{isEdit ? "Edit Sale Order" : "Sale Order"}</Text>
           <TouchableOpacity hitSlop={8}>
             <Ionicons name="settings-outline" size={22} color={colors.textLight} />
           </TouchableOpacity>
@@ -323,14 +427,16 @@ export default function NewSaleOrderScreen() {
                 <Text style={s.billedHeaderTxt}>Billed Items</Text>
               </View>
               {items.map((item, idx) => (
-                <View key={idx} style={s.billedItem}>
+                <TouchableOpacity key={idx} style={s.billedItem}
+                  onPress={() => { setEditingItemIndex(idx); setShowAddItem(true); }}>
                   <View style={s.billedItemTop}>
                     <Text style={s.billedItemNum}>#{idx + 1}</Text>
                     <Text style={s.billedItemName} numberOfLines={1}>{item.name}</Text>
                     <Text style={s.billedItemAmt}>Rs {(item.qty * item.rate).toFixed(0)}</Text>
+                    <Ionicons name="create-outline" size={16} color={colors.textLight} />
                   </View>
                   <Text style={s.billedItemSub}>Item Subtotal    {item.qty} × {item.rate} = Rs {(item.qty * item.rate).toFixed(0)}</Text>
-                </View>
+                </TouchableOpacity>
               ))}
               <View style={s.billedSummary}>
                 <View style={s.billedSummaryRow}>
@@ -341,12 +447,19 @@ export default function NewSaleOrderScreen() {
                   <Text style={s.billedSummaryTxt}>Total Qty: {totalQty.toFixed(1)}</Text>
                   <Text style={s.billedSummaryTxt}>Subtotal: {subtotal.toFixed(4)}</Text>
                 </View>
+                {profitKnownForAll && (
+                  <View style={s.billedSummaryRow}>
+                    <Text style={[s.billedSummaryTxt, { color: totalProfit >= 0 ? colors.green : colors.red, fontWeight: "700" }]}>
+                      Est. Profit: Rs {totalProfit.toFixed(2)}
+                    </Text>
+                  </View>
+                )}
               </View>
             </View>
           )}
 
           {/* Add Items button */}
-          <TouchableOpacity style={s.addItemsBtn} onPress={() => setShowAddItem(true)}>
+          <TouchableOpacity style={s.addItemsBtn} onPress={() => { setEditingItemIndex(null); setShowAddItem(true); }}>
             <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
             <Text style={s.addItemsTxt}>Add Items{items.length === 0 ? " (Optional)" : ""}</Text>
           </TouchableOpacity>
@@ -474,11 +587,13 @@ export default function NewSaleOrderScreen() {
 
         {/* Footer */}
         <View style={[s.footer, { paddingBottom: insets.bottom + 8 }]}>
-          <TouchableOpacity style={s.saveNewBtn} onPress={() => handleSave(true)} disabled={saving}>
-            <Text style={s.saveNewTxt}>Save &amp; New</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={s.saveBtn} onPress={() => handleSave(false)} disabled={saving}>
-            <Text style={s.saveTxt}>{saving ? "Saving…" : "Save"}</Text>
+          {!isEdit && (
+            <TouchableOpacity style={s.saveNewBtn} onPress={() => handleSave(true)} disabled={saving || loadingEdit}>
+              <Text style={s.saveNewTxt}>Save &amp; New</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity style={s.saveBtn} onPress={() => handleSave(false)} disabled={saving || loadingEdit}>
+            <Text style={s.saveTxt}>{saving ? "Saving…" : isEdit ? "Update" : "Save"}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={s.moreBtn}>
             <Ionicons name="ellipsis-vertical" size={20} color={colors.textMuted} />
