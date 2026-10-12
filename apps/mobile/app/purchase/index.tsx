@@ -215,6 +215,11 @@ export default function PurchaseListScreen() {
                 <View style={s.cardBottom}>
                   <Text style={s.balanceTxt}>Balance: Rs {fmt(row.balance)}</Text>
                   <View style={s.actions}>
+                    {canEditSale(row, permissions, memberId) && (
+                      <TouchableOpacity hitSlop={10} onPress={() => handleEdit(row)}>
+                        <Ionicons name="create-outline" size={18} color={colors.textMuted} />
+                      </TouchableOpacity>
+                    )}
                     <TouchableOpacity hitSlop={10} onPress={() => handlePrint(row, idx)}>
                       <Ionicons name="print-outline" size={18} color={colors.textMuted} />
                     </TouchableOpacity>
@@ -267,7 +272,6 @@ export default function PurchaseListScreen() {
           <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={() => setMenuTarget(null)} />
           <View style={[s.sheet, { paddingBottom: insets.bottom + 8 }]}>
             {[
-              { label: "Edit", icon: "create-outline" as const, show: !!menuTarget && canEditSale(menuTarget.row, permissions, memberId) },
               { label: "Duplicate", icon: "copy-outline" as const, show: true },
               { label: "Make Payment", icon: "cash-outline" as const, show: true },
               { label: "Return / Debit Note", icon: "return-down-back-outline" as const, show: true },
@@ -277,8 +281,7 @@ export default function PurchaseListScreen() {
                 style={[s.menuRow, i === arr.length - 1 && { borderBottomWidth: 0 }]}
                 onPress={async () => {
                   const t = menuTarget; setMenuTarget(null);
-                  if (label === "Edit" && t) handleEdit(t.row);
-                  else if (label === "Share as PDF" && t) await handleSharePdf(t.row, t.idx);
+                  if (label === "Share as PDF" && t) await handleSharePdf(t.row, t.idx);
                   else Alert.alert(label, "Coming soon.");
                 }}>
                 <Ionicons name={icon} size={20} color={colors.text} />
