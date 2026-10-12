@@ -32,20 +32,23 @@ function todayStr() {
    ADD ITEM SUB-SCREEN
 ══════════════════════════════════════════════════════ */
 function AddItemScreen({
-  catalog, onSave, onSaveNew, onBack,
+  catalog, initial, onSave, onSaveNew, onDelete, onBack,
 }: {
   catalog: any[];
+  initial?: ItemRow;
   onSave: (item: ItemRow) => void;
   onSaveNew: (item: ItemRow) => void;
+  onDelete?: () => void;
   onBack: () => void;
 }) {
   const insets = useSafeAreaInsets();
-  const [name, setName] = useState("");
-  const [itemId, setItemId] = useState("");
-  const [qty, setQty] = useState("");
-  const [unit, setUnit] = useState("Pcs");
-  const [mrp, setMrp] = useState("");
-  const [rate, setRate] = useState("");
+  const isEditingItem = !!initial;
+  const [name, setName] = useState(initial?.name ?? "");
+  const [itemId, setItemId] = useState(initial?.itemId ?? "");
+  const [qty, setQty] = useState(initial ? String(initial.qty) : "");
+  const [unit, setUnit] = useState(initial?.unit ?? "Pcs");
+  const [mrp, setMrp] = useState(initial?.mrp ?? "");
+  const [rate, setRate] = useState(initial ? String(initial.rate) : "");
   const [showUnitDrop, setShowUnitDrop] = useState(false);
   const [showCatalog, setShowCatalog] = useState(false);
   const [nameFocused, setNameFocused] = useState(false);
@@ -65,10 +68,19 @@ function AddItemScreen({
         <TouchableOpacity onPress={onBack} hitSlop={8}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={sf.appBarTitle}>Add Items to Purchase</Text>
-        <TouchableOpacity hitSlop={8}>
-          <Ionicons name="settings-outline" size={22} color={colors.textLight} />
-        </TouchableOpacity>
+        <Text style={sf.appBarTitle}>{isEditingItem ? "Edit Item" : "Add Items to Purchase"}</Text>
+        {isEditingItem && onDelete ? (
+          <TouchableOpacity hitSlop={8} onPress={() => Alert.alert("Remove item", "Remove this item from the purchase?", [
+            { text: "Cancel", style: "cancel" },
+            { text: "Remove", style: "destructive", onPress: onDelete },
+          ])}>
+            <Ionicons name="trash-outline" size={22} color={colors.textLight} />
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity hitSlop={8}>
+            <Ionicons name="settings-outline" size={22} color={colors.textLight} />
+          </TouchableOpacity>
+        )}
       </View>
 
       <ScrollView keyboardShouldPersistTaps="always" contentContainerStyle={sf.scroll}>
@@ -142,13 +154,15 @@ function AddItemScreen({
       </ScrollView>
 
       <View style={[sf.footer, { paddingBottom: insets.bottom + 8 }]}>
-        <TouchableOpacity style={sf.saveNewBtn}
-          onPress={() => { const item = buildItem(); if (item) onSaveNew(item); }}>
-          <Text style={sf.saveNewTxt}>Save &amp; New</Text>
-        </TouchableOpacity>
+        {!isEditingItem && (
+          <TouchableOpacity style={sf.saveNewBtn}
+            onPress={() => { const item = buildItem(); if (item) onSaveNew(item); }}>
+            <Text style={sf.saveNewTxt}>Save &amp; New</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity style={sf.saveBtn}
           onPress={() => { const item = buildItem(); if (item) onSave(item); }}>
-          <Text style={sf.saveTxt}>Save</Text>
+          <Text style={sf.saveTxt}>{isEditingItem ? "Update" : "Save"}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -201,6 +215,7 @@ export default function NewPurchaseScreen() {
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [showAddItem, setShowAddItem] = useState(false);
+  const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null);
   const [loadingEdit, setLoadingEdit] = useState(isEdit);
 
   // Load the existing purchase when opened via txn/[id].tsx's Edit action — mirrors
@@ -336,9 +351,21 @@ export default function NewPurchaseScreen() {
     return (
       <AddItemScreen
         catalog={catalog}
-        onSave={(item) => { setItems((prev) => [...prev, item]); setShowAddItem(false); }}
+        initial={editingItemIndex !== null ? items[editingItemIndex] : undefined}
+        onSave={(item) => {
+          setItems((prev) => editingItemIndex !== null
+            ? prev.map((it, i) => (i === editingItemIndex ? item : it))
+            : [...prev, item]);
+          setEditingItemIndex(null);
+          setShowAddItem(false);
+        }}
         onSaveNew={(item) => { setItems((prev) => [...prev, item]); }}
-        onBack={() => setShowAddItem(false)}
+        onDelete={editingItemIndex !== null ? () => {
+          setItems((prev) => prev.filter((_, i) => i !== editingItemIndex));
+          setEditingItemIndex(null);
+          setShowAddItem(false);
+        } : undefined}
+        onBack={() => { setEditingItemIndex(null); setShowAddItem(false); }}
       />
     );
   }
@@ -455,16 +482,18 @@ export default function NewPurchaseScreen() {
                 <Text style={s.billedHeaderTxt}>Billed Items</Text>
               </View>
               {items.map((item, idx) => (
-                <View key={idx} style={s.billedItem}>
+                <TouchableOpacity key={idx} style={s.billedItem}
+                  onPress={() => { setEditingItemIndex(idx); setShowAddItem(true); }}>
                   <View style={s.billedItemTop}>
                     <View style={s.billedNumBadge}>
                       <Text style={s.billedNumTxt}>#{idx + 1}</Text>
                     </View>
                     <Text style={s.billedItemName} numberOfLines={1}>{item.name}</Text>
                     <Text style={s.billedItemAmt}>Rs {(item.qty * item.rate).toFixed(0)}</Text>
+                    <Ionicons name="create-outline" size={16} color={colors.textLight} />
                   </View>
                   <Text style={s.billedItemSub}>Item Subtotal    {item.qty} x {item.rate} = Rs {(item.qty * item.rate).toFixed(0)}</Text>
-                </View>
+                </TouchableOpacity>
               ))}
               <View style={s.billedSummary}>
                 <View style={s.billedSummaryRow}>
@@ -480,7 +509,7 @@ export default function NewPurchaseScreen() {
           )}
 
           {/* Add Items */}
-          <TouchableOpacity style={s.addItemsBtn} onPress={() => setShowAddItem(true)}>
+          <TouchableOpacity style={s.addItemsBtn} onPress={() => { setEditingItemIndex(null); setShowAddItem(true); }}>
             <Ionicons name="add-circle" size={22} color={colors.primary} />
             <Text style={s.addItemsTxt}>Add Items{items.length === 0 ? " (Optional)" : ""}</Text>
           </TouchableOpacity>
