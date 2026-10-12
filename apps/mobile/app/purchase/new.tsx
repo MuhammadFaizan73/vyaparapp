@@ -14,6 +14,7 @@ import { useSelectedCompany } from "../../src/useSelectedCompany";
 import { useStores } from "../../src/useStores";
 import { CompanySwitcherBar } from "../../src/components/CompanySwitcher";
 import { takeHandoffTxn } from "../../src/txnHandoff";
+import { parseNoteItems } from "../../src/invoiceHtml";
 import type { TaxRate } from "@vyapar/api-client";
 
 // itemId: the real catalog Item.id, captured when picked from the catalog suggestion
@@ -233,14 +234,20 @@ export default function NewPurchaseScreen() {
 
       let parsedNotes: any = {};
       try { parsedNotes = JSON.parse(txn.notes ?? "{}"); } catch { parsedNotes = {}; }
-      const loadedItems: ItemRow[] = Array.isArray(parsedNotes.items) ? parsedNotes.items.map((it: any) => ({
+      // notes is either `{ items: [...], ... }` (this screen's own save format) or a bare
+      // array (every bulk-imported transaction — see import-vyapar-backup.js, which has no
+      // discount/note/paidAmt metadata to wrap around the line items) — reading only
+      // `parsedNotes.items` loaded zero items and Rs 0 total for an imported purchase,
+      // since `(bare array).items` is undefined. parseNoteItems handles both shapes
+      // (same helper Sale's own edit screen already uses for this exact reason).
+      const loadedItems: ItemRow[] = parseNoteItems(txn.notes).map((it: any) => ({
         name: it.name ?? "",
         itemId: it.itemId ?? undefined,
         qty: Number(it.qty) || 0,
         unit: it.unit ?? "Pcs",
         mrp: it.mrp != null ? String(it.mrp) : "",
         rate: Number(it.rate) || 0,
-      })) : [];
+      }));
       setItems(loadedItems);
       setDiscountPct(parsedNotes.discountPct ?? "");
       setDiscountRs(parsedNotes.discountRs ?? "");

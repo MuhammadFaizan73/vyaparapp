@@ -14,6 +14,7 @@ import { useSelectedCompany } from "../../src/useSelectedCompany";
 import { useStores } from "../../src/useStores";
 import { CompanySwitcherBar } from "../../src/components/CompanySwitcher";
 import { takeHandoffTxn } from "../../src/txnHandoff";
+import { parseNoteItems } from "../../src/invoiceHtml";
 import type { TaxRate } from "@vyapar/api-client";
 
 // itemId: the real catalog Item.id, captured when picked from the catalog suggestion
@@ -235,7 +236,17 @@ export default function NewPurchaseOrderScreen() {
       let parsedNotes: any = {};
       try { parsedNotes = JSON.parse(txn.notes ?? "{}"); } catch { parsedNotes = {}; }
 
-      const loadedItems: ItemRow[] = Array.isArray(parsedNotes.items) ? parsedNotes.items : [];
+      // notes is either `{ items: [...], ... }` or a bare array (every bulk-imported
+      // transaction) — see the identical fix in app/purchase/new.tsx for why reading only
+      // `parsedNotes.items` silently loses every item on a bare-array-shaped note.
+      const loadedItems: ItemRow[] = parseNoteItems(txn.notes).map((it: any) => ({
+        name: it.name ?? "",
+        itemId: it.itemId ?? undefined,
+        qty: Number(it.qty) || 0,
+        unit: it.unit ?? "Pcs",
+        mrp: it.mrp != null ? String(it.mrp) : "",
+        rate: Number(it.rate) || 0,
+      }));
       setItems(loadedItems);
 
       const itemsSubtotal = loadedItems.reduce((s, i) => s + i.qty * i.rate, 0);
