@@ -308,7 +308,10 @@ export default function NewPurchaseScreen() {
 
   async function handleSave(saveAndNew = false) {
     if (!supplier.trim()) { Alert.alert("Select a supplier"); return; }
-    if (!selectedCompanyId) {
+    // Only required when creating — a purchase being edited already carries its own
+    // companyId (set from the loaded transaction), and the topbar switcher could
+    // legitimately be sitting on "All Companies" while editing one that isn't.
+    if (!isEdit && !selectedCompanyId) {
       Alert.alert("Select a Company", "Pick a specific company from the switcher before saving a purchase.");
       return;
     }

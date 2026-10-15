@@ -634,7 +634,10 @@ export default function NewSaleScreen() {
     if (saving) return;
     if (!customer.trim()) { Alert.alert("Missing customer", "Please select a customer."); return; }
     if (!selectedParty) { Alert.alert("Unknown customer", "Select a customer from the list."); return; }
-    if (!selectedCompanyId) {
+    // Only required when creating — a sale being edited already carries its own
+    // companyId (set when the transaction was loaded), and the topbar switcher could
+    // legitimately be sitting on "All Companies" while editing one that isn't.
+    if (!isEdit && !selectedCompanyId) {
       Alert.alert("Select a Company", "Pick a specific Company from the company switcher before saving an invoice — invoices can't be saved under \"All Companies\".");
       return;
     }
