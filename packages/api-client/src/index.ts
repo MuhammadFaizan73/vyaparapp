@@ -493,6 +493,10 @@ export class VyaparApiClient {
     return data;
   }
 
+  async deleteStockTransfer(id: string): Promise<void> {
+    await this.http.delete(`/stock-transfers/${id}`);
+  }
+
   async createItem(body: CreateItemRequest): Promise<Item> {
     const { data } = await this.http.post<Item>("/items", body);
     return data;

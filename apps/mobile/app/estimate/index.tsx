@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../src/theme";
 import { api } from "../../src/auth";
+import { setHandoffTxn } from "../../src/txnHandoff";
 import { DateRangeFilterBar, type DateRange, getRange, isWithinRange } from "../../src/components/DateRangeFilter";
 import type { Transaction, Party } from "@vyapar/api-client";
 
@@ -93,6 +94,31 @@ export default function EstimateListScreen() {
     );
   }
 
+  function handleEdit(row: TxnRow) {
+    setHandoffTxn(row);
+    router.push({ pathname: "/estimate/new", params: { editId: row.id } } as never);
+  }
+
+  function handleDelete(row: TxnRow) {
+    Alert.alert(
+      "Delete estimate?",
+      `This will permanently delete this estimate for ${row.partyName}.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete", style: "destructive", onPress: async () => {
+            try {
+              await api.deleteTransaction(row.id);
+              await load();
+            } catch {
+              Alert.alert("Error", "Could not delete this estimate.");
+            }
+          },
+        },
+      ],
+    );
+  }
+
   /* filter */
   const chipKey = CHIPS[activeChip].toLowerCase();
   const filtered = rows.filter((r) => {
@@ -113,7 +139,7 @@ export default function EstimateListScreen() {
     const isConverting = converting === row.id;
 
     return (
-      <View style={s.card}>
+      <TouchableOpacity style={s.card} activeOpacity={0.85} onPress={() => handleEdit(row)}>
         <View style={s.cardTop}>
           <View style={s.cardLeft}>
             <View style={s.cardNameRow}>
@@ -137,22 +163,27 @@ export default function EstimateListScreen() {
             <Text style={s.balanceLbl}>Balance</Text>
             <Text style={s.balanceVal}>Rs {fmt(row.balance)}</Text>
           </View>
-          {isOpen ? (
-            <TouchableOpacity
-              style={[s.convertBtn, isConverting && { opacity: 0.5 }]}
-              onPress={() => handleConvert(row)}
-              disabled={isConverting}
-            >
-              <Text style={s.convertTxt}>{isConverting ? "Converting…" : "Convert"}</Text>
+          <View style={s.cardActions}>
+            <TouchableOpacity hitSlop={10} onPress={(e) => { e.stopPropagation?.(); handleDelete(row); }}>
+              <Ionicons name="trash-outline" size={18} color={colors.textMuted} />
             </TouchableOpacity>
-          ) : (
-            <View style={s.convertedBadge}>
-              <Ionicons name="checkmark-circle" size={14} color={colors.green} />
-              <Text style={s.convertedTxt}>Converted</Text>
-            </View>
-          )}
+            {isOpen ? (
+              <TouchableOpacity
+                style={[s.convertBtn, isConverting && { opacity: 0.5 }]}
+                onPress={(e) => { e.stopPropagation?.(); handleConvert(row); }}
+                disabled={isConverting}
+              >
+                <Text style={s.convertTxt}>{isConverting ? "Converting…" : "Convert"}</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={s.convertedBadge}>
+                <Ionicons name="checkmark-circle" size={14} color={colors.green} />
+                <Text style={s.convertedTxt}>Converted</Text>
+              </View>
+            )}
+          </View>
         </View>
-      </View>
+      </TouchableOpacity>
     );
   }
 
@@ -307,6 +338,8 @@ const s = StyleSheet.create({
   },
   balanceLbl: { fontSize: 12, color: colors.textMuted },
   balanceVal: { fontSize: 13, fontWeight: "600", color: colors.text, marginTop: 2 },
+
+  cardActions: { flexDirection: "row", alignItems: "center", gap: 16 },
 
   convertBtn: {
     borderWidth: 1.5, borderColor: colors.primary, borderRadius: 6,

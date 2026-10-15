@@ -91,6 +91,26 @@ export default function PurchaseListScreen() {
     router.push({ pathname: "/purchase/new", params: { editId: row.id } } as never);
   }
 
+  function handleDelete(row: PurchaseRow) {
+    Alert.alert(
+      "Delete purchase?",
+      `This will permanently delete this purchase for ${row.partyName}.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete", style: "destructive", onPress: async () => {
+            try {
+              await api.deleteTransaction(row.id);
+              await load();
+            } catch {
+              Alert.alert("Error", "Could not delete this purchase.");
+            }
+          },
+        },
+      ],
+    );
+  }
+
   async function handlePrint(row: PurchaseRow, idx: number) {
     try { await Print.printAsync({ html: buildHtml(row, idx) }); }
     catch { Alert.alert("Print failed"); }
@@ -276,16 +296,18 @@ export default function PurchaseListScreen() {
               { label: "Make Payment", icon: "cash-outline" as const, show: true },
               { label: "Return / Debit Note", icon: "return-down-back-outline" as const, show: true },
               { label: "Share as PDF", icon: "share-outline" as const, show: true },
-            ].filter((item) => item.show).map(({ label, icon }, i, arr) => (
+              { label: "Delete", icon: "trash-outline" as const, show: true, danger: true },
+            ].filter((item) => item.show).map(({ label, icon, danger }, i, arr) => (
               <TouchableOpacity key={label}
                 style={[s.menuRow, i === arr.length - 1 && { borderBottomWidth: 0 }]}
                 onPress={async () => {
                   const t = menuTarget; setMenuTarget(null);
                   if (label === "Share as PDF" && t) await handleSharePdf(t.row, t.idx);
+                  else if (label === "Delete" && t) handleDelete(t.row);
                   else Alert.alert(label, "Coming soon.");
                 }}>
-                <Ionicons name={icon} size={20} color={colors.text} />
-                <Text style={s.menuLabel}>{label}</Text>
+                <Ionicons name={icon} size={20} color={danger ? "#dc2626" : colors.text} />
+                <Text style={[s.menuLabel, danger && { color: "#dc2626" }]}>{label}</Text>
               </TouchableOpacity>
             ))}
           </View>

@@ -1,9 +1,13 @@
-import { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet } from "react-native";
-import { useRouter } from "expo-router";
+import { useState, useEffect } from "react";
+import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Alert } from "react-native";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../src/theme";
+import { api } from "../../src/auth";
+import { useSelectedCompany } from "../../src/useSelectedCompany";
+import { takeHandoffTxn } from "../../src/txnHandoff";
+import { parseExpenseNotes } from "../../src/expenseCategory";
 
 const CATEGORIES = ["Rent", "Salary", "Utilities", "Transport", "Manufacturing", "Other"];
 const PAYMENT_METHODS = [
@@ -13,15 +17,117 @@ const PAYMENT_METHODS = [
   { icon: "card-outline" as const, label: "Card" },
 ];
 
+// Expense transactions have no real vendor/customer of their own (see
+// apps/backend/src/bulk-import/bulk-import.service.ts's DEFAULT_EXPENSE_PARTY_NAME and
+// apps/backend/scripts/import-vyapar-backup.js's expensePlaceholderPartyId) — every one of
+// them is recorded against a single shared "Business Expenses" party so Transaction.partyId
+// stays satisfiable without surfacing a party picker on this form. Looked up case-
+// insensitively and created once, matching the backend's own lookup.
+const EXPENSE_PARTY_NAME = "Business Expenses";
+
+async function getOrCreateExpensePartyId(): Promise<string> {
+  const parties = await api.getParties();
+  const existing = parties.find((p) => p.name.trim().toLowerCase() === EXPENSE_PARTY_NAME.toLowerCase());
+  if (existing) return existing.id;
+  const created = await api.createParty({ name: EXPENSE_PARTY_NAME });
+  return created.id;
+}
+
+function dateStr(d: Date) {
+  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+}
+
 export default function NewExpenseScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams<{ editId?: string }>();
+  const isEdit = Boolean(params.editId);
+  const { selectedCompanyId } = useSelectedCompany();
+
   const [category, setCategory] = useState("");
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState("Cash");
   const [note, setNote] = useState("");
-  const d = new Date();
-  const date = `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+  const [dateObj, setDateObj] = useState(new Date());
+  const [expenseNo, setExpenseNo] = useState("1");
+  const [saving, setSaving] = useState(false);
+  const [loadingEdit, setLoadingEdit] = useState(isEdit);
+
+  // Auto-generate the next expense number — skipped entirely when editing, since the
+  // number already belongs to the expense being loaded below.
+  useEffect(() => {
+    if (params.editId) return;
+    api.getTransactionsByType("expense")
+      .then((txns) => setExpenseNo(String(txns.length + 1)))
+      .catch(() => {});
+  }, [params.editId]);
+
+  // Load the existing expense when opened via txn/[id].tsx's or the category list's Edit
+  // action — mirrors payment-out/new.tsx's own editId handling. Deliberately not
+  // depending on anything that can change after mount, so this only ever runs once per
+  // editId; a re-run later would wipe out edits the user already made.
+  useEffect(() => {
+    if (!params.editId) return;
+    const handed = takeHandoffTxn(params.editId);
+    const load = handed
+      ? Promise.resolve(handed)
+      : api.getTransaction(params.editId).catch(() => null);
+
+    load.then((txn) => {
+      if (!txn) { Alert.alert("Not found", "Could not load this expense."); router.back(); return; }
+
+      if (txn.number) setExpenseNo(txn.number);
+      setDateObj(new Date(txn.date));
+      setAmount(String(txn.total));
+
+      const parsed = parseExpenseNotes(txn.notes);
+      setCategory(parsed.category);
+      setMethod(parsed.paymentType);
+      setNote(parsed.note);
+
+      setLoadingEdit(false);
+    }).catch(() => {
+      Alert.alert("Error", "Could not load this expense.");
+      router.back();
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.editId]);
+
+  async function handleSave() {
+    if (!category.trim()) { Alert.alert("Enter a category"); return; }
+    const amt = parseFloat(amount) || 0;
+    if (amt <= 0) { Alert.alert("Enter the amount"); return; }
+
+    setSaving(true);
+    try {
+      const notes = JSON.stringify({ category: category.trim(), paymentType: method, note, items: [] });
+      if (params.editId) {
+        await api.updateTransaction(params.editId, {
+          date: dateObj.toISOString(),
+          total: amt,
+          balance: 0,
+          notes,
+        });
+      } else {
+        const partyId = await getOrCreateExpensePartyId();
+        await api.createTransaction({
+          partyId,
+          type: "expense",
+          number: expenseNo,
+          date: dateObj.toISOString(),
+          total: amt,
+          balance: 0,
+          notes,
+          companyId: selectedCompanyId ?? undefined,
+        });
+      }
+      router.back();
+    } catch {
+      Alert.alert("Error", `Could not ${params.editId ? "update" : "save"}. Check your connection.`);
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <View style={[s.screen, { paddingTop: insets.top }]}>
@@ -29,7 +135,7 @@ export default function NewExpenseScreen() {
         <TouchableOpacity onPress={() => router.back()} hitSlop={8}>
           <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={s.appBarTitle}>Expense</Text>
+        <Text style={s.appBarTitle}>{isEdit ? "Edit Expense" : "Expense"}</Text>
         <TouchableOpacity hitSlop={8}>
           <Ionicons name="settings-outline" size={22} color={colors.textLight} />
         </TouchableOpacity>
@@ -38,18 +144,16 @@ export default function NewExpenseScreen() {
       <View style={s.refRow}>
         <View style={s.refCell}>
           <Text style={s.refLabel}>Expense No.</Text>
-          <TouchableOpacity style={s.refValRow}>
-            <Text style={s.refValTxt}>#1</Text>
-            <Ionicons name="chevron-down" size={13} color={colors.textLight} />
-          </TouchableOpacity>
+          <View style={s.refValRow}>
+            <Text style={s.refValTxt}>#{expenseNo}</Text>
+          </View>
         </View>
         <View style={s.refDiv} />
         <View style={s.refCell}>
           <Text style={s.refLabel}>Date</Text>
-          <TouchableOpacity style={s.refValRow}>
-            <Text style={s.refValTxt}>{date}</Text>
-            <Ionicons name="chevron-down" size={13} color={colors.textLight} />
-          </TouchableOpacity>
+          <View style={s.refValRow}>
+            <Text style={s.refValTxt}>{dateStr(dateObj)}</Text>
+          </View>
         </View>
       </View>
 
@@ -64,7 +168,7 @@ export default function NewExpenseScreen() {
               onChangeText={setCategory}
               placeholder="Select category"
               placeholderTextColor={colors.textLight}
-              autoFocus
+              autoFocus={!isEdit}
             />
           </View>
         </View>
@@ -134,11 +238,11 @@ export default function NewExpenseScreen() {
       </ScrollView>
 
       <View style={[s.footer, { paddingBottom: insets.bottom + 8 }]}>
-        <TouchableOpacity style={s.draftBtn}>
+        <TouchableOpacity style={s.draftBtn} disabled={saving || loadingEdit}>
           <Text style={s.draftBtnTxt}>Save Draft</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={s.saveBtn} onPress={() => router.back()}>
-          <Text style={s.saveBtnTxt}>Save</Text>
+        <TouchableOpacity style={s.saveBtn} onPress={handleSave} disabled={saving || loadingEdit}>
+          <Text style={s.saveBtnTxt}>{saving ? "Saving…" : isEdit ? "Update" : "Save"}</Text>
         </TouchableOpacity>
       </View>
     </View>

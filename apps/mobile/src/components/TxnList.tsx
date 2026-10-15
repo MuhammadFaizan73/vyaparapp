@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from "react";
 import {
   View, Text, TouchableOpacity, ScrollView, FlatList, TextInput,
-  StyleSheet, ActivityIndicator, RefreshControl,
+  StyleSheet, ActivityIndicator, RefreshControl, Alert,
 } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -73,6 +73,32 @@ export function TxnList({ title, txnType, chips, dateRange, emptyMessage, fabLab
     setRefreshing(true);
     await load();
     setRefreshing(false);
+  }
+
+  // Long-press since a row's own tap is already claimed by edit — matches how a shopkeeper
+  // on this screen has no spare screen space for a per-row delete icon alongside the
+  // amount/status badge. Every type routed through TxnList has an unrestricted backend
+  // delete today (see transactions.service.ts's assertCanTouchSale — only "sale" has real
+  // permission gating), so this is safe to offer for all of them.
+  function handleDelete(row: TxnRow) {
+    if (!editRoute) return;
+    Alert.alert(
+      `Delete ${title}?`,
+      `This will permanently delete this ${title.toLowerCase()} for ${row.partyName}.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete", style: "destructive", onPress: async () => {
+            try {
+              await api.deleteTransaction(row.id);
+              await load();
+            } catch {
+              Alert.alert("Error", `Could not delete this ${title.toLowerCase()}.`);
+            }
+          },
+        },
+      ],
+    );
   }
 
   /* filter by chip + date range */
@@ -182,7 +208,8 @@ export function TxnList({ title, txnType, chips, dateRange, emptyMessage, fabLab
                     if (!editRoute) return;
                     setHandoffTxn(row);
                     router.push({ pathname: editRoute, params: { editId: row.id } } as never);
-                  }}>
+                  }}
+                  onLongPress={() => handleDelete(row)}>
                   <View style={s.rowLeft}>
                     <View style={s.avatar}>
                       <Text style={s.avatarTxt}>{row.partyName[0]?.toUpperCase() ?? "?"}</Text>
@@ -198,6 +225,11 @@ export function TxnList({ title, txnType, chips, dateRange, emptyMessage, fabLab
                       <Text style={[s.statusTxt, { color: status.color }]}>{status.label}</Text>
                     </View>
                   </View>
+                  {editRoute && (
+                    <TouchableOpacity hitSlop={10} style={s.rowDelete} onPress={() => handleDelete(row)}>
+                      <Ionicons name="trash-outline" size={16} color={colors.textLight} />
+                    </TouchableOpacity>
+                  )}
                 </TouchableOpacity>
               );
             }}
@@ -270,6 +302,7 @@ const s = StyleSheet.create({
   },
   avatarTxt: { fontSize: 15, fontWeight: "700", color: colors.primary },
   rowMid: { flex: 1 },
+  rowDelete: { paddingLeft: 4 },
   rowParty: { fontSize: 14, fontWeight: "600", color: colors.text },
   rowSub: { fontSize: 11.5, color: colors.textMuted, marginTop: 3 },
   rowRight: { alignItems: "flex-end", gap: 5 },

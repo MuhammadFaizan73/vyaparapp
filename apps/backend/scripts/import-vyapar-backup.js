@@ -175,13 +175,13 @@ async function main() {
     const name = (it.item_name || '').trim();
     if (!name) continue;
     const unit = unitById.get(it.base_unit_id) || null;
+    const key = name.toLowerCase();
     itemById.set(it.item_id, {
       name, unit,
       baseUnitId: it.base_unit_id,
       secondaryUnitId: it.secondary_unit_id,
       conversionRate: conversionRateByItemName.get(key),
     });
-    const key = name.toLowerCase();
     if (existingItemNames.has(key) || seenItemNames.has(key)) continue;
     seenItemNames.add(key);
     newItems.push({

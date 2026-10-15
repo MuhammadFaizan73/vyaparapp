@@ -10,6 +10,7 @@ export default function PurchaseOrderListScreen() {
       emptyMessage={"No purchase orders yet.\nTap below to create your first order."}
       fabLabel="Add Purchase Order"
       fabRoute="/purchase-order/new"
+      editRoute="/purchase-order/new"
     />
   );
 }

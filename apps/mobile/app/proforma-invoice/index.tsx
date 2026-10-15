@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../src/theme";
 import { api } from "../../src/auth";
+import { setHandoffTxn } from "../../src/txnHandoff";
 import { DateRangeFilterBar, type DateRange, getRange, isWithinRange } from "../../src/components/DateRangeFilter";
 import type { Transaction, Party } from "@vyapar/api-client";
 
@@ -93,6 +94,31 @@ export default function ProformaInvoiceListScreen() {
     );
   }
 
+  function handleEdit(row: TxnRow) {
+    setHandoffTxn(row);
+    router.push({ pathname: "/proforma-invoice/new", params: { editId: row.id } } as never);
+  }
+
+  function handleDelete(row: TxnRow) {
+    Alert.alert(
+      "Delete proforma invoice?",
+      `This will permanently delete this proforma invoice for ${row.partyName}.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete", style: "destructive", onPress: async () => {
+            try {
+              await api.deleteTransaction(row.id);
+              await load();
+            } catch {
+              Alert.alert("Error", "Could not delete this proforma invoice.");
+            }
+          },
+        },
+      ],
+    );
+  }
+
   /* filter */
   const chipKey = CHIPS[activeChip].toLowerCase();
   const filtered = rows.filter((r) => {
@@ -113,7 +139,7 @@ export default function ProformaInvoiceListScreen() {
     const isConverting = converting === row.id;
 
     return (
-      <View style={s.card}>
+      <TouchableOpacity style={s.card} activeOpacity={0.85} onPress={() => handleEdit(row)}>
         <View style={s.cardTop}>
           <View style={s.cardLeft}>
             <Text style={s.cardParty} numberOfLines={1}>{row.partyName}</Text>
@@ -134,23 +160,28 @@ export default function ProformaInvoiceListScreen() {
             <Text style={s.balanceLbl}>Balance</Text>
             <Text style={s.balanceVal}>Rs {fmt(row.balance)}</Text>
           </View>
-          {isOpen && (
-            <TouchableOpacity
-              style={[s.convertBtn, isConverting && { opacity: 0.6 }]}
-              onPress={() => handleConvert(row)}
-              disabled={isConverting}
-            >
-              <Text style={s.convertTxt}>{isConverting ? "Converting…" : "Convert"}</Text>
+          <View style={s.cardActions}>
+            <TouchableOpacity hitSlop={10} onPress={(e) => { e.stopPropagation?.(); handleDelete(row); }}>
+              <Ionicons name="trash-outline" size={18} color={colors.textMuted} />
             </TouchableOpacity>
-          )}
-          {!isOpen && (
-            <View style={s.convertedBadge}>
-              <Ionicons name="checkmark-circle" size={14} color={colors.green} />
-              <Text style={s.convertedTxt}>Converted</Text>
-            </View>
-          )}
+            {isOpen && (
+              <TouchableOpacity
+                style={[s.convertBtn, isConverting && { opacity: 0.6 }]}
+                onPress={(e) => { e.stopPropagation?.(); handleConvert(row); }}
+                disabled={isConverting}
+              >
+                <Text style={s.convertTxt}>{isConverting ? "Converting…" : "Convert"}</Text>
+              </TouchableOpacity>
+            )}
+            {!isOpen && (
+              <View style={s.convertedBadge}>
+                <Ionicons name="checkmark-circle" size={14} color={colors.green} />
+                <Text style={s.convertedTxt}>Converted</Text>
+              </View>
+            )}
+          </View>
         </View>
-      </View>
+      </TouchableOpacity>
     );
   }
 
@@ -308,6 +339,8 @@ const s = StyleSheet.create({
   balanceRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   balanceLbl: { fontSize: 12.5, color: colors.textMuted, fontWeight: "500" },
   balanceVal: { fontSize: 12.5, fontWeight: "700", color: colors.text },
+
+  cardActions: { flexDirection: "row", alignItems: "center", gap: 16 },
 
   convertBtn: {
     backgroundColor: colors.primary, borderRadius: 6,

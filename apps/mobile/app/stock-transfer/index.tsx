@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator, Alert } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -7,6 +7,28 @@ import { colors } from "../../src/theme";
 import { api } from "../../src/auth";
 import { useSelectedCompany } from "../../src/useSelectedCompany";
 import type { StockTransfer } from "@vyapar/api-client";
+
+function handleDelete(id: string, onDeleted: () => void) {
+  Alert.alert(
+    "Delete this stock transfer?",
+    "This will reverse the stock movement it made and permanently remove the record.",
+    [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await api.deleteStockTransfer(id);
+            onDeleted();
+          } catch {
+            Alert.alert("Error", "Could not delete this stock transfer.");
+          }
+        },
+      },
+    ],
+  );
+}
 
 function fmtDate(iso: string) {
   const d = new Date(iso);
@@ -82,7 +104,7 @@ export default function StockTransferHistoryScreen() {
             </View>
           )}
           {filteredTransfers.map((t) => (
-            <View key={t.id} style={styles.card}>
+            <TouchableOpacity key={t.id} style={styles.card} activeOpacity={0.85}>
               <View style={styles.cardTop}>
                 <Text style={styles.cardRoute}>{t.fromStoreName} → {t.toStoreName}</Text>
                 <Text style={styles.cardDate}>{fmtDate(t.date)}</Text>
@@ -90,7 +112,12 @@ export default function StockTransferHistoryScreen() {
               <Text style={styles.cardItems} numberOfLines={2}>
                 {t.lines.map((l) => `${l.itemName} (${l.quantity})`).join(", ")}
               </Text>
-            </View>
+              <View style={styles.cardBottom}>
+                <TouchableOpacity hitSlop={10} onPress={() => handleDelete(t.id, load)}>
+                  <Ionicons name="trash-outline" size={18} color={colors.red} />
+                </TouchableOpacity>
+              </View>
+            </TouchableOpacity>
           ))}
         </ScrollView>
       )}
@@ -140,6 +167,10 @@ const styles = StyleSheet.create({
   cardRoute: { fontSize: 13.5, fontWeight: "600", color: colors.text },
   cardDate: { fontSize: 11.5, color: colors.textLight },
   cardItems: { fontSize: 12, color: colors.textMuted, marginTop: 6 },
+  cardBottom: {
+    flexDirection: "row", justifyContent: "flex-end", alignItems: "center",
+    marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: "#f4f6fa",
+  },
 
   fabWrap: { position: "absolute", left: 0, right: 0, alignItems: "center" },
   fab: {

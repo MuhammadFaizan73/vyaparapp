@@ -1,11 +1,5 @@
-import { TxnForm } from "../../src/components/TxnForm";
+import { DebitNoteForm } from "../../src/components/DebitNoteForm";
 
 export default function NewPurchaseReturnScreen() {
-  return (
-    <TxnForm
-      title="Purchase Return"
-      refLabel="Return No."
-      partyLabel="Supplier *"
-    />
-  );
+  return <DebitNoteForm title="Purchase Return" ownRoute="/purchase-return/new" />;
 }

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { JwtGuard, type AuthedRequest } from "../auth/jwt.guard";
 import { StockTransfersService } from "./stock-transfers.service";
 import { CreateStockTransferDto } from "./stores.dto";
@@ -33,5 +33,10 @@ export class StockTransfersController {
   @Post()
   create(@Req() req: AuthedRequest, @Body() dto: CreateStockTransferDto) {
     return this.stockTransfersService.create(req.tenantId, dto);
+  }
+
+  @Delete(":id")
+  remove(@Req() req: AuthedRequest, @Param("id") id: string) {
+    return this.stockTransfersService.remove(req.tenantId, id);
   }
 }

@@ -100,6 +100,37 @@ export default function PartyDetailsScreen() {
     );
   }, [txns, search]);
 
+  function handleDelete() {
+    if (!party) return;
+    Alert.alert(
+      "Delete party?",
+      `This will permanently delete ${party.name} and cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete", style: "destructive", onPress: async () => {
+            try {
+              await api.deleteParty(party.id);
+              router.replace("/party");
+            } catch (err: any) {
+              // The backend returns a specific, actionable message for a few known cases
+              // (e.g. "Cannot delete system parties") — but a party with existing sale/
+              // purchase/payment history fails on a database foreign-key constraint, which
+              // the backend currently reports only as a generic "Internal server error".
+              // Pass through the specific message when there is one; otherwise tell the
+              // shopkeeper the likely real reason instead of a meaningless generic failure.
+              const raw = err?.response?.data?.message;
+              const msg = raw && raw !== "Internal server error"
+                ? (Array.isArray(raw) ? raw.join("\n") : raw)
+                : "Could not delete this party. It likely has existing transactions (sales, purchases, or payments) linked to it — remove or reassign those first.";
+              Alert.alert("Error", msg);
+            }
+          },
+        },
+      ],
+    );
+  }
+
   function sendReminder() {
     if (!party) return;
     if (!party.phone) { Alert.alert("No phone number", "Add a phone number for this party first."); return; }
@@ -131,6 +162,18 @@ export default function PartyDetailsScreen() {
           <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={s.headerTitle}>Party Details</Text>
+        {/* System parties (e.g. "Cash Sale") can't be edited or deleted — the backend
+            rejects both with a 403, so don't even offer the action. */}
+        {!party.isSystem && (
+          <View style={s.headerActions}>
+            <TouchableOpacity onPress={() => router.push(`/party/new?editId=${id}` as never)} hitSlop={8}>
+              <Ionicons name="create-outline" size={21} color={colors.textMuted} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleDelete} hitSlop={8}>
+              <Ionicons name="trash-outline" size={20} color={colors.red} />
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       {/* Balance card */}
@@ -261,6 +304,7 @@ const s = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: colors.border,
   },
   headerTitle: { flex: 1, fontSize: 17, fontWeight: "700", color: colors.text },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 16 },
 
   balanceCard: { backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: colors.border },
   balanceCardTop: { flexDirection: "row", alignItems: "flex-start", padding: 16, gap: 12 },

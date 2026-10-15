@@ -9,6 +9,7 @@ export default function PurchaseReturnListScreen() {
       emptyMessage={"No purchase returns yet.\nTap below to record a return."}
       fabLabel="Add Purchase Return"
       fabRoute="/purchase-return/new"
+      editRoute="/purchase-return/new"
     />
   );
 }

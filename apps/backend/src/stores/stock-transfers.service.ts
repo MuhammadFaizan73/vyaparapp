@@ -157,4 +157,19 @@ export class StockTransfersService {
 
     return toRow(created);
   }
+
+  async remove(tenantId: string, id: string): Promise<void> {
+    const existing = await this.prisma.stockTransfer.findUnique({ where: { id }, include: { lines: true } });
+    if (!existing || existing.tenantId !== tenantId) throw new NotFoundException("Stock transfer not found");
+
+    await this.prisma.$transaction(async (tx) => {
+      // Reverse exactly what create() applied: undo the from-store decrement and the to-store increment.
+      for (const line of existing.lines) {
+        await this.stock.adjustStock(tx, tenantId, line.itemId, existing.fromStoreId, line.quantity);
+        await this.stock.adjustStock(tx, tenantId, line.itemId, existing.toStoreId, -line.quantity);
+      }
+      // StockTransferLine has onDelete: Cascade, so this also removes the lines.
+      await tx.stockTransfer.delete({ where: { id } });
+    });
+  }
 }

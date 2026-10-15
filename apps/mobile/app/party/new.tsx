@@ -3,18 +3,21 @@ import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
   StyleSheet, Alert, ActivityIndicator, Modal,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../src/theme";
 import { api, getMemberId, getPermissions } from "../../src/auth";
 import { usePartySettings } from "../../src/usePartySettings";
 import { useSelectedCompany } from "../../src/useSelectedCompany";
+import { useParties } from "../../src/useParties";
 import type { PartyGroup } from "@vyapar/api-client";
 
 export default function NewPartyScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams<{ editId?: string }>();
+  const isEdit = Boolean(params.editId);
   const { settings } = usePartySettings();
   // null permissions = owner/unrestricted; a team member needs the explicit grant.
   const [canSetOpeningBalance, setCanSetOpeningBalance] = useState(true);
@@ -47,11 +50,48 @@ export default function NewPartyScreen() {
   const { companies, selectedCompanyId: filteredCompanyId } = useSelectedCompany();
   const [companyId, setCompanyId] = useState("");
   const [companyPickerOpen, setCompanyPickerOpen] = useState(false);
-  useEffect(() => { if (filteredCompanyId) setCompanyId(filteredCompanyId); }, [filteredCompanyId]);
+  // Only default to the active company filter when creating — editing must always load
+  // the party's own saved company, not whatever filter happens to be active right now.
+  useEffect(() => { if (!isEdit && filteredCompanyId) setCompanyId(filteredCompanyId); }, [filteredCompanyId, isEdit]);
 
   useEffect(() => {
     api.listPartyGroups().then(setGroups).catch(() => {});
   }, []);
+
+  // Editing — opened from Party Details' "Edit" action with ?editId=<party id>. The
+  // parties list is already loaded client-side almost everywhere else in this app
+  // (useParties), so look there first; only hit the network if this screen was opened
+  // before that list had a chance to load (e.g. a cold deep link). Mirrors the same
+  // pattern purchase/new.tsx and sale/new.tsx use for their own editId handling.
+  const { parties } = useParties();
+  const [loadingEdit, setLoadingEdit] = useState(isEdit);
+  useEffect(() => {
+    if (!params.editId) return;
+    const cached = parties.find((p) => p.id === params.editId) ?? null;
+    const load = cached ? Promise.resolve(cached) : api.getParties().then((all) => all.find((p) => p.id === params.editId) ?? null);
+    load
+      .then((p) => {
+        if (!p) { Alert.alert("Not found", "Could not load this party."); router.back(); return; }
+        setName(p.name ?? "");
+        setPhone(p.phone ?? "");
+        setEmail(p.email ?? "");
+        setOpeningBalance(p.openingBalance ? String(p.openingBalance) : "");
+        setBillingAddress(p.billingAddress ?? "");
+        setShippingAddress(p.shippingAddress ?? "");
+        setTin(p.gstin ?? "");
+        setNtn(p.ntn ?? "");
+        setCnic(p.cnic ?? "");
+        setStrn(p.strn ?? "");
+        setPartyType(p.partyType ?? "both");
+        setGroupId(p.groupId ?? "");
+        setCompanyId(p.companyId ?? "");
+      })
+      .catch(() => { Alert.alert("Error", "Could not load this party."); router.back(); })
+      .finally(() => setLoadingEdit(false));
+    // Deliberately keyed only on editId, not on `parties` — a re-run once the parties
+    // list finishes loading later would wipe out edits the user already made.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.editId]);
 
   const selectedGroup = groups.find((g) => g.id === groupId);
   const selectedCompany = companies.find((c) => c.id === companyId);
@@ -86,7 +126,7 @@ export default function NewPartyScreen() {
     }
     setSaving(true);
     try {
-      const party = await api.createParty({
+      const payload = {
         name: name.trim(),
         phone: phone.trim() || undefined,
         email: email.trim() || undefined,
@@ -100,7 +140,15 @@ export default function NewPartyScreen() {
         partyType,
         groupId: groupId || undefined,
         companyId: companyId || undefined,
-      });
+      };
+
+      if (isEdit && params.editId) {
+        await api.updateParty(params.editId, payload);
+        router.back();
+        return;
+      }
+
+      const party = await api.createParty(payload);
 
       // A salesman's own party/customer picker only shows parties assigned to them —
       // without an assignment, a party they just created themselves (e.g. signing up a
@@ -129,7 +177,7 @@ export default function NewPartyScreen() {
         <TouchableOpacity onPress={() => router.back()} hitSlop={8}>
           <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={s.appBarTitle}>Add New Party</Text>
+        <Text style={s.appBarTitle}>{isEdit ? "Edit Party" : "Add New Party"}</Text>
         <TouchableOpacity onPress={() => router.push("/party/settings" as never)} hitSlop={8}>
           <Ionicons name="settings-outline" size={22} color={colors.textLight} />
         </TouchableOpacity>
@@ -325,17 +373,19 @@ export default function NewPartyScreen() {
 
       {/* Footer */}
       <View style={[s.footer, { paddingBottom: insets.bottom + 8 }]}>
-        <TouchableOpacity style={s.saveNewBtn} onPress={() => handleSave(true)} disabled={saving}>
-          <Text style={s.saveNewTxt}>Save &amp; New</Text>
-        </TouchableOpacity>
+        {!isEdit && (
+          <TouchableOpacity style={s.saveNewBtn} onPress={() => handleSave(true)} disabled={saving || loadingEdit}>
+            <Text style={s.saveNewTxt}>Save &amp; New</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity
-          style={[s.saveBtn, (!name.trim() || saving) && s.saveBtnDisabled]}
+          style={[s.saveBtn, (!name.trim() || saving || loadingEdit) && s.saveBtnDisabled]}
           onPress={() => handleSave(false)}
-          disabled={saving || !name.trim()}
+          disabled={saving || loadingEdit || !name.trim()}
         >
           {saving
             ? <ActivityIndicator color="#fff" size="small" />
-            : <Text style={s.saveBtnTxt}>Save Party</Text>}
+            : <Text style={s.saveBtnTxt}>{isEdit ? "Update" : "Save Party"}</Text>}
         </TouchableOpacity>
       </View>
     </View>

@@ -9,6 +9,7 @@ export default function CreditNoteListScreen() {
       emptyMessage={"No credit notes yet.\nTap below to create one."}
       fabLabel="Add Credit Note"
       fabRoute="/credit-note/new"
+      editRoute="/credit-note/new"
     />
   );
 }

@@ -1,18 +1,14 @@
-import { useState } from "react";
-import { View, Text, TextInput, ScrollView, TouchableOpacity, StyleSheet } from "react-native";
+import { useState, useCallback } from "react";
+import { View, Text, TextInput, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../src/theme";
+import { api } from "../../src/auth";
+import { parseExpenseCategory, styleForCategory } from "../../src/expenseCategory";
+import type { Transaction } from "@vyapar/api-client";
 
-const CATEGORIES = [
-  { name: "Office rent", amt: 25000, icon: "🏢", tint: "#dbeafe", fg: "#1d4ed8", count: 1 },
-  { name: "Salaries", amt: 84000, icon: "👥", tint: "#fce7f3", fg: "#be185d", count: 4 },
-  { name: "Utilities", amt: 8500, icon: "⚡", tint: "#fef3c7", fg: "#b45309", count: 3 },
-  { name: "Travel & Fuel", amt: 12200, icon: "🚗", tint: "#dcfce7", fg: "#15803d", count: 6 },
-  { name: "Marketing", amt: 6400, icon: "📣", tint: "#ede9fe", fg: "#6d28d9", count: 2 },
-  { name: "Misc", amt: 3200, icon: "📦", tint: "#e0e7ff", fg: "#4338ca", count: 4 },
-];
+type CategoryBucket = { name: string; amt: number; count: number };
 
 function fmtRs(n: number) { return "₨ " + n.toLocaleString("en-IN"); }
 
@@ -20,13 +16,57 @@ export default function ExpenseScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [search, setSearch] = useState("");
-  const total = CATEGORIES.reduce((a, c) => a + c.amt, 0);
+  const [txns, setTxns] = useState<Transaction[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    try {
+      const rows = await api.getTransactionsByType("expense");
+      setTxns(rows);
+    } catch {
+      /* offline — keep showing whatever already loaded */
+    }
+  }, []);
+
+  useFocusEffect(useCallback(() => {
+    setLoading(true);
+    load().finally(() => setLoading(false));
+  }, [load]));
+
+  // Group the real transactions by their notes.category — this replaces the old
+  // hardcoded CATEGORIES constant (Office rent Rs 25000, Salaries Rs 84000, etc.), which
+  // was entirely made-up data never tied to an actual Transaction row.
+  const bucketsByKey = new Map<string, CategoryBucket>();
+  for (const t of txns) {
+    const category = parseExpenseCategory(t.notes);
+    const key = category.toLowerCase();
+    const bucket = bucketsByKey.get(key) ?? { name: category, amt: 0, count: 0 };
+    bucket.amt += t.total;
+    bucket.count += 1;
+    bucketsByKey.set(key, bucket);
+  }
+  const categories = [...bucketsByKey.values()].sort((a, b) => b.amt - a.amt);
+  const total = categories.reduce((a, c) => a + c.amt, 0);
+
+  // Real month-over-month trend, computed from the actual transaction dates — the old
+  // "↑ 8%" badge was invented with no computation behind it at all. Shown only when
+  // there's data to compare against; otherwise it's just omitted rather than faked.
+  const now = new Date();
+  const thisMonthKey = `${now.getFullYear()}-${now.getMonth()}`;
+  const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const prevMonthKey = `${prevMonthDate.getFullYear()}-${prevMonthDate.getMonth()}`;
+  let thisMonthTotal = 0;
+  let prevMonthTotal = 0;
+  for (const t of txns) {
+    const d = new Date(t.date);
+    const key = `${d.getFullYear()}-${d.getMonth()}`;
+    if (key === thisMonthKey) thisMonthTotal += t.total;
+    else if (key === prevMonthKey) prevMonthTotal += t.total;
+  }
+  const trendPct = prevMonthTotal > 0 ? Math.round(((thisMonthTotal - prevMonthTotal) / prevMonthTotal) * 100) : null;
 
   const q = search.toLowerCase();
-  const filteredCategories = CATEGORIES.filter((c) => {
-    const matchesSearch = c.name.toLowerCase().includes(q);
-    return matchesSearch;
-  });
+  const filteredCategories = categories.filter((c) => c.name.toLowerCase().includes(q));
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
@@ -53,46 +93,61 @@ export default function ExpenseScreen() {
         )}
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.body}>
-        <View style={styles.totalCard}>
-          <View>
-            <Text style={styles.totalLabel}>Total expenses · this month</Text>
-            <Text style={styles.totalAmt}>{fmtRs(total)}</Text>
-          </View>
-          <View style={styles.trendBadge}>
-            <Text style={styles.trendTxt}>↑ 8%</Text>
-          </View>
+      {loading ? (
+        <View style={styles.center}>
+          <ActivityIndicator color={colors.primary} size="large" />
         </View>
+      ) : (
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.body}>
+          <View style={styles.totalCard}>
+            <View>
+              <Text style={styles.totalLabel}>Total Expenses</Text>
+              <Text style={styles.totalAmt}>{fmtRs(total)}</Text>
+            </View>
+            {trendPct !== null && (
+              <View style={[styles.trendBadge, trendPct > 0 ? styles.trendBadgeUp : styles.trendBadgeDown]}>
+                <Text style={[styles.trendTxt, trendPct > 0 ? styles.trendTxtUp : styles.trendTxtDown]}>
+                  {trendPct > 0 ? "↑" : trendPct < 0 ? "↓" : "•"} {Math.abs(trendPct)}% vs last month
+                </Text>
+              </View>
+            )}
+          </View>
 
-        <Text style={styles.sectionTxt}>Categories</Text>
-        {filteredCategories.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Ionicons name="search-outline" size={40} color={colors.border} />
-            <Text style={styles.emptyTitle}>
-              {search ? "No matching records" : "No categories yet"}
-            </Text>
-          </View>
-        ) : (
-          <View style={styles.grid}>
-            {filteredCategories.map((c) => {
-              const pct = ((c.amt / total) * 100).toFixed(0);
-              return (
-                <View key={c.name} style={styles.catCard}>
-                  <View style={styles.catCardTop}>
-                    <View style={[styles.catIcon, { backgroundColor: c.tint }]}>
-                      <Text style={{ fontSize: 17 }}>{c.icon}</Text>
+          <Text style={styles.sectionTxt}>Categories</Text>
+          {filteredCategories.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="search-outline" size={40} color={colors.border} />
+              <Text style={styles.emptyTitle}>
+                {search ? "No matching records" : txns.length === 0 ? "No expenses yet" : "No categories yet"}
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.grid}>
+              {filteredCategories.map((c) => {
+                const pct = total > 0 ? ((c.amt / total) * 100).toFixed(0) : "0";
+                const style = styleForCategory(c.name);
+                return (
+                  <TouchableOpacity
+                    key={c.name}
+                    style={styles.catCard}
+                    onPress={() => router.push(`/expense/category/${encodeURIComponent(c.name)}` as never)}
+                  >
+                    <View style={styles.catCardTop}>
+                      <View style={[styles.catIcon, { backgroundColor: style.tint }]}>
+                        <Text style={{ fontSize: 17 }}>{style.icon}</Text>
+                      </View>
+                      <Text style={[styles.catPct, { color: style.fg }]}>{pct}%</Text>
                     </View>
-                    <Text style={[styles.catPct, { color: c.fg }]}>{pct}%</Text>
-                  </View>
-                  <Text style={styles.catName}>{c.name}</Text>
-                  <Text style={styles.catAmt}>{fmtRs(c.amt)}</Text>
-                  <Text style={styles.catCount}>{c.count} {c.count === 1 ? "entry" : "entries"}</Text>
-                </View>
-              );
-            })}
-          </View>
-        )}
-      </ScrollView>
+                    <Text style={styles.catName}>{c.name}</Text>
+                    <Text style={styles.catAmt}>{fmtRs(c.amt)}</Text>
+                    <Text style={styles.catCount}>{c.count} {c.count === 1 ? "entry" : "entries"}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
+        </ScrollView>
+      )}
 
       <View style={[styles.fabWrap, { bottom: 24 + (insets.bottom || 8) }]}>
         <TouchableOpacity style={styles.fab} onPress={() => router.push("/expense/new" as never)}>
@@ -123,6 +178,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   searchInput: { flex: 1, fontSize: 14, color: colors.text },
+  center: { flex: 1, alignItems: "center", justifyContent: "center" },
   body: { padding: 18, paddingBottom: 120 },
   totalCard: {
     backgroundColor: "#fff", borderRadius: 14, padding: 18,
@@ -131,8 +187,12 @@ const styles = StyleSheet.create({
   },
   totalLabel: { fontSize: 11, color: colors.textLight, fontWeight: "500", textTransform: "uppercase", letterSpacing: 0.3 },
   totalAmt: { fontSize: 24, fontWeight: "700", color: colors.text, marginTop: 5, letterSpacing: -0.3 },
-  trendBadge: { backgroundColor: "#fff7ed", borderRadius: 100, paddingHorizontal: 10, paddingVertical: 5 },
-  trendTxt: { fontSize: 11, fontWeight: "700", color: "#c2410c" },
+  trendBadge: { borderRadius: 100, paddingHorizontal: 10, paddingVertical: 5 },
+  trendBadgeUp: { backgroundColor: "#fff7ed" },
+  trendBadgeDown: { backgroundColor: "#e6f9ee" },
+  trendTxt: { fontSize: 11, fontWeight: "700" },
+  trendTxtUp: { color: "#c2410c" },
+  trendTxtDown: { color: colors.green },
   sectionTxt: { fontSize: 13, fontWeight: "600", color: colors.text, marginTop: 20, marginBottom: 12 },
   emptyState: { alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 40 },
   emptyTitle: { fontSize: 14, fontWeight: "600", color: colors.textLight },

@@ -9,6 +9,7 @@ export default function DebitNoteListScreen() {
       emptyMessage={"No debit notes yet.\nTap below to create one."}
       fabLabel="Add Debit Note"
       fabRoute="/debit-note/new"
+      editRoute="/debit-note/new"
     />
   );
 }

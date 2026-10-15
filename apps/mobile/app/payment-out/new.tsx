@@ -1,10 +1,13 @@
-import { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet } from "react-native";
-import { useRouter } from "expo-router";
+import { useState, useEffect } from "react";
+import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Alert } from "react-native";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../src/theme";
+import { api } from "../../src/auth";
 import { useParties } from "../../src/useParties";
+import { useSelectedCompany } from "../../src/useSelectedCompany";
+import { takeHandoffTxn } from "../../src/txnHandoff";
 
 const PAYMENT_METHODS = [
   { icon: "cash-outline" as const, label: "Cash" },
@@ -16,16 +19,98 @@ const PAYMENT_METHODS = [
 export default function NewPaymentOutScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams<{ editId?: string }>();
+  const isEdit = Boolean(params.editId);
   const { parties } = useParties();
+  const { selectedCompanyId } = useSelectedCompany();
   const [supplier, setSupplier] = useState("");
+  const [supplierId, setSupplierId] = useState<string | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState("Cash");
+  const [dateIso, setDateIso] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [loadingEdit, setLoadingEdit] = useState(isEdit);
+
+  // Load the existing payment when opened via txn/[id].tsx's Edit action — mirrors
+  // purchase/new.tsx's own editId handling. Deliberately not depending on `parties` so
+  // this only ever runs once per editId; a re-run when parties finish loading later
+  // would wipe out edits the user already made.
+  useEffect(() => {
+    if (!params.editId) return;
+    const handed = takeHandoffTxn(params.editId);
+    const load = handed
+      ? Promise.resolve(handed)
+      : api.getTransaction(params.editId).catch(() => null);
+
+    load.then(async (txn) => {
+      if (!txn) { Alert.alert("Not found", "Could not load this payment."); router.back(); return; }
+
+      let party = parties.find((p) => p.id === txn.partyId) ?? null;
+      if (!party) {
+        try { party = (await api.getParties()).find((p) => p.id === txn.partyId) ?? null; }
+        catch { /* fall through with whatever the handoff/notes already gave us */ }
+      }
+      setSupplier(party?.name ?? "");
+      setSupplierId(txn.partyId);
+      setAmount(String(txn.total));
+      setDateIso(txn.date);
+
+      try {
+        const notes = JSON.parse(txn.notes ?? "{}");
+        if (notes.paymentType) setMethod(notes.paymentType);
+      } catch { /* ignore */ }
+
+      setLoadingEdit(false);
+    }).catch(() => {
+      Alert.alert("Error", "Could not load this payment.");
+      router.back();
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.editId]);
+
+  async function handleSave() {
+    if (!supplier.trim()) { Alert.alert("Select a supplier"); return; }
+    const amt = parseFloat(amount) || 0;
+    if (amt <= 0) { Alert.alert("Enter the amount to pay"); return; }
+    setSaving(true);
+    try {
+      const party = parties.find((p) => p.id === supplierId) ?? parties.find((p) => p.name === supplier);
+      if (!party) { Alert.alert("Select a valid supplier from the list"); setSaving(false); return; }
+      const total = amt;
+      const balance = 0;
+      const notes = JSON.stringify({ paymentType: method });
+      if (params.editId) {
+        await api.updateTransaction(params.editId, {
+          partyId: party.id,
+          date: dateIso ?? new Date().toISOString(),
+          total,
+          balance,
+          notes,
+        });
+      } else {
+        await api.createTransaction({
+          partyId: party.id,
+          type: "payment_out",
+          date: new Date().toISOString(),
+          total,
+          balance,
+          notes,
+          companyId: selectedCompanyId ?? undefined,
+        });
+      }
+      router.back();
+    } catch {
+      Alert.alert("Error", `Could not ${params.editId ? "update" : "save"}. Check your connection.`);
+    } finally {
+      setSaving(false);
+    }
+  }
 
   const filtered = parties.filter((p) =>
     p.name.toLowerCase().includes(supplier.toLowerCase())
   );
-  const d = new Date();
+  const d = dateIso ? new Date(dateIso) : new Date();
   const date = `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
 
   return (
@@ -34,7 +119,7 @@ export default function NewPaymentOutScreen() {
         <TouchableOpacity onPress={() => router.back()} hitSlop={8}>
           <Ionicons name="chevron-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={s.appBarTitle}>Payment-Out</Text>
+        <Text style={s.appBarTitle}>{isEdit ? "Edit Payment-Out" : "Payment-Out"}</Text>
         <TouchableOpacity hitSlop={8}>
           <Ionicons name="settings-outline" size={22} color={colors.textLight} />
         </TouchableOpacity>
@@ -66,7 +151,7 @@ export default function NewPaymentOutScreen() {
             <TextInput
               style={s.formInput}
               value={supplier}
-              onChangeText={(t) => { setSupplier(t); setShowDropdown(true); }}
+              onChangeText={(t) => { setSupplier(t); setSupplierId(null); setShowDropdown(true); }}
               onFocus={() => setShowDropdown(true)}
               placeholder="Select or type name"
               placeholderTextColor={colors.textLight}
@@ -87,7 +172,7 @@ export default function NewPaymentOutScreen() {
               <TouchableOpacity
                 key={p.id}
                 style={[s.dropdownRow, i === filtered.length - 1 && s.dropdownRowLast]}
-                onPress={() => { setSupplier(p.name); setShowDropdown(false); }}
+                onPress={() => { setSupplier(p.name); setSupplierId(p.id); setShowDropdown(false); }}
               >
                 <View style={s.dropdownAvatar}>
                   <Text style={s.dropdownAvatarTxt}>{p.name[0]?.toUpperCase()}</Text>
@@ -143,11 +228,11 @@ export default function NewPaymentOutScreen() {
       </ScrollView>
 
       <View style={[s.footer, { paddingBottom: insets.bottom + 8 }]}>
-        <TouchableOpacity style={s.draftBtn}>
+        <TouchableOpacity style={s.draftBtn} disabled={saving || loadingEdit}>
           <Text style={s.draftBtnTxt}>Save Draft</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={s.saveBtn} onPress={() => router.back()}>
-          <Text style={s.saveBtnTxt}>Save Payment</Text>
+        <TouchableOpacity style={s.saveBtn} onPress={handleSave} disabled={saving || loadingEdit}>
+          <Text style={s.saveBtnTxt}>{saving ? "Saving…" : isEdit ? "Update" : "Save Payment"}</Text>
         </TouchableOpacity>
       </View>
     </View>

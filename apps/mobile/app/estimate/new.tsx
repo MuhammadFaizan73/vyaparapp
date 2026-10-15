@@ -1,15 +1,17 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
   StyleSheet, KeyboardAvoidingView, Platform, Alert,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { colors } from "../../src/theme";
 import { api } from "../../src/auth";
 import { useParties } from "../../src/useParties";
 import { useItems } from "../../src/useItems";
+import { takeHandoffTxn } from "../../src/txnHandoff";
+import { parseNoteItems } from "../../src/invoiceHtml";
 
 type ItemRow = { name: string; qty: number; unit: string; mrp: string; rate: number };
 const UNITS = ["Pcs", "Kg", "Gm", "L", "ML", "Box", "Pack", "Bag", "Mtr", "Ft", "NONE"];
@@ -23,19 +25,22 @@ function todayStr() {
    ADD ITEM SUB-SCREEN
 ══════════════════════════════════════════════════════ */
 function AddItemScreen({
-  catalog, onSave, onSaveNew, onBack,
+  catalog, initial, onSave, onSaveNew, onDelete, onBack,
 }: {
   catalog: any[];
+  initial?: ItemRow;
   onSave: (item: ItemRow) => void;
   onSaveNew: (item: ItemRow) => void;
+  onDelete?: () => void;
   onBack: () => void;
 }) {
   const insets = useSafeAreaInsets();
-  const [name, setName] = useState("");
-  const [qty, setQty] = useState("");
-  const [unit, setUnit] = useState("Pcs");
-  const [mrp, setMrp] = useState("");
-  const [rate, setRate] = useState("");
+  const isEditingItem = !!initial;
+  const [name, setName] = useState(initial?.name ?? "");
+  const [qty, setQty] = useState(initial ? String(initial.qty) : "");
+  const [unit, setUnit] = useState(initial?.unit ?? "Pcs");
+  const [mrp, setMrp] = useState(initial?.mrp ?? "");
+  const [rate, setRate] = useState(initial ? String(initial.rate) : "");
   const [showUnitDrop, setShowUnitDrop] = useState(false);
   const [showCatalog, setShowCatalog] = useState(false);
   const [nameFocused, setNameFocused] = useState(false);
@@ -55,10 +60,19 @@ function AddItemScreen({
         <TouchableOpacity onPress={onBack} hitSlop={8}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={sf.appBarTitle}>Add Items to Estimate/Quotation</Text>
-        <TouchableOpacity hitSlop={8}>
-          <Ionicons name="settings-outline" size={22} color={colors.textLight} />
-        </TouchableOpacity>
+        <Text style={sf.appBarTitle}>{isEditingItem ? "Edit Item" : "Add Items to Estimate/Quotation"}</Text>
+        {isEditingItem && onDelete ? (
+          <TouchableOpacity hitSlop={8} onPress={() => Alert.alert("Remove item", "Remove this item from the estimate?", [
+            { text: "Cancel", style: "cancel" },
+            { text: "Remove", style: "destructive", onPress: onDelete },
+          ])}>
+            <Ionicons name="trash-outline" size={22} color={colors.textLight} />
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity hitSlop={8}>
+            <Ionicons name="settings-outline" size={22} color={colors.textLight} />
+          </TouchableOpacity>
+        )}
       </View>
 
       <ScrollView keyboardShouldPersistTaps="always" contentContainerStyle={sf.scroll}>
@@ -128,11 +142,13 @@ function AddItemScreen({
       </ScrollView>
 
       <View style={[sf.footer, { paddingBottom: insets.bottom + 8 }]}>
-        <TouchableOpacity style={sf.saveNewBtn} onPress={() => { const item = buildItem(); if (item) onSaveNew(item); }}>
-          <Text style={sf.saveNewTxt}>Save &amp; New</Text>
-        </TouchableOpacity>
+        {!isEditingItem && (
+          <TouchableOpacity style={sf.saveNewBtn} onPress={() => { const item = buildItem(); if (item) onSaveNew(item); }}>
+            <Text style={sf.saveNewTxt}>Save &amp; New</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity style={sf.saveBtn} onPress={() => { const item = buildItem(); if (item) onSave(item); }}>
-          <Text style={sf.saveTxt}>Save</Text>
+          <Text style={sf.saveTxt}>{isEditingItem ? "Update" : "Save"}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -145,11 +161,14 @@ function AddItemScreen({
 export default function NewEstimateScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams<{ editId?: string }>();
+  const isEdit = Boolean(params.editId);
   const { parties } = useParties();
   const { items: catalog } = useItems();
 
-  const [refNo] = useState("1");
-  const [dateDisplay] = useState(todayStr());
+  const [refNo, setRefNo] = useState("1");
+  const [dateDisplay, setDateDisplay] = useState(todayStr());
+  const [dateIso, setDateIso] = useState<string | null>(null);
 
   const [customer, setCustomer] = useState("");
   const [customerId, setCustomerId] = useState<string | null>(null);
@@ -164,6 +183,61 @@ export default function NewEstimateScreen() {
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [showAddItem, setShowAddItem] = useState(false);
+  const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null);
+  const [loadingEdit, setLoadingEdit] = useState(isEdit);
+
+  // Load the existing estimate when opened via estimate/index.tsx's row tap — mirrors
+  // purchase/new.tsx's own editId handling. Deliberately not depending on `parties`/`catalog`
+  // so this only ever runs once per editId; a re-run when those finish loading later
+  // would wipe out edits the user already made.
+  useEffect(() => {
+    if (!params.editId) return;
+    const handed = takeHandoffTxn(params.editId);
+    const load = handed
+      ? Promise.resolve(handed)
+      : api.getTransaction(params.editId).catch(() => null);
+
+    load.then(async (txn) => {
+      if (!txn) { Alert.alert("Not found", "Could not load this estimate."); router.back(); return; }
+
+      let party = parties.find((p) => p.id === txn.partyId) ?? null;
+      if (!party) {
+        try { party = (await api.getParties()).find((p) => p.id === txn.partyId) ?? null; }
+        catch { /* fall through with whatever the handoff/notes already gave us */ }
+      }
+      setCustomer(party?.name ?? "");
+      setCustomerId(txn.partyId);
+      setSelectedParty(party);
+
+      setRefNo(txn.number ?? "1");
+      setDateIso(txn.date);
+      const d = new Date(txn.date);
+      setDateDisplay(`${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`);
+
+      let parsedNotes: any = {};
+      try { parsedNotes = JSON.parse(txn.notes ?? "{}"); } catch { parsedNotes = {}; }
+      // notes is either `{ items: [...], ... }` (this screen's own save format) or a bare
+      // array (every bulk-imported transaction) — parseNoteItems handles both shapes (same
+      // helper purchase/new.tsx uses for this exact reason).
+      const loadedItems: ItemRow[] = parseNoteItems(txn.notes).map((it: any) => ({
+        name: it.name ?? "",
+        qty: Number(it.qty) || 0,
+        unit: it.unit ?? "Pcs",
+        mrp: it.mrp != null ? String(it.mrp) : "",
+        rate: Number(it.rate) || 0,
+      }));
+      setItems(loadedItems);
+      setDiscountPct(parsedNotes.discountPct ?? "");
+      setDiscountRs(parsedNotes.discountRs ?? "");
+      setNote(typeof parsedNotes.note === "string" ? parsedNotes.note : "");
+
+      setLoadingEdit(false);
+    }).catch(() => {
+      Alert.alert("Error", "Could not load this estimate.");
+      router.back();
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.editId]);
 
   const subtotal = items.reduce((s, i) => s + i.qty * i.rate, 0);
   const totalQty  = items.reduce((s, i) => s + i.qty, 0);
@@ -193,18 +267,30 @@ export default function NewEstimateScreen() {
     try {
       const party = parties.find((p) => p.id === customerId) ?? parties.find((p) => p.name === customer);
       if (!party) { Alert.alert("Select a valid customer from the list"); setSaving(false); return; }
-      await api.createTransaction({
-        partyId: party.id,
-        type: "estimate",
-        number: refNo,
-        date: new Date().toISOString(),
-        total,
-        balance: total,
-        notes: JSON.stringify({ items, discountPct, discountRs, note }),
-      });
-      if (saveAndNew) { router.replace("/estimate/new"); }
-      else { router.back(); }
-    } catch { Alert.alert("Error", "Could not save. Check your connection."); }
+      const notes = JSON.stringify({ items, discountPct, discountRs, note });
+      if (params.editId) {
+        await api.updateTransaction(params.editId, {
+          partyId: party.id,
+          date: dateIso ?? new Date().toISOString(),
+          total,
+          balance: total,
+          notes,
+        });
+        router.back();
+      } else {
+        await api.createTransaction({
+          partyId: party.id,
+          type: "estimate",
+          number: refNo,
+          date: new Date().toISOString(),
+          total,
+          balance: total,
+          notes,
+        });
+        if (saveAndNew) { router.replace("/estimate/new"); }
+        else { router.back(); }
+      }
+    } catch { Alert.alert("Error", `Could not ${params.editId ? "update" : "save"}. Check your connection.`); }
     finally { setSaving(false); }
   }
 
@@ -212,9 +298,21 @@ export default function NewEstimateScreen() {
     return (
       <AddItemScreen
         catalog={catalog}
-        onSave={(item) => { setItems((prev) => [...prev, item]); setShowAddItem(false); }}
+        initial={editingItemIndex !== null ? items[editingItemIndex] : undefined}
+        onSave={(item) => {
+          setItems((prev) => editingItemIndex !== null
+            ? prev.map((it, i) => (i === editingItemIndex ? item : it))
+            : [...prev, item]);
+          setEditingItemIndex(null);
+          setShowAddItem(false);
+        }}
         onSaveNew={(item) => { setItems((prev) => [...prev, item]); }}
-        onBack={() => setShowAddItem(false)}
+        onDelete={editingItemIndex !== null ? () => {
+          setItems((prev) => prev.filter((_, i) => i !== editingItemIndex));
+          setEditingItemIndex(null);
+          setShowAddItem(false);
+        } : undefined}
+        onBack={() => { setEditingItemIndex(null); setShowAddItem(false); }}
       />
     );
   }
@@ -228,7 +326,7 @@ export default function NewEstimateScreen() {
           <TouchableOpacity onPress={() => router.back()} hitSlop={8}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
-          <Text style={s.appBarTitle}>Estimate/Quotation</Text>
+          <Text style={s.appBarTitle}>{isEdit ? "Edit Estimate" : "Estimate/Quotation"}</Text>
           <TouchableOpacity hitSlop={8}>
             <Ionicons name="settings-outline" size={22} color={colors.textMuted} />
           </TouchableOpacity>
@@ -306,16 +404,18 @@ export default function NewEstimateScreen() {
                 <Text style={s.billedHeaderTxt}>Billed Items</Text>
               </View>
               {items.map((item, idx) => (
-                <View key={idx} style={s.billedItem}>
+                <TouchableOpacity key={idx} style={s.billedItem}
+                  onPress={() => { setEditingItemIndex(idx); setShowAddItem(true); }}>
                   <View style={s.billedItemTop}>
                     <View style={s.billedItemNumBadge}>
                       <Text style={s.billedItemNumTxt}>#{idx + 1}</Text>
                     </View>
                     <Text style={s.billedItemName} numberOfLines={1}>{item.name}</Text>
                     <Text style={s.billedItemAmt}>Rs {(item.qty * item.rate).toFixed(0)}</Text>
+                    <Ionicons name="create-outline" size={16} color={colors.textLight} />
                   </View>
                   <Text style={s.billedItemSub}>Item Subtotal    {item.qty} x {item.rate} = Rs {(item.qty * item.rate).toFixed(0)}</Text>
-                </View>
+                </TouchableOpacity>
               ))}
               <View style={s.billedSummary}>
                 <View style={s.billedSummaryRow}>
@@ -331,7 +431,7 @@ export default function NewEstimateScreen() {
           )}
 
           {/* Add Items */}
-          <TouchableOpacity style={s.addItemsBtn} onPress={() => setShowAddItem(true)}>
+          <TouchableOpacity style={s.addItemsBtn} onPress={() => { setEditingItemIndex(null); setShowAddItem(true); }}>
             <Ionicons name="add-circle" size={22} color={colors.primary} />
             <Text style={s.addItemsTxt}>Add Items{items.length === 0 ? " (Optional)" : ""}</Text>
           </TouchableOpacity>
@@ -418,11 +518,13 @@ export default function NewEstimateScreen() {
 
         {/* Footer */}
         <View style={[s.footer, { paddingBottom: insets.bottom + 8 }]}>
-          <TouchableOpacity style={s.saveNewBtn} onPress={() => handleSave(true)} disabled={saving}>
-            <Text style={s.saveNewTxt}>Save &amp; New</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={s.saveBtn} onPress={() => handleSave(false)} disabled={saving}>
-            <Text style={s.saveTxt}>{saving ? "Saving…" : "Save"}</Text>
+          {!isEdit && (
+            <TouchableOpacity style={s.saveNewBtn} onPress={() => handleSave(true)} disabled={saving || loadingEdit}>
+              <Text style={s.saveNewTxt}>Save &amp; New</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity style={s.saveBtn} onPress={() => handleSave(false)} disabled={saving || loadingEdit}>
+            <Text style={s.saveTxt}>{saving ? "Saving…" : isEdit ? "Update" : "Save"}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={s.moreBtn}>
             <Ionicons name="ellipsis-vertical" size={20} color={colors.textMuted} />

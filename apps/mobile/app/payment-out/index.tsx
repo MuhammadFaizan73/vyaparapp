@@ -9,6 +9,7 @@ export default function PaymentOutListScreen() {
       emptyMessage={"No outgoing payments yet.\nTap below to record a payment."}
       fabLabel="Add Payment-Out"
       fabRoute="/payment-out/new"
+      editRoute="/payment-out/new"
     />
   );
 }
