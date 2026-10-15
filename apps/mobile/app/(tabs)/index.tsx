@@ -16,7 +16,7 @@ import { buildInvoiceHtml } from "../../src/invoiceHtml";
 import { useInvoiceHtmlOptions, useSettings } from "../../src/useSettings";
 import { getItems as getCachedItems, loadItems, subscribeItems, type Item } from "../../src/itemsStore";
 import { getRange, isWithinRange, PeriodModal, type DateRange } from "../../src/components/DateRangeFilter";
-import type { Party, Transaction } from "@vyapar/api-client";
+import type { Party, PartyGroup, Transaction } from "@vyapar/api-client";
 
 export default function HomeScreen() {
   const { settings, loaded } = useSettings();
@@ -306,6 +306,13 @@ function TrendingHome() {
   const [search, setSearch] = useState("");
   const [listFilterIdx, setListFilterIdx] = useState(0);
   const [showListFilter, setShowListFilter] = useState(false);
+
+  // Parties tab "⋮" overflow menu — matches the real Vyapar app's own menu there.
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [sortNameAZ, setSortNameAZ] = useState(false);
+  const [groups, setGroups] = useState<PartyGroup[]>([]);
+  const [groupFilterId, setGroupFilterId] = useState<string>("");
+  const [showGroupPicker, setShowGroupPicker] = useState(false);
   // Stat cards (You'll Get/You'll Give) jump to the Parties tab pre-filtered to To
   // Collect/To Pay — this holds the target filter across that tab switch so the effect
   // below doesn't reset it back to "All" the moment `tab` changes.
@@ -332,6 +339,7 @@ function TrendingHome() {
         api.getAllTransactions(),
         api.getTenant(),
       ]);
+      api.listPartyGroups().then(setGroups).catch(() => {});
       const map: Record<string, string> = {};
       allParties.forEach((p) => { map[p.id] = p.name; });
       setParties(allParties);
@@ -372,17 +380,20 @@ function TrendingHome() {
 
   const filterOptsForTab = tab === "parties" ? PARTY_FILTERS : tab === "transactions" ? TXN_FILTERS : ITEM_FILTERS;
 
-  const filteredParties = parties.filter((p) => {
-    const q = search.trim().toLowerCase();
-    const matchesSearch = !q || p.name.toLowerCase().includes(q) || (p.phone ?? "").includes(search.trim());
-    const matchesFilter =
-      listFilterIdx === 0 ||
-      (listFilterIdx === 1 && (p.partyType === "customer" || p.partyType === "both")) ||
-      (listFilterIdx === 2 && (p.partyType === "supplier" || p.partyType === "both")) ||
-      (listFilterIdx === 3 && (p.balance ?? 0) > 0) ||
-      (listFilterIdx === 4 && (p.balance ?? 0) < 0);
-    return matchesSearch && matchesFilter;
-  });
+  const filteredParties = parties
+    .filter((p) => {
+      const q = search.trim().toLowerCase();
+      const matchesSearch = !q || p.name.toLowerCase().includes(q) || (p.phone ?? "").includes(search.trim());
+      const matchesFilter =
+        listFilterIdx === 0 ||
+        (listFilterIdx === 1 && (p.partyType === "customer" || p.partyType === "both")) ||
+        (listFilterIdx === 2 && (p.partyType === "supplier" || p.partyType === "both")) ||
+        (listFilterIdx === 3 && (p.balance ?? 0) > 0) ||
+        (listFilterIdx === 4 && (p.balance ?? 0) < 0);
+      const matchesGroup = !groupFilterId || p.groupId === groupFilterId;
+      return matchesSearch && matchesFilter && matchesGroup;
+    })
+    .sort((a, b) => (sortNameAZ ? a.name.localeCompare(b.name) : 0));
 
   const filteredTxns = txns.filter((r) => {
     if (!isWithinRange(r.date, range)) return false;
@@ -471,10 +482,70 @@ function TrendingHome() {
         <TouchableOpacity style={t.newBtn} onPress={handleAddPress}>
           <Text style={t.newBtnTxt}>{trendingAddLabel(tab)}</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={t.smallIconBtn} hitSlop={6}>
-          <Ionicons name="ellipsis-vertical" size={18} color={colors.text} />
-        </TouchableOpacity>
+        {tab === "parties" && (
+          <TouchableOpacity style={t.smallIconBtn} onPress={() => setShowMoreMenu(true)} hitSlop={6}>
+            <Ionicons name="ellipsis-vertical" size={18} color={colors.text} />
+          </TouchableOpacity>
+        )}
       </View>
+
+      {/* Parties "⋮" overflow menu */}
+      <Modal visible={showMoreMenu} transparent animationType="fade" onRequestClose={() => setShowMoreMenu(false)}>
+        <Pressable style={t.filterOverlay} onPress={() => setShowMoreMenu(false)}>
+          <View style={t.moreMenuSheet}>
+            <TouchableOpacity
+              style={t.moreMenuRow}
+              onPress={() => { setShowMoreMenu(false); Alert.alert("Bulk Payment Reminder", "Yeh feature abhi build nahi hua — SMS bhejne ke liye naya backend chahiye."); }}
+            >
+              <Text style={t.moreMenuTxt}>Bulk Payment Reminder</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={t.moreMenuRow}
+              onPress={() => { setShowMoreMenu(false); Alert.alert("Bulk Message", "Yeh feature abhi build nahi hua — SMS bhejne ke liye naya backend chahiye."); }}
+            >
+              <Text style={t.moreMenuTxt}>Bulk Message</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={t.moreMenuRow}
+              onPress={() => { setShowMoreMenu(false); setShowGroupPicker(true); }}
+            >
+              <Text style={t.moreMenuTxt}>Party Grouping</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={t.moreMenuRow}
+              onPress={() => { setSortNameAZ((v) => !v); setShowMoreMenu(false); }}
+            >
+              <Text style={t.moreMenuTxt}>Sort by Name [A-Z]</Text>
+              <Ionicons name={sortNameAZ ? "checkbox" : "square-outline"} size={18} color={sortNameAZ ? colors.primary : colors.textMuted} />
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* Party Grouping — filter the list by an existing group */}
+      <Modal visible={showGroupPicker} transparent animationType="fade" onRequestClose={() => setShowGroupPicker(false)}>
+        <Pressable style={t.filterOverlay} onPress={() => setShowGroupPicker(false)}>
+          <View style={t.filterSheet}>
+            <TouchableOpacity style={t.filterRow} onPress={() => { setGroupFilterId(""); setShowGroupPicker(false); }}>
+              <Text style={[t.filterRowTxt, !groupFilterId && t.filterRowTxtActive]}>All Groups</Text>
+              {!groupFilterId
+                ? <Ionicons name="checkmark-circle" size={18} color={colors.primary} />
+                : <View style={t.filterCircle} />}
+            </TouchableOpacity>
+            {groups.map((g) => (
+              <TouchableOpacity key={g.id} style={t.filterRow} onPress={() => { setGroupFilterId(g.id); setShowGroupPicker(false); }}>
+                <Text style={[t.filterRowTxt, groupFilterId === g.id && t.filterRowTxtActive]}>{g.name}</Text>
+                {groupFilterId === g.id
+                  ? <Ionicons name="checkmark-circle" size={18} color={colors.primary} />
+                  : <View style={t.filterCircle} />}
+              </TouchableOpacity>
+            ))}
+            {groups.length === 0 && (
+              <Text style={t.moreMenuEmpty}>Koi group nahi bana — Add Party screen se bana sakte hain.</Text>
+            )}
+          </View>
+        </Pressable>
+      </Modal>
 
       {/* List filter picker (options depend on the active tab) */}
       <Modal visible={showListFilter} transparent animationType="fade" onRequestClose={() => setShowListFilter(false)}>
@@ -1295,6 +1366,14 @@ const t = StyleSheet.create({
   filterRowTxt: { fontSize: 14, color: colors.text },
   filterRowTxtActive: { color: colors.primary, fontWeight: "600" },
   filterCircle: { width: 18, height: 18, borderRadius: 9, borderWidth: 1.5, borderColor: colors.border },
+  moreMenuSheet: { backgroundColor: "#fff", borderRadius: 14, paddingVertical: 6 },
+  moreMenuRow: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 18, paddingVertical: 13,
+    borderBottomWidth: 1, borderBottomColor: colors.borderLight,
+  },
+  moreMenuTxt: { fontSize: 14, color: colors.text },
+  moreMenuEmpty: { fontSize: 13, color: colors.textMuted, padding: 18, textAlign: "center" },
 
   list: { padding: 12, flexGrow: 1 },
   row: {
