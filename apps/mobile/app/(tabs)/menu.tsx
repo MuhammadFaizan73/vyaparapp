@@ -322,7 +322,7 @@ export default function MenuScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   appBar: {
-    backgroundColor: "#fff", paddingHorizontal: 18, paddingVertical: 16,
+    backgroundColor: "#fff", paddingHorizontal: 18, paddingVertical: 12,
     borderBottomWidth: 1, borderBottomColor: colors.border,
   },
   appBarTitle: { fontSize: 17, fontWeight: "600", color: colors.text },
@@ -331,8 +331,8 @@ const styles = StyleSheet.create({
 
   searchBar: {
     flexDirection: "row", alignItems: "center", gap: 10,
-    backgroundColor: "#eef1f5", marginHorizontal: 16, marginTop: 12,
-    borderRadius: 100, paddingHorizontal: 16, paddingVertical: 12,
+    backgroundColor: "#eef1f5", marginHorizontal: 16, marginTop: 10,
+    borderRadius: 100, paddingHorizontal: 16, paddingVertical: 10,
   },
   searchInput: { flex: 1, fontSize: 13.5, color: colors.text, padding: 0 },
 
