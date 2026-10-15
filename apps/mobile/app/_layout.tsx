@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Stack } from "expo-router";
+import { View } from "react-native";
+import { Stack, usePathname } from "expo-router";
 import * as Updates from "expo-updates";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -7,8 +8,31 @@ import { PartySettingsProvider } from "../src/usePartySettings";
 import { DeviceProvider } from "../src/useDeviceSession";
 import { SelectedCompanyProvider } from "../src/useSelectedCompany";
 import { ErrorBoundary } from "../src/ErrorBoundary";
+import { PersistentBottomBar } from "../src/components/PersistentBottomBar";
 import "../src/locationTask"; // register background location ping task
 import "../src/geoFenceTask"; // register shop geo-fence task
+
+// Every list/view screen (Purchase List, Sale List, Payment-In, party/item detail,
+// reports, ...) is its own top-level Stack route outside the (tabs) group, so the bottom
+// nav bar — previously only ever rendered via (tabs)/_layout.tsx's Tabs `tabBar` prop —
+// vanished the moment a user navigated to any of them. Render it here instead, as a
+// plain flex sibling below the Stack (not absolutely positioned — this lets the Stack's
+// own flex:1 area naturally shrink to make room, so every screen's own FAB/footer,
+// already positioned off that same area's safe-area insets, ends up sitting just above
+// the bar with no per-screen changes needed) — shown on every route except: the actual
+// (tabs) screens (Home/Dashboard/Items/Menu/Premium already get their own bar from the
+// Tabs navigator), every create/edit form (consistently named ".../new" throughout this
+// app), and pre-login/full-screen-flow routes where a bottom nav makes no sense.
+const TAB_PATHS = new Set(["/", "/dashboard", "/items", "/menu", "/premium"]);
+const HIDDEN_BAR_PREFIXES = [
+  "/onboarding", "/login", "/office-location", "/location-picker", "/accept-invite",
+];
+function shouldShowBottomBar(pathname: string): boolean {
+  if (TAB_PATHS.has(pathname)) return false;
+  if (pathname.endsWith("/new")) return false;
+  if (HIDDEN_BAR_PREFIXES.some((p) => pathname.startsWith(p) || pathname.includes(p))) return false;
+  return true;
+}
 
 export default function RootLayout() {
   // Known Android/old-architecture bug (facebook/react-native#25481, #23629): a Text's width
@@ -54,11 +78,22 @@ export default function RootLayout() {
         <PartySettingsProvider>
           <SelectedCompanyProvider>
             <ErrorBoundary>
-              <Stack screenOptions={{ headerShown: false }} />
+              <AppShell />
             </ErrorBoundary>
           </SelectedCompanyProvider>
         </PartySettingsProvider>
       </DeviceProvider>
     </SafeAreaProvider>
+  );
+}
+
+function AppShell() {
+  const pathname = usePathname();
+  const showBottomBar = shouldShowBottomBar(pathname);
+  return (
+    <View style={{ flex: 1 }}>
+      <Stack screenOptions={{ headerShown: false }} />
+      {showBottomBar && <PersistentBottomBar />}
+    </View>
   );
 }
