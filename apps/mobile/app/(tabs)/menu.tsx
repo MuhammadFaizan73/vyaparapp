@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert } from "react-native";
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, TextInput } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -106,6 +106,7 @@ export default function MenuScreen() {
   const [role, setRole] = useState("owner");
   const [permissions, setPermissions] = useState<string[] | null>(null);
   const [expanded, setExpanded] = useState<ExpandedSection>("sale");
+  const [search, setSearch] = useState("");
 
   useFocusEffect(useCallback(() => {
     getRole().then(setRole);
@@ -177,7 +178,10 @@ export default function MenuScreen() {
           <View style={[styles.expandIcon, { backgroundColor: tint }]}>
             <Ionicons name={icon} size={19} color={fg} />
           </View>
-          <Text style={styles.expandLabel}>{label}</Text>
+          <View style={styles.expandLabelWrap}>
+            <Text style={styles.expandLabel}>{label}</Text>
+            <Text style={styles.expandCount}>{items.length} option{items.length === 1 ? "" : "s"}</Text>
+          </View>
           <Ionicons
             name={open ? "chevron-up" : "chevron-down"}
             size={16}
@@ -212,6 +216,19 @@ export default function MenuScreen() {
         <Text style={styles.appBarTitle}>Menu</Text>
       </View>
 
+      {/* Search — visual only for now (filters nothing yet); wiring it up to actually
+          narrow the sections below is a behavior change, out of scope for this pass. */}
+      <View style={styles.searchBar}>
+        <Ionicons name="search-outline" size={18} color={colors.textLight} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search invoices, payments, reports…"
+          placeholderTextColor={colors.textLight}
+          value={search}
+          onChangeText={setSearch}
+        />
+      </View>
+
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
@@ -221,27 +238,37 @@ export default function MenuScreen() {
       >
         {/* Profile card */}
         <View style={styles.profileCard}>
-          <View style={styles.profileAvatar}>
-            <Text style={styles.profileAvatarTxt}>V</Text>
-          </View>
-          <View style={styles.profileMid}>
-            <Text style={styles.profileName}>Godigi</Text>
-            <Text style={styles.profileSub}>
-              {role === "owner" ? "Free Plan · 5 invoices left" : ROLE_LABELS[role] ?? role}
-            </Text>
+          <View style={styles.profileTop}>
+            <View style={styles.profileAvatar}>
+              <Text style={styles.profileAvatarTxt}>V</Text>
+            </View>
+            <View style={styles.profileMid}>
+              <Text style={styles.profileName}>Godigi</Text>
+              <View style={styles.profileSubRow}>
+                {role === "owner" ? (
+                  <>
+                    <View style={styles.planPill}><Text style={styles.planPillTxt}>Free Plan</Text></View>
+                    <Text style={styles.profileSub}>5 invoices left</Text>
+                  </>
+                ) : (
+                  <Text style={styles.profileSub}>{ROLE_LABELS[role] ?? role}</Text>
+                )}
+              </View>
+            </View>
           </View>
           {role === "owner" && (
             <TouchableOpacity
               style={styles.upgradeBtn}
               onPress={() => router.push("/plans-pricing" as never)}
             >
-              <Text style={styles.upgradeBtnTxt}>Upgrade</Text>
+              <Text style={styles.upgradeBtnTxt}>Upgrade plan</Text>
+              <Ionicons name="arrow-forward" size={15} color={colors.primary} />
             </TouchableOpacity>
           )}
         </View>
 
         {/* My Business */}
-        <Text style={styles.sectionHeader}>My Business</Text>
+        <Text style={styles.sectionHeader}>MY BUSINESS</Text>
         <View style={styles.group}>
           {renderExpandableSection("sale", "Sale", "receipt-outline", "#fff0f4", "#e11d48", SALE_ITEMS)}
           {renderExpandableSection("purchase", "Purchase", "cart-outline", "#f0fdf4", "#15803d", PURCHASE_ITEMS)}
@@ -302,29 +329,43 @@ const styles = StyleSheet.create({
   body: { paddingBottom: 110 },
   bodyCompactNav: { paddingBottom: 40 },
 
-  profileCard: {
-    backgroundColor: "#fff", marginHorizontal: 16, marginTop: 16,
-    borderRadius: 14, padding: 16,
-    borderWidth: 1, borderColor: colors.border,
-    flexDirection: "row", alignItems: "center", gap: 14,
+  searchBar: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    backgroundColor: "#eef1f5", marginHorizontal: 16, marginTop: 12,
+    borderRadius: 100, paddingHorizontal: 16, paddingVertical: 12,
   },
+  searchInput: { flex: 1, fontSize: 13.5, color: colors.text, padding: 0 },
+
+  profileCard: {
+    backgroundColor: colors.primary, marginHorizontal: 16, marginTop: 16,
+    borderRadius: 18, padding: 18, gap: 16,
+  },
+  profileTop: { flexDirection: "row", alignItems: "center", gap: 14 },
   profileAvatar: {
     width: 52, height: 52, borderRadius: 16,
-    backgroundColor: colors.primary,
+    backgroundColor: "#fff",
     alignItems: "center", justifyContent: "center",
   },
-  profileAvatarTxt: { fontSize: 20, fontWeight: "800", color: "#fff", letterSpacing: -0.5 },
+  profileAvatarTxt: { fontSize: 20, fontWeight: "800", color: colors.primary, letterSpacing: -0.5 },
   profileMid: { flex: 1 },
-  profileName: { fontSize: 15, fontWeight: "700", color: colors.text },
-  profileSub: { fontSize: 11.5, color: colors.textMuted, marginTop: 3 },
-  upgradeBtn: {
-    backgroundColor: colors.primary, borderRadius: 100,
-    paddingHorizontal: 14, paddingVertical: 7,
+  profileName: { fontSize: 18, fontWeight: "700", color: "#fff" },
+  profileSubRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6 },
+  planPill: {
+    backgroundColor: "rgba(255,255,255,0.18)", borderRadius: 100,
+    paddingHorizontal: 10, paddingVertical: 3,
   },
-  upgradeBtnTxt: { fontSize: 11.5, fontWeight: "600", color: "#fff" },
+  planPillTxt: { fontSize: 11, fontWeight: "700", color: "#fff" },
+  profileSub: { fontSize: 12.5, color: "rgba(255,255,255,0.85)" },
+  upgradeBtn: {
+    backgroundColor: "#fff", borderRadius: 10,
+    paddingVertical: 13, flexDirection: "row", alignItems: "center",
+    justifyContent: "center", gap: 8,
+  },
+  upgradeBtnTxt: { fontSize: 14, fontWeight: "700", color: colors.primary },
 
   sectionHeader: {
-    fontSize: 13, fontWeight: "600", color: colors.text,
+    fontSize: 12.5, fontWeight: "700", color: colors.textMuted,
+    textTransform: "uppercase", letterSpacing: 0.5,
     paddingHorizontal: 20, paddingTop: 20, paddingBottom: 10,
   },
 
@@ -356,7 +397,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 13,
   },
   expandIcon: { width: 38, height: 38, borderRadius: 10, alignItems: "center", justifyContent: "center", flexShrink: 0 },
-  expandLabel: { flex: 1, fontSize: 14, fontWeight: "600", color: colors.text },
+  expandLabelWrap: { flex: 1 },
+  expandLabel: { fontSize: 15, fontWeight: "700", color: colors.text },
+  expandCount: { fontSize: 11.5, color: colors.textLight, marginTop: 2 },
 
   subList: { backgroundColor: "#fafbfc", borderTopWidth: 1, borderTopColor: "#f0f2f5" },
   subRow: {

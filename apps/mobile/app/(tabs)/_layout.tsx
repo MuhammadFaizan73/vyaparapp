@@ -34,13 +34,18 @@ function ReadOnlyBanner() {
       <TouchableOpacity
         style={styles.readOnlyBanner}
         onPress={() => router.push("/manage-devices")}
-        activeOpacity={0.7}
+        activeOpacity={0.8}
       >
-        <Ionicons name="eye-outline" size={14} color={colors.amber} />
-        <Text style={styles.readOnlyText}>
-          View-only mode · Tap to activate this device
-        </Text>
-        <Ionicons name="chevron-forward" size={14} color={colors.amber} />
+        <View style={styles.readOnlyIconWrap}>
+          <Ionicons name="eye-outline" size={18} color={colors.amber} />
+        </View>
+        <View style={styles.readOnlyTextWrap}>
+          <Text style={styles.readOnlyTitle}>View-only mode</Text>
+          <Text style={styles.readOnlyText}>Activate this device to create entries</Text>
+        </View>
+        <View style={styles.readOnlyBtn}>
+          <Text style={styles.readOnlyBtnTxt}>Activate</Text>
+        </View>
       </TouchableOpacity>
     </View>
   );
@@ -208,19 +213,41 @@ const styles = StyleSheet.create({
   readOnlyBanner: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
     backgroundColor: colors.amberLight,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    gap: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: "#fde68a",
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 4,
+    borderRadius: 14,
+    padding: 14,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: "#fde68a",
+  },
+  readOnlyIconWrap: {
+    width: 36, height: 36, borderRadius: 10,
+    backgroundColor: "#fde68a",
+    alignItems: "center", justifyContent: "center",
+  },
+  readOnlyTextWrap: { flex: 1 },
+  readOnlyTitle: {
+    color: colors.amber,
+    fontSize: 14,
+    fontWeight: "700",
   },
   readOnlyText: {
     color: colors.amber,
-    fontSize: 12,
-    fontWeight: "600",
-    flex: 1,
-    textAlign: "center",
+    fontSize: 11.5,
+    marginTop: 2,
+  },
+  readOnlyBtn: {
+    backgroundColor: colors.amber,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  readOnlyBtnTxt: {
+    color: "#fff",
+    fontSize: 12.5,
+    fontWeight: "700",
   },
 });
