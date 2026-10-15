@@ -23,17 +23,25 @@ function ReadOnlyBanner() {
   const insets = useSafeAreaInsets();
   if (!isReadOnly) return null;
   return (
-    <TouchableOpacity
-      style={[styles.readOnlyBanner, { paddingTop: insets.top + 7 }]}
-      onPress={() => router.push("/manage-devices")}
-      activeOpacity={0.85}
-    >
-      <Ionicons name="eye-outline" size={14} color="#fff" />
-      <Text style={styles.readOnlyText}>
-        View-only mode · Tap to activate this device
-      </Text>
-      <Ionicons name="chevron-forward" size={14} color="#fff" />
-    </TouchableOpacity>
+    // A loud solid band bleeding into the status bar read as an error state, not a
+    // gentle heads-up, and didn't match how every other amber/warning indicator in this
+    // app (party balances, unpaid badges, team-member status) is styled — a light tint
+    // with amber text/icon, never a full-bleed solid color. The status-bar area itself
+    // stays the app's own background so the banner reads as "a notice within the app",
+    // not as if the OS status bar changed color.
+    <View style={{ paddingTop: insets.top, backgroundColor: colors.card }}>
+      <TouchableOpacity
+        style={styles.readOnlyBanner}
+        onPress={() => router.push("/manage-devices")}
+        activeOpacity={0.7}
+      >
+        <Ionicons name="eye-outline" size={14} color={colors.amber} />
+        <Text style={styles.readOnlyText}>
+          View-only mode · Tap to activate this device
+        </Text>
+        <Ionicons name="chevron-forward" size={14} color={colors.amber} />
+      </TouchableOpacity>
+    </View>
   );
 }
 
@@ -344,13 +352,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#d97706",
-    paddingVertical: 7,
+    backgroundColor: colors.amberLight,
+    paddingVertical: 8,
     paddingHorizontal: 12,
     gap: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: "#fde68a",
   },
   readOnlyText: {
-    color: "#fff",
+    color: colors.amber,
     fontSize: 12,
     fontWeight: "600",
     flex: 1,
