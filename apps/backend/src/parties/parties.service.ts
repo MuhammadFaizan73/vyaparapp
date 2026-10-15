@@ -1,7 +1,15 @@
 import { Injectable, NotFoundException, ForbiddenException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { SmsService } from "../sms/sms.service";
 import { CreatePartyDto, UpdatePartyDto } from "./parties.dto";
 import { companyIdWhere, parseCompanyIds } from "../common/company-filter.util";
+
+// D7 needs a full international number, no leading 0 on the local part — same convention
+// AuthService/SmsService already use for OTP, just not exported from there.
+function normalizePhone(countryCode: string, phone: string): string {
+  const digits = phone.replace(/\D/g, "");
+  return `${countryCode}${digits.replace(/^0+/, "")}`;
+}
 
 export type PartyRow = {
   id: string;
@@ -71,7 +79,10 @@ function toRow(p: any): PartyRow {
 
 @Injectable()
 export class PartiesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly sms: SmsService,
+  ) {}
 
   // companyId, when provided, scopes both which parties show up (parties directly
   // tagged to the company, or with at least one transaction tied to it) and their
@@ -231,5 +242,45 @@ export class PartiesService {
     await this.prisma.party.create({
       data: { tenantId, name: "Cash Sale", isSystem: true },
     });
+  }
+
+  // Only parties the caller actually owes money to (balance > 0 = receivable, same sign
+  // convention parties.service.ts's own list() already uses) get a reminder — sending one
+  // to a party with nothing outstanding would just be a wrong, confusing SMS.
+  async bulkPaymentReminder(tenantId: string, partyIds: string[]): Promise<{ sent: number; skipped: number }> {
+    const [allParties, tenant] = await Promise.all([
+      this.list(tenantId),
+      this.prisma.tenant.findUnique({ where: { id: tenantId }, select: { countryCode: true, companyName: true } }),
+    ]);
+    const idSet = new Set(partyIds);
+    const targets = allParties.filter((p) => idSet.has(p.id) && p.phone && p.balance > 0);
+    const skipped = partyIds.length - targets.length;
+    if (!targets.length) return { sent: 0, skipped };
+
+    const cc = tenant?.countryCode ?? "";
+    const bizName = tenant?.companyName || "us";
+    const messages = targets.map((p) => ({
+      recipients: [normalizePhone(cc, p.phone!)],
+      content: `Dear ${p.name}, aapka ${bizName} ke paas Rs ${p.balance.toLocaleString("en-PK")} ka outstanding hai. Jald ada farmayen. Shukriya.`,
+    }));
+    await this.sms.sendBulkSms(messages);
+    return { sent: targets.length, skipped };
+  }
+
+  async bulkMessage(tenantId: string, partyIds: string[], message: string): Promise<{ sent: number; skipped: number }> {
+    const [allParties, tenant] = await Promise.all([
+      this.prisma.party.findMany({ where: { tenantId, id: { in: partyIds } }, select: { id: true, phone: true } }),
+      this.prisma.tenant.findUnique({ where: { id: tenantId }, select: { countryCode: true } }),
+    ]);
+    const targets = allParties.filter((p) => p.phone);
+    const skipped = partyIds.length - targets.length;
+    if (!targets.length) return { sent: 0, skipped };
+
+    const cc = tenant?.countryCode ?? "";
+    await this.sms.sendBulkSms([{
+      recipients: targets.map((p) => normalizePhone(cc, p.phone!)),
+      content: message,
+    }]);
+    return { sent: targets.length, skipped };
   }
 }

@@ -1,4 +1,4 @@
-import { IsIn, IsNumber, IsOptional, IsString, MaxLength, Min } from "class-validator";
+import { ArrayMinSize, IsArray, IsIn, IsNumber, IsOptional, IsString, MaxLength, Min } from "class-validator";
 
 export class CreatePartyDto {
   @IsString() @MaxLength(100) name!: string;
@@ -52,4 +52,13 @@ export class UpdatePartyDto {
   @IsOptional() @IsNumber() latitude?: number;
   @IsOptional() @IsNumber() longitude?: number;
   @IsOptional() @IsString() companyId?: string;
+}
+
+export class BulkPaymentReminderDto {
+  @IsArray() @ArrayMinSize(1) @IsString({ each: true }) partyIds!: string[];
+}
+
+export class BulkMessageDto {
+  @IsArray() @ArrayMinSize(1) @IsString({ each: true }) partyIds!: string[];
+  @IsString() @MaxLength(640) message!: string;
 }

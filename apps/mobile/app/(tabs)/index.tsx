@@ -313,6 +313,9 @@ function TrendingHome() {
   const [groups, setGroups] = useState<PartyGroup[]>([]);
   const [groupFilterId, setGroupFilterId] = useState<string>("");
   const [showGroupPicker, setShowGroupPicker] = useState(false);
+  const [showBulkMessage, setShowBulkMessage] = useState(false);
+  const [bulkMessageText, setBulkMessageText] = useState("");
+  const [bulkSending, setBulkSending] = useState(false);
   // Stat cards (You'll Get/You'll Give) jump to the Parties tab pre-filtered to To
   // Collect/To Pay — this holds the target filter across that tab switch so the effect
   // below doesn't reset it back to "All" the moment `tab` changes.
@@ -369,6 +372,58 @@ function TrendingHome() {
     if (tab === "parties") router.push("/party/new" as never);
     else if (tab === "items") router.push("/items/new" as never);
     else router.push("/sale/new" as never);
+  }
+
+  // Acts on whatever the Parties tab's own search/filter is currently showing — the
+  // filter row is the selection mechanism, same convention as everywhere else on this tab.
+  function confirmBulkPaymentReminder() {
+    const targets = filteredParties.filter((p) => (p.balance ?? 0) > 0 && p.phone);
+    if (!targets.length) {
+      Alert.alert("Bulk Payment Reminder", "Filter me koi party aisi nahi jiska balance ho aur phone number saved ho.");
+      return;
+    }
+    Alert.alert(
+      "Bulk Payment Reminder",
+      `${targets.length} ${targets.length === 1 ? "party" : "parties"} ko unke balance ka reminder SMS bheja jayega. Bhejna hai?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Bhejo",
+          onPress: async () => {
+            setBulkSending(true);
+            try {
+              const result = await api.bulkPaymentReminder(targets.map((p) => p.id));
+              Alert.alert("Bhej diya", `${result.sent} ko SMS bhej diya gaya${result.skipped ? `, ${result.skipped} skip hue (phone number nahi)` : ""}.`);
+            } catch {
+              Alert.alert("Error", "SMS bhejte waqt masla aaya, dobara koshish karein.");
+            } finally {
+              setBulkSending(false);
+            }
+          },
+        },
+      ],
+    );
+  }
+
+  async function sendBulkMessage() {
+    const text = bulkMessageText.trim();
+    if (!text) return;
+    const targets = filteredParties.filter((p) => p.phone);
+    if (!targets.length) {
+      Alert.alert("Bulk Message", "Filter me koi party aisi nahi jiska phone number saved ho.");
+      return;
+    }
+    setBulkSending(true);
+    try {
+      const result = await api.bulkMessage(targets.map((p) => p.id), text);
+      setShowBulkMessage(false);
+      setBulkMessageText("");
+      Alert.alert("Bhej diya", `${result.sent} ko SMS bhej diya gaya${result.skipped ? `, ${result.skipped} skip hue (phone number nahi)` : ""}.`);
+    } catch {
+      Alert.alert("Error", "SMS bhejte waqt masla aaya, dobara koshish karein.");
+    } finally {
+      setBulkSending(false);
+    }
   }
 
   // Cumulative receivable/payable balances — not date-bound, so the app-bar date filter
@@ -495,13 +550,13 @@ function TrendingHome() {
           <View style={t.moreMenuSheet}>
             <TouchableOpacity
               style={t.moreMenuRow}
-              onPress={() => { setShowMoreMenu(false); Alert.alert("Bulk Payment Reminder", "Yeh feature abhi build nahi hua — SMS bhejne ke liye naya backend chahiye."); }}
+              onPress={() => { setShowMoreMenu(false); confirmBulkPaymentReminder(); }}
             >
               <Text style={t.moreMenuTxt}>Bulk Payment Reminder</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={t.moreMenuRow}
-              onPress={() => { setShowMoreMenu(false); Alert.alert("Bulk Message", "Yeh feature abhi build nahi hua — SMS bhejne ke liye naya backend chahiye."); }}
+              onPress={() => { setShowMoreMenu(false); setShowBulkMessage(true); }}
             >
               <Text style={t.moreMenuTxt}>Bulk Message</Text>
             </TouchableOpacity>
@@ -544,6 +599,39 @@ function TrendingHome() {
               <Text style={t.moreMenuEmpty}>Koi group nahi bana — Add Party screen se bana sakte hain.</Text>
             )}
           </View>
+        </Pressable>
+      </Modal>
+
+      {/* Bulk Message — composes one SMS sent to every party the current search/filter shows */}
+      <Modal visible={showBulkMessage} transparent animationType="fade" onRequestClose={() => setShowBulkMessage(false)}>
+        <Pressable style={t.filterOverlay} onPress={() => setShowBulkMessage(false)}>
+          <Pressable style={t.bulkMsgSheet} onPress={(e) => e.stopPropagation()}>
+            <Text style={t.bulkMsgTitle}>Bulk Message</Text>
+            <Text style={t.bulkMsgSub}>
+              {filteredParties.filter((p) => p.phone).length} parties ko bheja jayega (filter ke mutabiq)
+            </Text>
+            <TextInput
+              style={t.bulkMsgInput}
+              value={bulkMessageText}
+              onChangeText={setBulkMessageText}
+              placeholder="Apna message likhein…"
+              placeholderTextColor={colors.textLight}
+              multiline
+              numberOfLines={4}
+            />
+            <View style={t.bulkMsgActions}>
+              <TouchableOpacity style={t.bulkMsgCancel} onPress={() => { setShowBulkMessage(false); setBulkMessageText(""); }}>
+                <Text style={t.bulkMsgCancelTxt}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[t.bulkMsgSend, (!bulkMessageText.trim() || bulkSending) && { opacity: 0.5 }]}
+                disabled={!bulkMessageText.trim() || bulkSending}
+                onPress={sendBulkMessage}
+              >
+                {bulkSending ? <ActivityIndicator size="small" color="#fff" /> : <Text style={t.bulkMsgSendTxt}>Send</Text>}
+              </TouchableOpacity>
+            </View>
+          </Pressable>
         </Pressable>
       </Modal>
 
@@ -1374,6 +1462,18 @@ const t = StyleSheet.create({
   },
   moreMenuTxt: { fontSize: 14, color: colors.text },
   moreMenuEmpty: { fontSize: 13, color: colors.textMuted, padding: 18, textAlign: "center" },
+  bulkMsgSheet: { backgroundColor: "#fff", borderRadius: 14, padding: 18 },
+  bulkMsgTitle: { fontSize: 16, fontWeight: "700", color: colors.text },
+  bulkMsgSub: { fontSize: 12.5, color: colors.textMuted, marginTop: 4, marginBottom: 12 },
+  bulkMsgInput: {
+    borderWidth: 1, borderColor: colors.border, borderRadius: 10,
+    padding: 12, fontSize: 14, color: colors.text, minHeight: 90, textAlignVertical: "top",
+  },
+  bulkMsgActions: { flexDirection: "row", justifyContent: "flex-end", gap: 10, marginTop: 14 },
+  bulkMsgCancel: { paddingHorizontal: 16, paddingVertical: 10 },
+  bulkMsgCancelTxt: { fontSize: 14, fontWeight: "600", color: colors.textMuted },
+  bulkMsgSend: { backgroundColor: colors.primary, borderRadius: 10, paddingHorizontal: 20, paddingVertical: 10, minWidth: 72, alignItems: "center" },
+  bulkMsgSendTxt: { fontSize: 14, fontWeight: "700", color: "#fff" },
 
   list: { padding: 12, flexGrow: 1 },
   row: {

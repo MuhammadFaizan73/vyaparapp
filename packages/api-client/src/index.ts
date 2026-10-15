@@ -226,6 +226,16 @@ export class VyaparApiClient {
     await this.http.delete(`/party-groups/${id}`);
   }
 
+  async bulkPaymentReminder(partyIds: string[]): Promise<{ sent: number; skipped: number }> {
+    const { data } = await this.http.post<{ sent: number; skipped: number }>("/parties/bulk-payment-reminder", { partyIds });
+    return data;
+  }
+
+  async bulkMessage(partyIds: string[], message: string): Promise<{ sent: number; skipped: number }> {
+    const { data } = await this.http.post<{ sent: number; skipped: number }>("/parties/bulk-message", { partyIds, message });
+    return data;
+  }
+
   async listTaxRates(): Promise<TaxRate[]> {
     const { data } = await this.http.get<TaxRate[]>("/tax-rates");
     return data;

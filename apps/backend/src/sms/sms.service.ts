@@ -140,4 +140,38 @@ export class SmsService {
   async resendOtp(countryCode: string, phone: string): Promise<void> {
     await this.sendOtp(countryCode, phone);
   }
+
+  // D7's regular Messages API (https://d7networks.com/docs/sms/send-sms/) — a different
+  // endpoint from the OTP one above, but the same Client ID/Secret → Bearer token exchange
+  // (getAccessToken/withAuth), so reused as-is. One message object per distinct content
+  // string, recipients grouped under it — lets a caller send different text to different
+  // phone numbers in a single request instead of one HTTP call per recipient.
+  async sendBulkSms(messages: Array<{ recipients: string[]; content: string }>): Promise<void> {
+    if (!messages.length) return;
+    const { res, data } = await this.withAuth(async (token) => {
+      const r = await fetch("https://api.d7networks.com/messages/v1/send", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          messages: messages.map((m) => ({
+            channel: "sms",
+            recipients: m.recipients,
+            content: m.content,
+            msg_type: "text",
+            data_coding: "auto",
+          })),
+          message_globals: { originator: this.originator },
+        }),
+      });
+      const d = await r.json().catch(() => ({}));
+      return { res: r, data: d };
+    });
+    if (!res.ok || data.status === "rejected") {
+      throw new InternalServerErrorException(data.message || "Could not send SMS.");
+    }
+  }
 }

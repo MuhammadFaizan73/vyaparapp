@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { PartiesService } from "./parties.service";
-import { CreatePartyDto, UpdatePartyDto } from "./parties.dto";
+import { CreatePartyDto, UpdatePartyDto, BulkPaymentReminderDto, BulkMessageDto } from "./parties.dto";
 import { JwtGuard, type AuthedRequest } from "../auth/jwt.guard";
 import { restrictCompanyIds } from "../common/company-filter.util";
 
@@ -28,5 +28,15 @@ export class PartiesController {
   @HttpCode(204)
   remove(@Req() req: AuthedRequest, @Param("id") id: string) {
     return this.partiesService.remove(req.tenantId, id);
+  }
+
+  @Post("bulk-payment-reminder")
+  bulkPaymentReminder(@Req() req: AuthedRequest, @Body() dto: BulkPaymentReminderDto) {
+    return this.partiesService.bulkPaymentReminder(req.tenantId, dto.partyIds);
+  }
+
+  @Post("bulk-message")
+  bulkMessage(@Req() req: AuthedRequest, @Body() dto: BulkMessageDto) {
+    return this.partiesService.bulkMessage(req.tenantId, dto.partyIds, dto.message);
   }
 }
